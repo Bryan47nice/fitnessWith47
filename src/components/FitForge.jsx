@@ -110,6 +110,7 @@ export default function FitForge({ user }) {
   const [wSets, setWSets] = useState([{ reps: "", weight: "" }]);
   const [wNote, setWNote] = useState("");
   const [savedAnim, setSavedAnim] = useState(false);
+  const [prAnim, setPrAnim] = useState(false);
 
   // More Panel state
   const [showMorePanel, setShowMorePanel] = useState(false);
@@ -261,6 +262,10 @@ export default function FitForge({ user }) {
 
   async function saveWorkout() {
     const name = wCustom.trim() || wExercise;
+    const isNewPR = wSets.some(s => {
+      const wt = parseFloat(s.weight);
+      return !isNaN(wt) && wt > 0 && (!prMap[name] || wt > prMap[name].weight);
+    });
     await addDoc(collection(db, "users", user.uid, "workouts"), {
       date: wDate, exercise: name, sets: wSets, note: wNote, createdAt: serverTimestamp(),
     });
@@ -268,6 +273,10 @@ export default function FitForge({ user }) {
     setWNote(""); setWCustom("");
     setSavedAnim(true);
     setTimeout(() => setSavedAnim(false), 1500);
+    if (isNewPR) {
+      setPrAnim(true);
+      setTimeout(() => setPrAnim(false), 2500);
+    }
   }
 
   async function saveQuickWorkout() {
@@ -392,6 +401,41 @@ export default function FitForge({ user }) {
       </div>
     );
   };
+
+  // PR Map: key=exercise, value={ weight, date }
+  const prMap = {};
+  workouts.forEach(w => {
+    w.sets?.forEach(s => {
+      const wt = parseFloat(s.weight);
+      if (!isNaN(wt) && wt > 0) {
+        if (!prMap[w.exercise] || wt > prMap[w.exercise].weight) {
+          prMap[w.exercise] = { weight: wt, date: w.date };
+        }
+      }
+    });
+  });
+  const topPRs = Object.entries(prMap)
+    .sort(([, a], [, b]) => b.weight - a.weight)
+    .slice(0, 5);
+
+  // Weekly volume: past 8 weeks (Mon as week start)
+  function getWeekStart(dateStr) {
+    const d = new Date(dateStr);
+    const day = d.getDay();
+    d.setDate(d.getDate() - (day === 0 ? 6 : day - 1));
+    return d.toISOString().slice(0, 10);
+  }
+  const weeklyMap = {};
+  workouts.forEach(w => {
+    const ws = getWeekStart(w.date);
+    weeklyMap[ws] = (weeklyMap[ws] || 0) + (w.sets?.length || 0);
+  });
+  const weeklyPoints = Array.from({ length: 8 }, (_, i) => {
+    const d = new Date();
+    d.setDate(d.getDate() - 7 * (7 - i));
+    const ws = getWeekStart(d.toISOString().slice(0, 10));
+    return { label: ws.slice(5), sets: weeklyMap[ws] || 0 };
+  });
 
   const tabs = [
     { id: "dashboard", label: "儀表板", icon: "⚡" },
@@ -808,6 +852,44 @@ export default function FitForge({ user }) {
               </div>
             </div>
 
+            {/* 每週訓練量趨勢圖 */}
+            <div style={styles.card}>
+              <div style={styles.sectionTitle}>每週訓練量</div>
+              <ResponsiveContainer width="100%" height={160}>
+                <LineChart data={weeklyPoints} margin={{ top: 8, right: 8, bottom: 0, left: -16 }}>
+                  <XAxis
+                    dataKey="label"
+                    tick={{ fill: "#666", fontSize: 10, fontFamily: "'Barlow Condensed','Noto Sans TC',sans-serif" }}
+                    axisLine={{ stroke: "rgba(255,255,255,0.08)" }}
+                    tickLine={false}
+                    interval={1}
+                  />
+                  <YAxis
+                    allowDecimals={false}
+                    tick={{ fill: "#666", fontSize: 10, fontFamily: "'Barlow Condensed','Noto Sans TC',sans-serif" }}
+                    axisLine={false} tickLine={false} width={28}
+                  />
+                  <Tooltip
+                    content={({ active, payload }) => {
+                      if (!active || !payload?.length) return null;
+                      const { label, sets } = payload[0].payload;
+                      return (
+                        <div style={{ background: "rgba(18,18,28,0.96)", border: "1px solid rgba(255,106,0,0.4)", borderRadius: "10px", padding: "8px 14px", fontFamily: "'Barlow Condensed','Noto Sans TC',sans-serif", pointerEvents: "none" }}>
+                          <div style={{ fontSize: "11px", color: "#888", marginBottom: "2px" }}>{label} 週</div>
+                          <div style={{ fontSize: "20px", fontWeight: 900, color: "#ff6a00" }}>{sets}<span style={{ fontSize: "12px", fontWeight: 400, color: "#888", marginLeft: "4px" }}>組</span></div>
+                        </div>
+                      );
+                    }}
+                    cursor={{ stroke: "rgba(255,106,0,0.25)", strokeWidth: 1, strokeDasharray: "4 4" }}
+                  />
+                  <Line type="monotone" dataKey="sets" stroke="#ff6a00" strokeWidth={2}
+                    dot={{ r: 3, fill: "#ff6a00", strokeWidth: 0 }}
+                    activeDot={{ r: 6, fill: "#ff9500", stroke: "#fff", strokeWidth: 2 }}
+                  />
+                </LineChart>
+              </ResponsiveContainer>
+            </div>
+
             {latestBody && (
               <div style={styles.card}>
                 <div style={styles.sectionTitle}>最新身材數據</div>
@@ -832,6 +914,24 @@ export default function FitForge({ user }) {
                     }} />
                   </div>
                 )}
+              </div>
+            )}
+
+            {/* 個人最佳 PR */}
+            {topPRs.length > 0 && (
+              <div style={styles.card}>
+                <div style={styles.sectionTitle}>個人最佳 PR</div>
+                {topPRs.map(([exercise, { weight, date }]) => (
+                  <div key={exercise} style={{ ...styles.workoutItem, display: "flex", justifyContent: "space-between", alignItems: "center" }}>
+                    <div style={{ fontWeight: 700, fontSize: "15px" }}>{exercise}</div>
+                    <div style={{ textAlign: "right" }}>
+                      <div style={{ fontSize: "20px", fontWeight: 900, color: "#ffd700" }}>
+                        {weight}<span style={{ fontSize: "13px", fontWeight: 400, color: "#888", marginLeft: "2px" }}>kg</span>
+                      </div>
+                      <div style={{ fontSize: "11px", color: "#555" }}>{date}</div>
+                    </div>
+                  </div>
+                ))}
               </div>
             )}
 
@@ -1241,6 +1341,20 @@ export default function FitForge({ user }) {
         )}
 
       </div>
+
+      {/* NEW PR Toast */}
+      {prAnim && (
+        <div style={{
+          position: "fixed", top: "80px", left: "50%", transform: "translateX(-50%)",
+          background: "linear-gradient(135deg, #ffd700, #ff9500)",
+          color: "#0a0a0f", padding: "10px 24px", borderRadius: "24px",
+          fontWeight: 900, fontSize: "17px", letterSpacing: "0.06em",
+          zIndex: 300, boxShadow: "0 4px 24px rgba(255,215,0,0.45)",
+          pointerEvents: "none", whiteSpace: "nowrap",
+        }}>
+          🏆 NEW PR！
+        </div>
+      )}
 
       {/* Quick-Log FAB */}
       <button
