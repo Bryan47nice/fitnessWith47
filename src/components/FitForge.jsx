@@ -78,6 +78,7 @@ const exerciseCategories = [
 
 const metricConfig = {
   weight: { label: "體重",   unit: "kg" },
+  height: { label: "身高",   unit: "cm" },
   chest:  { label: "胸圍",   unit: "cm" },
   waist:  { label: "腰圍",   unit: "cm" },
   hip:    { label: "臀圍",   unit: "cm" },
@@ -327,12 +328,21 @@ export default function FitForge({ user }) {
 
   async function saveEditWorkout() {
     if (!editWorkoutId) return;
+    const name = ewExercise;
+    const isNewPR = ewSets.some(s => {
+      const wt = parseFloat(s.weight);
+      return !isNaN(wt) && wt > 0 && (!prMap[name] || wt > prMap[name].weight);
+    });
     await updateDoc(
       doc(db, "users", user.uid, "workouts", editWorkoutId),
       { date: ewDate, exercise: ewExercise, sets: ewSets, note: ewNote }
     );
     setEditSavedAnim(true);
     setTimeout(() => { setEditSavedAnim(false); closeEditWorkout(); }, 1200);
+    if (isNewPR) {
+      setPrAnim(true);
+      setTimeout(() => setPrAnim(false), 2500);
+    }
   }
 
   function deleteWorkout(id) {
@@ -1276,34 +1286,40 @@ export default function FitForge({ user }) {
                   </div>
                 )}
 
-                {bodyData.slice(0, 5).map((b, i) => (
-                  <div key={b.id} style={{ ...styles.workoutItem, display: "flex", justifyContent: "space-between", alignItems: "flex-start" }}>
-                    <div>
-                      <div style={{ fontSize: "20px", fontWeight: 900, color: i === 0 ? "#ff6a00" : "#e8e4dc" }}>
-                        {b.weight}kg
-                      </div>
-                      <div style={{ fontSize: "12px", color: "#666", marginTop: "2px" }}>
-                        {b.chest && `胸${b.chest} `}{b.waist && `腰${b.waist} `}{b.hip && `臀${b.hip}`}
-                      </div>
-                    </div>
-                    <div style={{ textAlign: "right" }}>
-                      <div style={{ fontSize: "12px", color: "#666" }}>{b.date}</div>
-                      {i === 0 && <div style={{ fontSize: "11px", color: "#ff6a00", marginTop: "2px" }}>最新</div>}
-                      {i > 0 && bodyData[i - 1]?.weight && (
-                        <div style={{ fontSize: "13px", fontWeight: 700, color: parseFloat(b.weight) < parseFloat(bodyData[i - 1].weight) ? "#4ade80" : "#f87171" }}>
-                          {parseFloat(b.weight) < parseFloat(bodyData[i - 1].weight) ? "↓" : "↑"}
-                          {Math.abs(parseFloat(b.weight) - parseFloat(bodyData[i - 1].weight)).toFixed(1)}kg
+                {bodyData.slice(0, 5).map((b, i) => {
+                  const cfg = metricConfig[activeMetric];
+                  const val = parseFloat(b[activeMetric]);
+                  const prevVal = parseFloat(bodyData[i - 1]?.[activeMetric]);
+                  const hasDiff = i > 0 && !isNaN(val) && !isNaN(prevVal);
+                  return (
+                    <div key={b.id} style={{ ...styles.workoutItem, display: "flex", justifyContent: "space-between", alignItems: "flex-start" }}>
+                      <div>
+                        <div style={{ fontSize: "20px", fontWeight: 900, color: i === 0 ? "#ff6a00" : "#e8e4dc" }}>
+                          {b[activeMetric] ? `${b[activeMetric]}${cfg.unit}` : "—"}
                         </div>
-                      )}
-                      <button
-                        style={{ ...styles.historyDeleteBtn, fontSize: "11px", marginTop: "6px" }}
-                        onClick={() => deleteBodyRecord(b.id)}
-                      >
-                        刪除
-                      </button>
+                        <div style={{ fontSize: "12px", color: "#666", marginTop: "2px" }}>
+                          {b.chest && `胸${b.chest} `}{b.waist && `腰${b.waist} `}{b.hip && `臀${b.hip}`}
+                        </div>
+                      </div>
+                      <div style={{ textAlign: "right" }}>
+                        <div style={{ fontSize: "12px", color: "#666" }}>{b.date}</div>
+                        {i === 0 && <div style={{ fontSize: "11px", color: "#ff6a00", marginTop: "2px" }}>最新</div>}
+                        {hasDiff && (
+                          <div style={{ fontSize: "13px", fontWeight: 700, color: val < prevVal ? "#4ade80" : "#f87171" }}>
+                            {val < prevVal ? "↓" : "↑"}
+                            {Math.abs(val - prevVal).toFixed(1)}{cfg.unit}
+                          </div>
+                        )}
+                        <button
+                          style={{ ...styles.historyDeleteBtn, fontSize: "11px", marginTop: "6px" }}
+                          onClick={() => deleteBodyRecord(b.id)}
+                        >
+                          刪除
+                        </button>
+                      </div>
                     </div>
-                  </div>
-                ))}
+                  );
+                })}
               </div>
             )}
           </div>
