@@ -6,7 +6,8 @@ import {
 } from "firebase/firestore";
 import { signOut } from "firebase/auth";
 import { fetchAndActivate, getBoolean, getString, getNumber } from "firebase/remote-config";
-import { db, auth, remoteConfig } from "../firebase";
+import { getToken } from "firebase/messaging";
+import { db, auth, remoteConfig, getAppMessaging } from "../firebase";
 import {
   ResponsiveContainer, LineChart, Line,
   XAxis, YAxis, Tooltip,
@@ -137,6 +138,9 @@ export default function FitForge({ user }) {
   // Confirmation dialog state: null | { message, onConfirm }
   const [confirmDialog, setConfirmDialog] = useState(null);
 
+  // Notification permission banner
+  const [showNotifBanner, setShowNotifBanner] = useState(false);
+
   // Body form state
   const [bDate, setBDate] = useState(new Date().toISOString().slice(0, 10));
   const [bWeight, setBWeight] = useState("");
@@ -213,6 +217,28 @@ export default function FitForge({ user }) {
       .catch(() => { /* Remote Config fetch failed silently */ });
   }, []);
 
+  // Update lastActiveAt and maybe show notification banner
+  useEffect(() => {
+    setDoc(doc(db, "userPushTokens", user.uid), { lastActiveAt: serverTimestamp() }, { merge: true }).catch(() => {});
+
+    const permission = Notification.permission;
+    if (permission === "granted") {
+      // Silently refresh token
+      getAppMessaging().then(async (messaging) => {
+        if (!messaging) return;
+        try {
+          const token = await getToken(messaging, { vapidKey: import.meta.env.VITE_VAPID_KEY });
+          if (token) setDoc(doc(db, "userPushTokens", user.uid), { fcmToken: token }, { merge: true }).catch(() => {});
+        } catch (_) { /* ignore */ }
+      });
+    } else if (permission === "default") {
+      // Show in-app banner after a short delay
+      const t = setTimeout(() => setShowNotifBanner(true), 3000);
+      return () => clearTimeout(t);
+    }
+    // "denied" → silent skip
+  }, [user.uid]);
+
   // Subscribe to custom exercises
   useEffect(() => {
     const q = query(
@@ -272,6 +298,7 @@ export default function FitForge({ user }) {
     await addDoc(collection(db, "users", user.uid, "workouts"), {
       date: wDate, exercise: name, sets: wSets, note: wNote, createdAt: serverTimestamp(),
     });
+    setDoc(doc(db, "userPushTokens", user.uid), { lastWorkoutDate: wDate }, { merge: true }).catch(() => {});
     setWSets([{ reps: "", weight: "" }]);
     setWNote(""); setWCustom("");
     setSavedAnim(true);
@@ -283,13 +310,15 @@ export default function FitForge({ user }) {
   }
 
   async function saveQuickWorkout() {
+    const qDate = new Date().toISOString().slice(0, 10);
     await addDoc(collection(db, "users", user.uid, "workouts"), {
-      date: new Date().toISOString().slice(0, 10),
+      date: qDate,
       exercise: quickExercise,
       sets: quickSets,
       note: "",
       createdAt: serverTimestamp(),
     });
+    setDoc(doc(db, "userPushTokens", user.uid), { lastWorkoutDate: qDate }, { merge: true }).catch(() => {});
     setQuickSets([{ reps: "", weight: "" }]);
     setQuickAnim(true);
     setTimeout(() => { setQuickAnim(false); setShowQuickLog(false); }, 1200);
@@ -376,6 +405,22 @@ export default function FitForge({ user }) {
       setShareCopied(true);
       setTimeout(() => setShareCopied(false), 1500);
     }
+  }
+
+  async function requestNotificationPermission() {
+    setShowNotifBanner(false);
+    try {
+      const permission = await Notification.requestPermission();
+      if (permission !== "granted") return;
+      const messaging = await getAppMessaging();
+      if (!messaging) return;
+      const token = await getToken(messaging, { vapidKey: import.meta.env.VITE_VAPID_KEY });
+      if (token) setDoc(doc(db, "userPushTokens", user.uid), { fcmToken: token }, { merge: true }).catch(() => {});
+    } catch (_) { /* ignore */ }
+  }
+
+  function dismissNotifBanner() {
+    setShowNotifBanner(false);
   }
 
   const recentWorkouts = workouts.slice(0, 5);
@@ -2032,6 +2077,46 @@ export default function FitForge({ user }) {
             </button>
           </div>
         </div>
+      </div>,
+      document.body
+    )}
+    {showNotifBanner && createPortal(
+      <div style={{
+        position: "fixed", bottom: "72px", left: "50%", transform: "translateX(-50%)",
+        zIndex: 9990, width: "calc(100% - 32px)", maxWidth: "400px",
+        background: "#13131c",
+        border: "1px solid rgba(255,106,0,0.35)",
+        borderRadius: "16px",
+        padding: "14px 16px",
+        display: "flex", alignItems: "center", gap: "12px",
+        boxShadow: "0 8px 32px rgba(0,0,0,0.6)",
+        fontFamily: "'Barlow Condensed','Noto Sans TC',sans-serif",
+      }}>
+        <span style={{ fontSize: "22px", flexShrink: 0 }}>🔔</span>
+        <div style={{ flex: 1, fontSize: "13px", color: "#b0aba3", lineHeight: "1.5" }}>
+          開啟通知，3天未訓練時提醒你回來
+        </div>
+        <button
+          onClick={requestNotificationPermission}
+          style={{
+            flexShrink: 0, padding: "7px 14px", border: "none", borderRadius: "10px",
+            background: "linear-gradient(135deg,#ff6a00,#ff9500)",
+            color: "#fff", fontSize: "13px", fontWeight: 800, cursor: "pointer",
+            letterSpacing: "0.04em",
+          }}
+        >
+          開啟
+        </button>
+        <button
+          onClick={dismissNotifBanner}
+          style={{
+            flexShrink: 0, padding: "7px 10px", border: "1px solid rgba(255,255,255,0.12)",
+            borderRadius: "10px", background: "transparent",
+            color: "#888", fontSize: "13px", cursor: "pointer",
+          }}
+        >
+          不了
+        </button>
       </div>,
       document.body
     )}
