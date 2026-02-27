@@ -114,6 +114,7 @@ export default function FitForge({ user }) {
 
   // More Panel state
   const [showMorePanel, setShowMorePanel] = useState(false);
+  const [showChangelog, setShowChangelog] = useState(false);
 
   // Quick-Log FAB state
   const [showQuickLog, setShowQuickLog] = useState(false);
@@ -1421,6 +1422,26 @@ export default function FitForge({ user }) {
 
           <div style={{ height: "1px", background: "rgba(255,255,255,0.07)", margin: "0 24px" }} />
 
+          {/* Changelog button */}
+          <div style={{ padding: "16px 24px 0" }}>
+            <button
+              style={{
+                width: "100%", padding: "13px 16px", border: "1px solid rgba(255,255,255,0.1)",
+                borderRadius: "12px", background: "rgba(255,255,255,0.04)",
+                color: "#e8e4dc", fontSize: "15px", fontWeight: 700,
+                cursor: "pointer", letterSpacing: "0.02em",
+                fontFamily: "'Barlow Condensed','Noto Sans TC',sans-serif",
+                display: "flex", alignItems: "center", justifyContent: "space-between",
+              }}
+              onClick={() => { setShowMorePanel(false); setShowChangelog(true); }}
+            >
+              <span>📋 版本更新記錄</span>
+              <span style={{ color: "#555", fontSize: "18px" }}>›</span>
+            </button>
+          </div>
+
+          <div style={{ height: "1px", background: "rgba(255,255,255,0.07)", margin: "16px 24px 0" }} />
+
           {/* Sign out button */}
           <div style={{ padding: "20px 24px 8px" }}>
             <button
@@ -1454,6 +1475,108 @@ export default function FitForge({ user }) {
               onClick={() => setShowMorePanel(false)}
             >
               取消
+            </button>
+          </div>
+        </div>
+      </div>,
+      document.body
+    )}
+
+    {showChangelog && createPortal(
+      <div
+        style={{
+          position: "fixed", inset: 0, zIndex: 9999,
+          background: "rgba(0,0,0,0.65)",
+          display: "flex", alignItems: "flex-end", justifyContent: "center",
+        }}
+        onClick={() => setShowChangelog(false)}
+      >
+        <div
+          style={{
+            width: "100%", maxWidth: "480px", maxHeight: "70vh",
+            background: "#13131c", borderRadius: "20px 20px 0 0",
+            border: "1px solid rgba(255,255,255,0.1)", borderBottom: "none",
+            padding: "0 0 32px", overflowY: "auto",
+          }}
+          onClick={e => e.stopPropagation()}
+        >
+          {/* Drag handle */}
+          <div style={{ display: "flex", justifyContent: "center", padding: "14px 0 10px" }}>
+            <div style={{ width: "40px", height: "4px", borderRadius: "2px", background: "rgba(255,255,255,0.15)" }} />
+          </div>
+
+          <div style={{ padding: "8px 24px 20px" }}>
+            <div style={{ fontSize: "18px", fontWeight: 900, color: "#e8e4dc", letterSpacing: "0.05em", textAlign: "center", marginBottom: "24px" }}>
+              版本更新記錄
+            </div>
+
+            {/* v1.2 */}
+            <div style={{ marginBottom: "24px" }}>
+              <div style={{ display: "flex", alignItems: "center", gap: "10px", marginBottom: "10px" }}>
+                <span style={{ fontSize: "17px", fontWeight: 900, color: "#ffd700" }}>v1.2</span>
+                <span style={{
+                  fontSize: "11px", fontWeight: 800, color: "#ff6a00",
+                  background: "rgba(255,106,0,0.15)", border: "1px solid rgba(255,106,0,0.3)",
+                  borderRadius: "6px", padding: "2px 7px", letterSpacing: "0.05em",
+                }}>最新</span>
+                <span style={{ fontSize: "12px", color: "#555", marginLeft: "auto" }}>2026-02-27</span>
+              </div>
+              <div style={{ display: "flex", flexDirection: "column", gap: "7px" }}>
+                <div style={{ fontSize: "14px", color: "#c8c4bc", display: "flex", gap: "8px" }}>
+                  <span style={{ color: "#ffd700", flexShrink: 0 }}>🏆</span>
+                  <span>動作個人最高紀錄（PR）追蹤，破紀錄即時金色提示</span>
+                </div>
+                <div style={{ fontSize: "14px", color: "#c8c4bc", display: "flex", gap: "8px" }}>
+                  <span style={{ color: "#ffd700", flexShrink: 0 }}>📊</span>
+                  <span>儀表板週訓練量趨勢圖，8 週進度一覽</span>
+                </div>
+              </div>
+            </div>
+
+            <div style={{ height: "1px", background: "rgba(255,255,255,0.07)", marginBottom: "20px" }} />
+
+            {/* v1.1 */}
+            <div style={{ marginBottom: "24px" }}>
+              <div style={{ display: "flex", alignItems: "center", gap: "10px", marginBottom: "10px" }}>
+                <span style={{ fontSize: "16px", fontWeight: 800, color: "#888" }}>v1.1</span>
+                <span style={{ fontSize: "12px", color: "#555", marginLeft: "auto" }}>2026-02-27</span>
+              </div>
+              <div style={{ display: "flex", flexDirection: "column", gap: "7px" }}>
+                <div style={{ fontSize: "14px", color: "#888", display: "flex", gap: "8px" }}>
+                  <span style={{ flexShrink: 0 }}>•</span>
+                  <span>身材趨勢折線圖</span>
+                </div>
+                <div style={{ fontSize: "14px", color: "#888", display: "flex", gap: "8px" }}>
+                  <span style={{ flexShrink: 0 }}>•</span>
+                  <span>訓練紀錄與身材紀錄可編輯、刪除</span>
+                </div>
+              </div>
+            </div>
+
+            <div style={{ height: "1px", background: "rgba(255,255,255,0.07)", marginBottom: "20px" }} />
+
+            {/* v1.0 */}
+            <div style={{ marginBottom: "28px" }}>
+              <div style={{ display: "flex", alignItems: "center", gap: "10px", marginBottom: "10px" }}>
+                <span style={{ fontSize: "16px", fontWeight: 800, color: "#888" }}>v1.0</span>
+                <span style={{ fontSize: "12px", color: "#555", marginLeft: "auto" }}>2026-02-24</span>
+              </div>
+              <div style={{ fontSize: "14px", color: "#888", display: "flex", gap: "8px" }}>
+                <span style={{ flexShrink: 0 }}>•</span>
+                <span>初始版本上線</span>
+              </div>
+            </div>
+
+            <button
+              style={{
+                width: "100%", padding: "13px", border: "1px solid rgba(255,255,255,0.12)",
+                borderRadius: "12px", background: "transparent",
+                color: "#888", fontSize: "15px", fontWeight: 700,
+                cursor: "pointer", fontFamily: "'Barlow Condensed','Noto Sans TC',sans-serif",
+              }}
+              onClick={() => setShowChangelog(false)}
+            >
+              關閉
             </button>
           </div>
         </div>
