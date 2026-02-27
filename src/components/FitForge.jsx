@@ -7,6 +7,10 @@ import {
 import { signOut } from "firebase/auth";
 import { fetchAndActivate, getBoolean, getString, getNumber } from "firebase/remote-config";
 import { db, auth, remoteConfig } from "../firebase";
+import {
+  ResponsiveContainer, LineChart, Line,
+  XAxis, YAxis, Tooltip,
+} from "recharts";
 
 const exerciseCategories = [
   {
@@ -72,6 +76,15 @@ const exerciseCategories = [
   },
 ];
 
+const metricConfig = {
+  weight: { label: "體重",   unit: "kg" },
+  chest:  { label: "胸圍",   unit: "cm" },
+  waist:  { label: "腰圍",   unit: "cm" },
+  hip:    { label: "臀圍",   unit: "cm" },
+  arm:    { label: "手臂圍", unit: "cm" },
+  thigh:  { label: "大腿圍", unit: "cm" },
+};
+
 export default function FitForge({ user }) {
   const [tab, setTab] = useState("dashboard");
   const [workouts, setWorkouts] = useState([]);
@@ -106,7 +119,19 @@ export default function FitForge({ user }) {
   const [quickExercise, setQuickExercise] = useState(exerciseCategories[0].exercises[0]);
   const [quickSets, setQuickSets] = useState([{ reps: "", weight: "" }]);
   const [quickAnim, setQuickAnim] = useState(false);
-  const [pickerTarget, setPickerTarget] = useState("workout"); // "workout" | "quick"
+  const [pickerTarget, setPickerTarget] = useState("workout"); // "workout" | "quick" | "editWorkout"
+
+  // Edit workout sheet state
+  const [showEditWorkout, setShowEditWorkout] = useState(false);
+  const [editWorkoutId, setEditWorkoutId] = useState(null);
+  const [ewDate, setEwDate] = useState("");
+  const [ewExercise, setEwExercise] = useState("");
+  const [ewSets, setEwSets] = useState([{ reps: "", weight: "" }]);
+  const [ewNote, setEwNote] = useState("");
+  const [editSavedAnim, setEditSavedAnim] = useState(false);
+
+  // Confirmation dialog state: null | { message, onConfirm }
+  const [confirmDialog, setConfirmDialog] = useState(null);
 
   // Body form state
   const [bDate, setBDate] = useState(new Date().toISOString().slice(0, 10));
@@ -117,6 +142,7 @@ export default function FitForge({ user }) {
   const [bHip, setBHip] = useState("");
   const [bArm, setBArm] = useState("");
   const [bThigh, setBThigh] = useState("");
+  const [activeMetric, setActiveMetric] = useState("weight");
 
   const today = new Date().toISOString().slice(0, 10);
 
@@ -265,6 +291,60 @@ export default function FitForge({ user }) {
     setBWeight(""); setBHeight(""); setBChest(""); setBWaist(""); setBHip(""); setBArm(""); setBThigh("");
   }
 
+  // Edit workout set helpers
+  function ewAddSet() { setEwSets([...ewSets, { reps: "", weight: "" }]); }
+  function ewRemoveSet(i) { setEwSets(ewSets.filter((_, idx) => idx !== i)); }
+  function ewUpdateSet(i, field, val) {
+    const s = [...ewSets]; s[i] = { ...s[i], [field]: val }; setEwSets(s);
+  }
+
+  function openEditWorkout(workout) {
+    setEditWorkoutId(workout.id);
+    setEwDate(workout.date);
+    setEwExercise(workout.exercise);
+    setEwSets(workout.sets ? workout.sets.map(s => ({ ...s })) : [{ reps: "", weight: "" }]);
+    setEwNote(workout.note || "");
+    setShowEditWorkout(true);
+  }
+
+  function closeEditWorkout() {
+    setShowEditWorkout(false);
+    setEditWorkoutId(null);
+    setEwDate(""); setEwExercise("");
+    setEwSets([{ reps: "", weight: "" }]);
+    setEwNote(""); setEditSavedAnim(false);
+  }
+
+  async function saveEditWorkout() {
+    if (!editWorkoutId) return;
+    await updateDoc(
+      doc(db, "users", user.uid, "workouts", editWorkoutId),
+      { date: ewDate, exercise: ewExercise, sets: ewSets, note: ewNote }
+    );
+    setEditSavedAnim(true);
+    setTimeout(() => { setEditSavedAnim(false); closeEditWorkout(); }, 1200);
+  }
+
+  function deleteWorkout(id) {
+    setConfirmDialog({
+      message: "確認刪除此訓練紀錄？",
+      onConfirm: async () => {
+        await deleteDoc(doc(db, "users", user.uid, "workouts", id));
+        setConfirmDialog(null);
+      },
+    });
+  }
+
+  function deleteBodyRecord(id) {
+    setConfirmDialog({
+      message: "確認刪除此身材紀錄？",
+      onConfirm: async () => {
+        await deleteDoc(doc(db, "users", user.uid, "bodyData", id));
+        setConfirmDialog(null);
+      },
+    });
+  }
+
   const recentWorkouts = workouts.slice(0, 5);
   const latestBody = bodyData[0];
   const workoutDays = new Set(workouts.map(w => w.date)).size;
@@ -275,6 +355,43 @@ export default function FitForge({ user }) {
     const h = parseFloat(latestBody.height) / 100;
     bmi = (parseFloat(latestBody.weight) / (h * h)).toFixed(1);
   }
+
+  // bodyData is Firestore DESC order; reverse() puts oldest on left
+  const chartPoints = bodyData
+    .filter(b => {
+      const v = parseFloat(b[activeMetric]);
+      return !isNaN(v) && b[activeMetric] !== "" && b[activeMetric] != null;
+    })
+    .slice()
+    .reverse()
+    .map(b => ({
+      date: b.date,
+      value: parseFloat(b[activeMetric]),
+      label: b.date.slice(5),   // "MM-DD"
+    }));
+
+  const CustomTooltip = ({ active, payload }) => {
+    if (!active || !payload || !payload.length) return null;
+    const { date, value } = payload[0].payload;
+    return (
+      <div style={{
+        background: "rgba(18,18,28,0.96)",
+        border: "1px solid rgba(255,106,0,0.4)",
+        borderRadius: "10px", padding: "10px 14px",
+        fontFamily: "'Barlow Condensed','Noto Sans TC',sans-serif",
+        boxShadow: "0 4px 20px rgba(0,0,0,0.5)",
+        pointerEvents: "none",
+      }}>
+        <div style={{ fontSize: "11px", color: "#888", marginBottom: "4px", letterSpacing: "0.06em" }}>{date}</div>
+        <div style={{ fontSize: "22px", fontWeight: 900, color: "#ff6a00", lineHeight: 1 }}>
+          {value}
+          <span style={{ fontSize: "13px", fontWeight: 400, color: "#888", marginLeft: "4px" }}>
+            {metricConfig[activeMetric].unit}
+          </span>
+        </div>
+      </div>
+    );
+  };
 
   const tabs = [
     { id: "dashboard", label: "儀表板", icon: "⚡" },
@@ -453,6 +570,35 @@ export default function FitForge({ user }) {
       background: "rgba(255,106,0,0.15)", border: "1px solid rgba(255,106,0,0.25)",
       borderRadius: "20px", fontSize: "12px", color: "#ff9500", marginRight: "6px",
     },
+    historyActionBtn: {
+      padding: "3px 10px",
+      background: "rgba(255,255,255,0.06)",
+      border: "1px solid rgba(255,255,255,0.14)",
+      borderRadius: "6px", color: "#ccc",
+      cursor: "pointer", fontSize: "12px",
+      fontFamily: "'Barlow Condensed','Noto Sans TC',sans-serif",
+    },
+    historyDeleteBtn: {
+      padding: "3px 10px",
+      background: "rgba(255,50,50,0.12)",
+      border: "1px solid rgba(255,50,50,0.2)",
+      borderRadius: "6px", color: "#ff5555",
+      cursor: "pointer", fontSize: "12px",
+      fontFamily: "'Barlow Condensed','Noto Sans TC',sans-serif",
+    },
+    confirmCancelBtn: {
+      flex: 1, padding: "13px", cursor: "pointer", fontWeight: 700,
+      border: "1px solid rgba(255,255,255,0.15)", borderRadius: "12px",
+      background: "transparent", color: "#888", fontSize: "15px",
+      fontFamily: "'Barlow Condensed','Noto Sans TC',sans-serif",
+    },
+    confirmDeleteBtn: {
+      flex: 1, padding: "13px", cursor: "pointer", fontWeight: 800,
+      border: "none", borderRadius: "12px",
+      background: "linear-gradient(135deg, #ff3030, #ff5555)",
+      color: "#fff", fontSize: "15px",
+      fontFamily: "'Barlow Condensed','Noto Sans TC',sans-serif",
+    },
   };
 
   const getBmiColor = (b) => {
@@ -532,11 +678,12 @@ export default function FitForge({ user }) {
                 {cat.label}
               </div>
               {cat.exercises.map(ex => {
-                const currentEx = pickerTarget === "quick" ? quickExercise : wExercise;
+                const currentEx = pickerTarget === "quick" ? quickExercise : pickerTarget === "editWorkout" ? ewExercise : wExercise;
                 const sel = currentEx === ex;
                 return (
                   <button key={ex} onClick={() => {
                     if (pickerTarget === "quick") setQuickExercise(ex);
+                    else if (pickerTarget === "editWorkout") setEwExercise(ex);
                     else setWExercise(ex);
                     setShowExPicker(false);
                   }}
@@ -564,11 +711,12 @@ export default function FitForge({ user }) {
                 ★ 我的自訂動作
               </div>
               {customExercises.map(ex => {
-                const currentEx = pickerTarget === "quick" ? quickExercise : wExercise;
+                const currentEx = pickerTarget === "quick" ? quickExercise : pickerTarget === "editWorkout" ? ewExercise : wExercise;
                 const sel = currentEx === ex.name;
                 return (
                   <button key={ex.id} onClick={() => {
                     if (pickerTarget === "quick") setQuickExercise(ex.name);
+                    else if (pickerTarget === "editWorkout") setEwExercise(ex.name);
                     else setWExercise(ex.name);
                     setShowExPicker(false);
                   }}
@@ -952,8 +1100,83 @@ export default function FitForge({ user }) {
             {bodyData.length > 0 && (
               <div style={styles.card}>
                 <div style={styles.sectionTitle}>身材趨勢</div>
+
+                {/* Metric selector pills */}
+                <div style={{
+                  display: "flex", gap: "8px", overflowX: "auto",
+                  WebkitOverflowScrolling: "touch", scrollbarWidth: "none",
+                  msOverflowStyle: "none", paddingBottom: "4px", marginBottom: "16px",
+                }}>
+                  {Object.entries(metricConfig).map(([key, cfg]) => {
+                    const isActive = activeMetric === key;
+                    return (
+                      <button key={key} onClick={() => setActiveMetric(key)} style={{
+                        flexShrink: 0, padding: "6px 14px", borderRadius: "20px",
+                        border: isActive ? "1px solid #ff6a00" : "1px solid rgba(255,255,255,0.12)",
+                        background: isActive ? "rgba(255,106,0,0.2)" : "rgba(255,255,255,0.04)",
+                        color: isActive ? "#ff6a00" : "#888",
+                        fontSize: "13px", fontWeight: isActive ? 700 : 400,
+                        cursor: "pointer", letterSpacing: "0.03em",
+                        fontFamily: "'Barlow Condensed','Noto Sans TC',sans-serif",
+                      }}>
+                        {cfg.label}
+                      </button>
+                    );
+                  })}
+                </div>
+
+                {/* Line chart or empty state */}
+                {chartPoints.length >= 2 ? (
+                  <ResponsiveContainer width="100%" height={200}>
+                    <LineChart data={chartPoints} margin={{ top: 8, right: 8, bottom: 0, left: -16 }}>
+                      <XAxis
+                        dataKey="label"
+                        tick={{ fill: "#666", fontSize: 11, fontFamily: "'Barlow Condensed','Noto Sans TC',sans-serif" }}
+                        axisLine={{ stroke: "rgba(255,255,255,0.08)" }}
+                        tickLine={false}
+                        interval="preserveStartEnd"
+                      />
+                      <YAxis
+                        domain={["auto", "auto"]}
+                        tick={{ fill: "#666", fontSize: 11, fontFamily: "'Barlow Condensed','Noto Sans TC',sans-serif" }}
+                        axisLine={false}
+                        tickLine={false}
+                        width={36}
+                      />
+                      <Tooltip
+                        content={<CustomTooltip />}
+                        cursor={{ stroke: "rgba(255,106,0,0.25)", strokeWidth: 1, strokeDasharray: "4 4" }}
+                      />
+                      <Line
+                        type="monotone"
+                        dataKey="value"
+                        stroke="#ff6a00"
+                        strokeWidth={2}
+                        dot={{ r: 4, fill: "#ff6a00", strokeWidth: 0 }}
+                        activeDot={{ r: 7, fill: "#ff9500", stroke: "#fff", strokeWidth: 2 }}
+                        connectNulls={false}
+                      />
+                    </LineChart>
+                  </ResponsiveContainer>
+                ) : (
+                  <div style={{
+                    height: "120px", display: "flex", flexDirection: "column",
+                    alignItems: "center", justifyContent: "center", gap: "8px",
+                    color: "#555", borderRadius: "12px",
+                    border: "1px dashed rgba(255,255,255,0.08)", marginBottom: "16px",
+                  }}>
+                    <div style={{ fontSize: "28px", opacity: 0.4 }}>📈</div>
+                    <div style={{ fontSize: "13px", letterSpacing: "0.04em" }}>
+                      至少需要 2 筆紀錄才能顯示趨勢圖
+                    </div>
+                    <div style={{ fontSize: "11px", color: "#444" }}>
+                      {metricConfig[activeMetric].label} 目前只有 {chartPoints.length} 筆有效數據
+                    </div>
+                  </div>
+                )}
+
                 {bodyData.slice(0, 5).map((b, i) => (
-                  <div key={b.id} style={{ ...styles.workoutItem, display: "flex", justifyContent: "space-between", alignItems: "center" }}>
+                  <div key={b.id} style={{ ...styles.workoutItem, display: "flex", justifyContent: "space-between", alignItems: "flex-start" }}>
                     <div>
                       <div style={{ fontSize: "20px", fontWeight: 900, color: i === 0 ? "#ff6a00" : "#e8e4dc" }}>
                         {b.weight}kg
@@ -971,6 +1194,12 @@ export default function FitForge({ user }) {
                           {Math.abs(parseFloat(b.weight) - parseFloat(bodyData[i - 1].weight)).toFixed(1)}kg
                         </div>
                       )}
+                      <button
+                        style={{ ...styles.historyDeleteBtn, fontSize: "11px", marginTop: "6px" }}
+                        onClick={() => deleteBodyRecord(b.id)}
+                      >
+                        刪除
+                      </button>
                     </div>
                   </div>
                 ))}
@@ -989,7 +1218,13 @@ export default function FitForge({ user }) {
               )}
               {workouts.map(w => (
                 <div key={w.id} style={{ ...styles.workoutItem, marginBottom: "10px" }}>
-                  <div style={styles.historyDate}>{w.date}</div>
+                  <div style={{ display: "flex", justifyContent: "space-between", alignItems: "center", marginBottom: "6px" }}>
+                    <div style={styles.historyDate}>{w.date}</div>
+                    <div style={{ display: "flex", gap: "6px" }}>
+                      <button style={styles.historyActionBtn} onClick={() => openEditWorkout(w)}>編輯</button>
+                      <button style={styles.historyDeleteBtn} onClick={() => deleteWorkout(w.id)}>刪除</button>
+                    </div>
+                  </div>
                   <div style={{ fontSize: "17px", fontWeight: 700, marginBottom: "8px" }}>{w.exercise}</div>
                   <div style={{ display: "flex", gap: "6px", flexWrap: "wrap", marginBottom: w.note ? "8px" : 0 }}>
                     {w.sets?.map((s, i) => (
@@ -1277,6 +1512,177 @@ export default function FitForge({ user }) {
       document.body
     )}
 
+    {showEditWorkout && createPortal(
+      <div
+        style={{
+          position: "fixed", inset: 0, zIndex: 9996,
+          background: "rgba(0,0,0,0.72)",
+          display: "flex", alignItems: "flex-end", justifyContent: "center",
+        }}
+        onClick={closeEditWorkout}
+      >
+        <div
+          style={{
+            width: "100%", maxWidth: "480px", maxHeight: "80vh",
+            background: "#13131c", borderRadius: "20px 20px 0 0",
+            border: "1px solid rgba(255,255,255,0.1)", borderBottom: "none",
+            display: "flex", flexDirection: "column", overflow: "hidden",
+          }}
+          onClick={e => e.stopPropagation()}
+        >
+          {/* Header */}
+          <div style={{
+            display: "flex", alignItems: "center", justifyContent: "space-between",
+            padding: "16px 20px 14px", borderBottom: "1px solid rgba(255,255,255,0.07)",
+            flexShrink: 0,
+          }}>
+            <span style={{ fontSize: "16px", fontWeight: 800, color: "#e8e4dc", letterSpacing: "0.05em" }}>
+              編輯訓練
+            </span>
+            <button
+              style={{
+                background: "rgba(255,255,255,0.08)", border: "1px solid rgba(255,255,255,0.15)",
+                borderRadius: "8px", padding: "6px 16px", color: "#e8e4dc",
+                fontSize: "14px", fontWeight: 700, cursor: "pointer",
+                fontFamily: "'Barlow Condensed','Noto Sans TC',sans-serif",
+              }}
+              onClick={closeEditWorkout}
+            >
+              取消
+            </button>
+          </div>
+
+          {/* Scrollable body */}
+          <div style={{ flex: 1, overflowY: "auto", WebkitOverflowScrolling: "touch", padding: "16px 20px 24px" }}>
+            {/* Date */}
+            <div style={{ marginBottom: "14px" }}>
+              <label style={{ fontSize: "12px", color: "#888", letterSpacing: "0.06em", marginBottom: "6px", display: "block" }}>日期</label>
+              <input type="date" value={ewDate} onChange={e => setEwDate(e.target.value)}
+                style={{
+                  width: "100%", background: "rgba(255,255,255,0.05)",
+                  border: "1px solid rgba(255,255,255,0.1)", borderRadius: "10px",
+                  padding: "10px 14px", color: "#e8e4dc", fontSize: "15px",
+                  outline: "none", boxSizing: "border-box", fontFamily: "inherit",
+                }}
+              />
+            </div>
+
+            {/* Exercise picker */}
+            <div style={{ marginBottom: "14px" }}>
+              <label style={{ fontSize: "12px", color: "#888", letterSpacing: "0.06em", marginBottom: "6px", display: "block" }}>選擇動作</label>
+              <button
+                style={{
+                  width: "100%", background: "#12121a",
+                  border: "1px solid rgba(255,255,255,0.1)", borderRadius: "10px",
+                  padding: "10px 14px", color: "#e8e4dc", fontSize: "15px",
+                  cursor: "pointer", display: "flex", alignItems: "center", justifyContent: "space-between",
+                  textAlign: "left", fontFamily: "'Barlow Condensed','Noto Sans TC',sans-serif",
+                  boxSizing: "border-box",
+                }}
+                onClick={() => { setPickerTarget("editWorkout"); setShowExPicker(true); }}
+              >
+                <span>{ewExercise}</span>
+                <span style={{ color: "#666", fontSize: "12px" }}>▼</span>
+              </button>
+            </div>
+
+            {/* Sets */}
+            <div style={{ marginBottom: "12px" }}>
+              <div style={{ display: "flex", justifyContent: "space-between", alignItems: "center", marginBottom: "10px" }}>
+                <label style={{ fontSize: "12px", color: "#888", letterSpacing: "0.06em" }}>訓練組數</label>
+                <button
+                  style={{
+                    padding: "6px 12px", border: "1px solid rgba(255,255,255,0.15)", borderRadius: "8px",
+                    background: "transparent", color: "#888", fontSize: "13px",
+                    cursor: "pointer", fontFamily: "'Barlow Condensed','Noto Sans TC',sans-serif",
+                  }}
+                  onClick={ewAddSet}
+                >
+                  + 新增一組
+                </button>
+              </div>
+              {ewSets.map((s, i) => (
+                <div key={i} style={{ display: "flex", gap: "8px", alignItems: "center", marginBottom: "8px" }}>
+                  <div style={{ textAlign: "center", color: "#ff6a00", fontWeight: 900, fontSize: "18px", minWidth: "24px" }}>
+                    {i + 1}
+                  </div>
+                  <div style={{ flex: 1 }}>
+                    <input type="number" placeholder="次數" value={s.reps}
+                      onChange={e => ewUpdateSet(i, "reps", e.target.value)}
+                      style={{
+                        width: "100%", background: "rgba(255,255,255,0.05)",
+                        border: "1px solid rgba(255,255,255,0.1)", borderRadius: "8px",
+                        padding: "8px 12px", color: "#e8e4dc", fontSize: "15px",
+                        outline: "none", textAlign: "center", fontFamily: "inherit", boxSizing: "border-box",
+                      }}
+                    />
+                    <div style={{ fontSize: "11px", color: "#666", textAlign: "center", marginTop: "2px" }}>次數 (reps)</div>
+                  </div>
+                  <div style={{ flex: 1 }}>
+                    <input type="number" placeholder="重量" value={s.weight}
+                      onChange={e => ewUpdateSet(i, "weight", e.target.value)}
+                      style={{
+                        width: "100%", background: "rgba(255,255,255,0.05)",
+                        border: "1px solid rgba(255,255,255,0.1)", borderRadius: "8px",
+                        padding: "8px 12px", color: "#e8e4dc", fontSize: "15px",
+                        outline: "none", textAlign: "center", fontFamily: "inherit", boxSizing: "border-box",
+                      }}
+                    />
+                    <div style={{ fontSize: "11px", color: "#666", textAlign: "center", marginTop: "2px" }}>重量 (kg)</div>
+                  </div>
+                  {ewSets.length > 1 && (
+                    <button
+                      style={{
+                        background: "rgba(255,50,50,0.15)", border: "1px solid rgba(255,50,50,0.2)",
+                        borderRadius: "8px", padding: "8px 10px", color: "#ff5555",
+                        cursor: "pointer", fontSize: "14px",
+                      }}
+                      onClick={() => ewRemoveSet(i)}
+                    >
+                      ✕
+                    </button>
+                  )}
+                </div>
+              ))}
+            </div>
+
+            {/* Note */}
+            <div style={{ marginBottom: "14px" }}>
+              <label style={{ fontSize: "12px", color: "#888", letterSpacing: "0.06em", marginBottom: "6px", display: "block" }}>備註（可選）</label>
+              <input type="text" placeholder="訓練備註..." value={ewNote}
+                onChange={e => setEwNote(e.target.value)}
+                style={{
+                  width: "100%", background: "rgba(255,255,255,0.05)",
+                  border: "1px solid rgba(255,255,255,0.1)", borderRadius: "10px",
+                  padding: "10px 14px", color: "#e8e4dc", fontSize: "15px",
+                  outline: "none", boxSizing: "border-box", fontFamily: "inherit",
+                }}
+              />
+            </div>
+
+            {/* Save button */}
+            <button
+              style={{
+                width: "100%", padding: "14px", border: "none", borderRadius: "12px",
+                background: editSavedAnim
+                  ? "linear-gradient(135deg, #22c55e, #16a34a)"
+                  : "linear-gradient(135deg, #ff6a00, #ff9500)",
+                color: "#fff", fontSize: "16px", fontWeight: 800,
+                cursor: "pointer", letterSpacing: "0.06em", textTransform: "uppercase",
+                marginTop: "8px", transition: "background 0.3s",
+                fontFamily: "'Barlow Condensed','Noto Sans TC',sans-serif",
+              }}
+              onClick={saveEditWorkout}
+              disabled={editSavedAnim}
+            >
+              {editSavedAnim ? "✓ 已儲存！" : "💾 儲存修改"}
+            </button>
+          </div>
+        </div>
+      </div>,
+      document.body
+    )}
+
     {popup && createPortal(
       <div
         style={{
@@ -1339,6 +1745,51 @@ export default function FitForge({ user }) {
             >
               {popup.btnText}
             </button>
+          </div>
+        </div>
+      </div>,
+      document.body
+    )}
+    {confirmDialog && createPortal(
+      <div
+        style={{
+          position: "fixed", inset: 0, zIndex: 9995,
+          background: "rgba(0,0,0,0.78)",
+          display: "flex", alignItems: "center", justifyContent: "center",
+          padding: "24px",
+        }}
+        onClick={() => setConfirmDialog(null)}
+      >
+        <div
+          style={{
+            width: "100%", maxWidth: "340px",
+            background: "#13131c",
+            borderRadius: "20px",
+            border: "1px solid rgba(255,255,255,0.1)",
+            overflow: "hidden",
+            boxShadow: "0 24px 64px rgba(0,0,0,0.7)",
+          }}
+          onClick={e => e.stopPropagation()}
+        >
+          <div style={{ height: "4px", background: "linear-gradient(90deg,#ff6a00,#ffd700)" }} />
+          <div style={{ padding: "24px 24px 28px" }}>
+            <div style={{
+              fontSize: "20px", fontWeight: 900, color: "#e8e4dc",
+              marginBottom: "8px",
+              fontFamily: "'Barlow Condensed','Noto Sans TC',sans-serif",
+            }}>
+              確認刪除？
+            </div>
+            <div style={{
+              fontSize: "14px", color: "#888", lineHeight: "1.6", marginBottom: "24px",
+              fontFamily: "'Barlow Condensed','Noto Sans TC',sans-serif",
+            }}>
+              {confirmDialog.message}
+            </div>
+            <div style={{ display: "flex", gap: "10px" }}>
+              <button style={styles.confirmCancelBtn} onClick={() => setConfirmDialog(null)}>取消</button>
+              <button style={styles.confirmDeleteBtn} onClick={() => confirmDialog.onConfirm()}>刪除</button>
+            </div>
           </div>
         </div>
       </div>,
