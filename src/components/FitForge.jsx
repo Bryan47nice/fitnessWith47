@@ -116,6 +116,7 @@ export default function FitForge({ user }) {
   // More Panel state
   const [showMorePanel, setShowMorePanel] = useState(false);
   const [showChangelog, setShowChangelog] = useState(false);
+  const [shareCopied, setShareCopied] = useState(false);
 
   // Quick-Log FAB state
   const [showQuickLog, setShowQuickLog] = useState(false);
@@ -363,6 +364,18 @@ export default function FitForge({ user }) {
         setConfirmDialog(null);
       },
     });
+  }
+
+  function shareApp() {
+    const APP_URL = "https://fitnesswith47.web.app";
+    if (navigator.share) {
+      setShowMorePanel(false);
+      navigator.share({ title: "FitForge — 健身追蹤 App", text: "我在用 FitForge 追蹤訓練，推薦你也試試！", url: APP_URL });
+    } else {
+      navigator.clipboard.writeText(APP_URL);
+      setShareCopied(true);
+      setTimeout(() => setShareCopied(false), 1500);
+    }
   }
 
   const recentWorkouts = workouts.slice(0, 5);
@@ -1453,6 +1466,25 @@ export default function FitForge({ user }) {
             >
               <span>📋 版本更新記錄</span>
               <span style={{ color: "#555", fontSize: "18px" }}>›</span>
+            </button>
+          </div>
+
+          {/* Share button */}
+          <div style={{ padding: "12px 24px 0" }}>
+            <button
+              style={{
+                width: "100%", padding: "13px 16px", border: "1px solid rgba(255,255,255,0.1)",
+                borderRadius: "12px", background: "rgba(255,255,255,0.04)",
+                color: shareCopied ? "#4ade80" : "#e8e4dc", fontSize: "15px", fontWeight: 700,
+                cursor: "pointer", letterSpacing: "0.02em",
+                fontFamily: "'Barlow Condensed','Noto Sans TC',sans-serif",
+                display: "flex", alignItems: "center", justifyContent: "space-between",
+                transition: "color 0.2s",
+              }}
+              onClick={shareApp}
+            >
+              <span>{shareCopied ? "✓ 已複製連結！" : "🔗 分享給好友"}</span>
+              {!shareCopied && <span style={{ color: "#555", fontSize: "18px" }}>›</span>}
             </button>
           </div>
 
