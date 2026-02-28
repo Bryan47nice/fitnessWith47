@@ -288,6 +288,19 @@ export default function FitForge({ user }) {
     }
   }, [workouts, loading]);
 
+  // Show one-time body overwrite tip when user first visits body tab
+  useEffect(() => {
+    if (tab !== "body") return;
+    const key = "popup_seen_body_overwrite_v121";
+    if (localStorage.getItem(key)) return;
+    localStorage.setItem(key, "1");
+    setPopup({
+      title: "身材數據更新",
+      body: "同一天的身材數據現在改為覆蓋機制，\n切換日期時會自動帶入舊資料，\n方便你修改當天的紀錄。",
+      btnText: "知道了",
+    });
+  }, [tab]);
+
   async function addCustomExercise() {
     const name = newExName.trim();
     if (!name) return;
