@@ -151,6 +151,7 @@ export default function FitForge({ user }) {
   const [bArm, setBArm] = useState("");
   const [bThigh, setBThigh] = useState("");
   const [activeMetric, setActiveMetric] = useState("weight");
+  const [bSavedAnim, setBSavedAnim] = useState(false);
 
   const today = new Date().toISOString().slice(0, 10);
 
@@ -174,7 +175,14 @@ export default function FitForge({ user }) {
       orderBy("createdAt", "desc")
     );
     const unsub = onSnapshot(q, (snapshot) => {
-      setBodyData(snapshot.docs.map(d => ({ id: d.id, ...d.data() })));
+      const data = snapshot.docs.map(d => ({ id: d.id, ...d.data() }));
+      // Sort by date DESC (newest date first); tie-break by createdAt DESC
+      data.sort((a, b) =>
+        b.date !== a.date
+          ? b.date.localeCompare(a.date)
+          : (b.createdAt?.seconds || 0) - (a.createdAt?.seconds || 0)
+      );
+      setBodyData(data);
     });
     return unsub;
   }, [user.uid]);
@@ -221,23 +229,41 @@ export default function FitForge({ user }) {
   useEffect(() => {
     setDoc(doc(db, "userPushTokens", user.uid), { lastActiveAt: serverTimestamp() }, { merge: true }).catch(() => {});
 
-    const permission = Notification.permission;
-    if (permission === "granted") {
-      // Silently refresh token
-      getAppMessaging().then(async (messaging) => {
-        if (!messaging) return;
+    // Check FCM support first, then decide what to do
+    getAppMessaging().then(async (messaging) => {
+      if (!messaging) return; // browser doesn't support FCM (e.g. iOS Safari)
+
+      const permission = typeof Notification !== "undefined" ? Notification.permission : "denied";
+      if (permission === "granted") {
+        // Silently refresh token
         try {
           const token = await getToken(messaging, { vapidKey: import.meta.env.VITE_VAPID_KEY });
           if (token) setDoc(doc(db, "userPushTokens", user.uid), { fcmToken: token }, { merge: true }).catch(() => {});
         } catch (_) { /* ignore */ }
-      });
-    } else if (permission === "default") {
-      // Show in-app banner after a short delay
-      const t = setTimeout(() => setShowNotifBanner(true), 3000);
-      return () => clearTimeout(t);
-    }
-    // "denied" → silent skip
+      } else if (permission === "default") {
+        // Show in-app banner after a short delay
+        setTimeout(() => setShowNotifBanner(true), 3000);
+      }
+      // "denied" → silent skip
+    });
   }, [user.uid]);
+
+  // Pre-fill body form when date changes or bodyData loads — enables overwrite UX
+  useEffect(() => {
+    const existing = bodyData.find(b => b.date === bDate);
+    if (existing) {
+      setBWeight(existing.weight || "");
+      setBHeight(existing.height || "");
+      setBChest(existing.chest || "");
+      setBWaist(existing.waist || "");
+      setBHip(existing.hip || "");
+      setBArm(existing.arm || "");
+      setBThigh(existing.thigh || "");
+    } else {
+      setBWeight(""); setBHeight(""); setBChest(""); setBWaist("");
+      setBHip(""); setBArm(""); setBThigh("");
+    }
+  }, [bDate, bodyData]);
 
   // Subscribe to custom exercises
   useEffect(() => {
@@ -325,11 +351,22 @@ export default function FitForge({ user }) {
   }
 
   async function saveBody() {
-    await addDoc(collection(db, "users", user.uid, "bodyData"), {
-      date: bDate, weight: bWeight, height: bHeight, chest: bChest,
-      waist: bWaist, hip: bHip, arm: bArm, thigh: bThigh, createdAt: serverTimestamp(),
-    });
-    setBWeight(""); setBHeight(""); setBChest(""); setBWaist(""); setBHip(""); setBArm(""); setBThigh("");
+    const hasData = [bWeight, bHeight, bChest, bWaist, bHip, bArm, bThigh].some(v => v !== "");
+    if (!hasData) return;
+    const existing = bodyData.find(b => b.date === bDate);
+    if (existing) {
+      await updateDoc(doc(db, "users", user.uid, "bodyData", existing.id), {
+        date: bDate, weight: bWeight, height: bHeight, chest: bChest,
+        waist: bWaist, hip: bHip, arm: bArm, thigh: bThigh,
+      });
+    } else {
+      await addDoc(collection(db, "users", user.uid, "bodyData"), {
+        date: bDate, weight: bWeight, height: bHeight, chest: bChest,
+        waist: bWaist, hip: bHip, arm: bArm, thigh: bThigh, createdAt: serverTimestamp(),
+      });
+    }
+    setBSavedAnim(true);
+    setTimeout(() => setBSavedAnim(false), 1500);
   }
 
   // Edit workout set helpers
@@ -425,6 +462,7 @@ export default function FitForge({ user }) {
 
   const recentWorkouts = workouts.slice(0, 5);
   const latestBody = bodyData[0];
+  const existingBodyForDate = bodyData.find(b => b.date === bDate) || null;
   const workoutDays = new Set(workouts.map(w => w.date)).size;
   const totalSets = workouts.reduce((a, w) => a + (w.sets?.length || 0), 0);
 
@@ -434,14 +472,14 @@ export default function FitForge({ user }) {
     bmi = (parseFloat(latestBody.weight) / (h * h)).toFixed(1);
   }
 
-  // bodyData is Firestore DESC order; reverse() puts oldest on left
+  // Sort by date ASC so chart x-axis goes from oldest (left) to newest (right)
   const chartPoints = bodyData
     .filter(b => {
       const v = parseFloat(b[activeMetric]);
       return !isNaN(v) && b[activeMetric] !== "" && b[activeMetric] != null;
     })
     .slice()
-    .reverse()
+    .sort((a, b) => a.date.localeCompare(b.date))
     .map(b => ({
       date: b.date,
       value: parseFloat(b[activeMetric]),
@@ -1263,7 +1301,21 @@ export default function FitForge({ user }) {
                 ))}
               </div>
 
-              <button style={styles.btn} onClick={saveBody}>📏 儲存身材數據</button>
+              {existingBodyForDate && (
+                <div style={{
+                  marginBottom: "10px", padding: "10px 14px",
+                  background: "rgba(255,165,0,0.08)", border: "1px solid rgba(255,165,0,0.35)",
+                  borderRadius: "10px", fontSize: "13px", color: "#ffaa00", lineHeight: "1.5",
+                }}>
+                  ⚠️ 此日期已有紀錄，儲存將覆蓋現有數據
+                </div>
+              )}
+              <button
+                style={{ ...styles.btn, transform: bSavedAnim ? "scale(0.97)" : "scale(1)", opacity: bSavedAnim ? 0.8 : 1 }}
+                onClick={saveBody}
+              >
+                {bSavedAnim ? "✓ 已儲存！" : existingBodyForDate ? "✏️ 更新身材數據" : "📏 儲存身材數據"}
+              </button>
             </div>
 
             {bodyData.length > 0 && (
@@ -1363,8 +1415,8 @@ export default function FitForge({ user }) {
                         <div style={{ fontSize: "12px", color: "#666" }}>{b.date}</div>
                         {i === 0 && <div style={{ fontSize: "11px", color: "#ff6a00", marginTop: "2px" }}>最新</div>}
                         {hasDiff && (
-                          <div style={{ fontSize: "13px", fontWeight: 700, color: val < prevVal ? "#4ade80" : "#f87171" }}>
-                            {val < prevVal ? "↓" : "↑"}
+                          <div style={{ fontSize: "13px", fontWeight: 700, color: val > prevVal ? "#4ade80" : "#f87171" }}>
+                            {val > prevVal ? "↓" : "↑"}
                             {Math.abs(val - prevVal).toFixed(1)}{cfg.unit}
                           </div>
                         )}
@@ -1603,24 +1655,48 @@ export default function FitForge({ user }) {
               版本更新記錄
             </div>
 
-            {/* v1.2 */}
+            {/* v1.2.1 */}
             <div style={{ marginBottom: "24px" }}>
               <div style={{ display: "flex", alignItems: "center", gap: "10px", marginBottom: "10px" }}>
-                <span style={{ fontSize: "17px", fontWeight: 900, color: "#ffd700" }}>v1.2</span>
+                <span style={{ fontSize: "17px", fontWeight: 900, color: "#ffd700" }}>v1.2.1</span>
                 <span style={{
                   fontSize: "11px", fontWeight: 800, color: "#ff6a00",
                   background: "rgba(255,106,0,0.15)", border: "1px solid rgba(255,106,0,0.3)",
                   borderRadius: "6px", padding: "2px 7px", letterSpacing: "0.05em",
                 }}>最新</span>
-                <span style={{ fontSize: "12px", color: "#555", marginLeft: "auto" }}>2026-02-27</span>
+                <span style={{ fontSize: "12px", color: "#555", marginLeft: "auto" }}>2026-02-28</span>
               </div>
               <div style={{ display: "flex", flexDirection: "column", gap: "7px" }}>
                 <div style={{ fontSize: "14px", color: "#c8c4bc", display: "flex", gap: "8px" }}>
-                  <span style={{ color: "#ffd700", flexShrink: 0 }}>🏆</span>
-                  <span>動作個人最高紀錄（PR）追蹤，破紀錄即時金色提示</span>
+                  <span style={{ color: "#ffd700", flexShrink: 0 }}>🔧</span>
+                  <span>身材趨勢圖 x 軸日期排序修正，補記過去資料不再亂序</span>
                 </div>
                 <div style={{ fontSize: "14px", color: "#c8c4bc", display: "flex", gap: "8px" }}>
-                  <span style={{ color: "#ffd700", flexShrink: 0 }}>📊</span>
+                  <span style={{ color: "#ffd700", flexShrink: 0 }}>🔧</span>
+                  <span>身材紀錄漲跌箭頭與顏色方向修正</span>
+                </div>
+                <div style={{ fontSize: "14px", color: "#c8c4bc", display: "flex", gap: "8px" }}>
+                  <span style={{ color: "#ffd700", flexShrink: 0 }}>🔧</span>
+                  <span>同日期身材數據改為覆蓋機制，自動帶入舊資料並提示覆蓋</span>
+                </div>
+              </div>
+            </div>
+
+            <div style={{ height: "1px", background: "rgba(255,255,255,0.07)", marginBottom: "20px" }} />
+
+            {/* v1.2.0 */}
+            <div style={{ marginBottom: "24px" }}>
+              <div style={{ display: "flex", alignItems: "center", gap: "10px", marginBottom: "10px" }}>
+                <span style={{ fontSize: "16px", fontWeight: 800, color: "#888" }}>v1.2.0</span>
+                <span style={{ fontSize: "12px", color: "#555", marginLeft: "auto" }}>2026-02-27</span>
+              </div>
+              <div style={{ display: "flex", flexDirection: "column", gap: "7px" }}>
+                <div style={{ fontSize: "14px", color: "#888", display: "flex", gap: "8px" }}>
+                  <span style={{ flexShrink: 0 }}>•</span>
+                  <span>動作個人最高紀錄（PR）追蹤，破紀錄即時金色提示</span>
+                </div>
+                <div style={{ fontSize: "14px", color: "#888", display: "flex", gap: "8px" }}>
+                  <span style={{ flexShrink: 0 }}>•</span>
                   <span>儀表板週訓練量趨勢圖，8 週進度一覽</span>
                 </div>
               </div>
@@ -1628,10 +1704,10 @@ export default function FitForge({ user }) {
 
             <div style={{ height: "1px", background: "rgba(255,255,255,0.07)", marginBottom: "20px" }} />
 
-            {/* v1.1 */}
+            {/* v1.1.0 */}
             <div style={{ marginBottom: "24px" }}>
               <div style={{ display: "flex", alignItems: "center", gap: "10px", marginBottom: "10px" }}>
-                <span style={{ fontSize: "16px", fontWeight: 800, color: "#888" }}>v1.1</span>
+                <span style={{ fontSize: "16px", fontWeight: 800, color: "#888" }}>v1.1.0</span>
                 <span style={{ fontSize: "12px", color: "#555", marginLeft: "auto" }}>2026-02-27</span>
               </div>
               <div style={{ display: "flex", flexDirection: "column", gap: "7px" }}>
@@ -1648,10 +1724,10 @@ export default function FitForge({ user }) {
 
             <div style={{ height: "1px", background: "rgba(255,255,255,0.07)", marginBottom: "20px" }} />
 
-            {/* v1.0 */}
+            {/* v1.0.0 */}
             <div style={{ marginBottom: "28px" }}>
               <div style={{ display: "flex", alignItems: "center", gap: "10px", marginBottom: "10px" }}>
-                <span style={{ fontSize: "16px", fontWeight: 800, color: "#888" }}>v1.0</span>
+                <span style={{ fontSize: "16px", fontWeight: 800, color: "#888" }}>v1.0.0</span>
                 <span style={{ fontSize: "12px", color: "#555", marginLeft: "auto" }}>2026-02-24</span>
               </div>
               <div style={{ fontSize: "14px", color: "#888", display: "flex", gap: "8px" }}>
