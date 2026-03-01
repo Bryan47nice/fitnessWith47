@@ -37,6 +37,9 @@
 | `public/firebase-messaging-sw.js` | FCM Service Worker |
 | `firestore.rules` | Firestore 安全規則 |
 | `vite.config.js` | Vite 建構設定（含 PWA plugin） |
+| `src/utils/fitforge.utils.js` | 純函式工具層（可測試的業務邏輯） |
+| `src/utils/fitforge.utils.test.js` | Vitest GWT 測試（30 個案例） |
+| `docs/testing.md` | GWT 測試案例完整文件 |
 
 ---
 
@@ -48,7 +51,7 @@
 - **圖表**：Recharts v3
 - **PWA**：vite-plugin-pwa（Workbox）
 - **TypeScript**：無（純 JSX）
-- **測試框架**：無
+- **測試框架**：Vitest v4 + jsdom（`npm test`）
 - **樣式**：全部 inline styles（無 CSS module / styled-components）
 
 ---
@@ -107,6 +110,15 @@ userPushTokens/{userId}       → { fcmToken, lastActiveAt, lastNotifiedAt }
 | `popup_trigger_count` | STRING | trigger_type=1 時的 N 值 |
 | `marquee_enabled` | BOOLEAN | 頂部跑馬燈開關 |
 | `marquee_texts` | STRING | 跑馬燈訊息（JSON array 格式） |
+
+---
+
+## 測試規範
+
+- 執行：`npm test`（Vitest，不需 build）
+- 純函式與布林判斷邏輯必須放在 `src/utils/fitforge.utils.js`，並補對應測試
+- 新增測試案例時，同步更新 `docs/testing.md` 的 GWT 表格
+- UI 互動與 Firestore 操作目前不在測試範圍
 
 ---
 
