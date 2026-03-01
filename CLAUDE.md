@@ -90,6 +90,7 @@ userPushTokens/{userId}       → { fcmToken, lastActiveAt, lastNotifiedAt }
 | `popup_seen_{title}` | Remote Config 彈窗顯示計數（title 為彈窗標題） |
 | `popup_seen_body_overwrite_v121` | 身材頁籤一次性說明彈窗 |
 | `body_migrated_date_key_v122` | 身材資料遷移旗標（v1.2.2 一次性遷移） |
+| `ex_active_tag` | 上次選擇的動作部位 Tag（胸/背/肩/腿/手臂/核心/有氧/自訂） |
 
 ---
 

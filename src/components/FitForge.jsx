@@ -13,70 +13,16 @@ import {
   XAxis, YAxis, Tooltip, ReferenceLine,
 } from "recharts";
 
-const APP_VERSION = "1.3.1";
+const APP_VERSION = "1.3.2";
 
 const exerciseCategories = [
-  {
-    label: "胸部",
-    exercises: [
-      "臥推 Bench Press",
-      "上斜臥推 Incline Bench Press",
-      "雙槓撐體 Dips",
-      "飛鳥 Cable Fly",
-    ],
-  },
-  {
-    label: "背部",
-    exercises: [
-      "硬舉 Deadlift",
-      "引體向上 Pull-up",
-      "划船 Barbell Row",
-      "滑輪下拉 Lat Pulldown",
-      "單手啞鈴划船 One-Arm DB Row",
-    ],
-  },
-  {
-    label: "肩部",
-    exercises: [
-      "肩推 Shoulder Press",
-      "側平舉 Lateral Raise",
-      "前平舉 Front Raise",
-      "面拉 Face Pull",
-    ],
-  },
-  {
-    label: "腿部",
-    exercises: [
-      "深蹲 Squat",
-      "腿推 Leg Press",
-      "腿彎舉 Leg Curl",
-      "腿伸展 Leg Extension",
-      "保加利亞分腿蹲 Bulgarian Split Squat",
-    ],
-  },
-  {
-    label: "手臂",
-    exercises: [
-      "二頭彎舉 Bicep Curl",
-      "三頭下壓 Tricep Pushdown",
-    ],
-  },
-  {
-    label: "核心",
-    exercises: [
-      "棒式 Plank",
-      "捲腹 Crunch",
-      "俄羅斯轉體 Russian Twist",
-    ],
-  },
-  {
-    label: "有氧",
-    exercises: [
-      "跑步機 Treadmill",
-      "騎車 Cycling",
-      "跳繩 Jump Rope",
-    ],
-  },
+  { label: "胸", exercises: ["臥推", "上斜臥推", "雙槓撐體", "飛鳥", "胸推機", "蝴蝶機", "伏地挺身"] },
+  { label: "背", exercises: ["引體向上", "划船", "滑輪下拉", "單手啞鈴划船", "坐姿划船機"] },
+  { label: "肩", exercises: ["肩推", "側平舉", "前平舉", "面拉"] },
+  { label: "腿", exercises: ["深蹲", "硬舉", "腿推", "腿彎舉", "腿伸展", "保加利亞分腿蹲", "啞鈴弓箭步"] },
+  { label: "手臂", exercises: ["二頭彎舉", "三頭下壓"] },
+  { label: "核心", exercises: ["棒式", "捲腹", "俄羅斯轉體"] },
+  { label: "有氧", exercises: ["跑步機", "騎車", "跳繩"] },
 ];
 
 const metricConfig = {
@@ -100,7 +46,6 @@ export default function FitForge({ user }) {
   // Custom exercises from Firestore
   const [customExercises, setCustomExercises] = useState([]);
   const [newExName, setNewExName] = useState("");
-  const [showManageEx, setShowManageEx] = useState(false);
   const [showExPicker, setShowExPicker] = useState(false);
   const [editingExId, setEditingExId] = useState(null);
   const [editingExName, setEditingExName] = useState("");
@@ -119,7 +64,6 @@ export default function FitForge({ user }) {
   // Workout form state
   const [wDate, setWDate] = useState(new Date().toISOString().slice(0, 10));
   const [wExercise, setWExercise] = useState(exerciseCategories[0].exercises[0]);
-  const [wCustom, setWCustom] = useState("");
   const [wSets, setWSets] = useState([{ reps: "", weight: "" }]);
   const [wNote, setWNote] = useState("");
   const [savedAnim, setSavedAnim] = useState(false);
@@ -133,12 +77,14 @@ export default function FitForge({ user }) {
     () => localStorage.getItem("last_seen_changelog") !== APP_VERSION
   );
 
-  // Quick-Log FAB state
-  const [showQuickLog, setShowQuickLog] = useState(false);
-  const [quickExercise, setQuickExercise] = useState(exerciseCategories[0].exercises[0]);
-  const [quickSets, setQuickSets] = useState([{ reps: "", weight: "" }]);
-  const [quickAnim, setQuickAnim] = useState(false);
-  const [pickerTarget, setPickerTarget] = useState("workout"); // "workout" | "quick" | "editWorkout"
+  // Inline exercise picker state
+  const [exPickerExpanded, setExPickerExpanded] = useState(false);
+  const [exSearchQuery, setExSearchQuery] = useState("");
+  const [exActiveTag, setExActiveTag] = useState(
+    () => localStorage.getItem("ex_active_tag") || null
+  );
+  const [showAddCustomEx, setShowAddCustomEx] = useState(false);
+  const [pickerTarget, setPickerTarget] = useState("editWorkout"); // "editWorkout" | "goal"
 
   // Edit workout sheet state
   const [showEditWorkout, setShowEditWorkout] = useState(false);
@@ -412,7 +358,7 @@ export default function FitForge({ user }) {
   }
 
   async function saveWorkout() {
-    const name = wCustom.trim() || wExercise;
+    const name = wExercise;
     const isNewPR = wSets.some(s => {
       const wt = parseFloat(s.weight);
       return !isNaN(wt) && wt > 0 && (!prMap[name] || wt > prMap[name].weight);
@@ -422,28 +368,13 @@ export default function FitForge({ user }) {
     });
     setDoc(doc(db, "userPushTokens", user.uid), { lastWorkoutDate: wDate }, { merge: true }).catch(() => {});
     setWSets([{ reps: "", weight: "" }]);
-    setWNote(""); setWCustom("");
+    setWNote("");
     setSavedAnim(true);
     setTimeout(() => setSavedAnim(false), 1500);
     if (isNewPR) {
       setPrAnim(true);
       setTimeout(() => setPrAnim(false), 2500);
     }
-  }
-
-  async function saveQuickWorkout() {
-    const qDate = new Date().toISOString().slice(0, 10);
-    await addDoc(collection(db, "users", user.uid, "workouts"), {
-      date: qDate,
-      exercise: quickExercise,
-      sets: quickSets,
-      note: "",
-      createdAt: serverTimestamp(),
-    });
-    setDoc(doc(db, "userPushTokens", user.uid), { lastWorkoutDate: qDate }, { merge: true }).catch(() => {});
-    setQuickSets([{ reps: "", weight: "" }]);
-    setQuickAnim(true);
-    setTimeout(() => { setQuickAnim(false); setShowQuickLog(false); }, 1200);
   }
 
   async function saveBody() {
@@ -713,6 +644,14 @@ export default function FitForge({ user }) {
     return "目標";
   }
 
+  function getCategoryForExercise(name) {
+    for (const cat of exerciseCategories) {
+      if (cat.exercises.includes(name)) return cat.label;
+    }
+    if (customExercises.some(e => e.name === name)) return "自訂";
+    return "";
+  }
+
   const sortedGoals = [...goals].sort((a, b) => {
     const aProg = getGoalProgress(a);
     const bProg = getGoalProgress(b);
@@ -724,6 +663,39 @@ export default function FitForge({ user }) {
     if (aExpired !== bExpired) return aExpired ? 1 : -1;
     return a.deadline.localeCompare(b.deadline);
   });
+
+  const recentExercises = (() => {
+    const seen = new Set();
+    const result = [];
+    for (const w of workouts) {
+      if (!seen.has(w.exercise)) {
+        seen.add(w.exercise);
+        result.push(w.exercise);
+        if (result.length >= 5) break;
+      }
+    }
+    return result;
+  })();
+
+  const allPresetFlat = exerciseCategories.flatMap(cat =>
+    cat.exercises.map(e => ({ name: e, category: cat.label }))
+  );
+  const allCustomFlat = customExercises.map(e => ({ name: e.name, category: "自訂", id: e.id }));
+
+  let pickerDisplayList;
+  if (exSearchQuery.trim()) {
+    const q = exSearchQuery.trim().toLowerCase();
+    pickerDisplayList = [...allPresetFlat, ...allCustomFlat].filter(e =>
+      e.name.toLowerCase().includes(q)
+    );
+  } else if (exActiveTag === "自訂") {
+    pickerDisplayList = allCustomFlat;
+  } else if (exActiveTag) {
+    const cat = exerciseCategories.find(c => c.label === exActiveTag);
+    pickerDisplayList = cat ? cat.exercises.map(e => ({ name: e, category: exActiveTag })) : [];
+  } else {
+    pickerDisplayList = recentExercises.map(name => ({ name, category: getCategoryForExercise(name) }));
+  }
 
   const tabs = [
     { id: "dashboard", label: "儀表板", icon: "⚡" },
@@ -1010,14 +982,12 @@ export default function FitForge({ user }) {
                 {cat.label}
               </div>
               {cat.exercises.map(ex => {
-                const currentEx = pickerTarget === "quick" ? quickExercise : pickerTarget === "editWorkout" ? ewExercise : pickerTarget === "goal" ? goalTargetExercise : wExercise;
+                const currentEx = pickerTarget === "editWorkout" ? ewExercise : pickerTarget === "goal" ? goalTargetExercise : ewExercise;
                 const sel = currentEx === ex;
                 return (
                   <button key={ex} onClick={() => {
-                    if (pickerTarget === "quick") setQuickExercise(ex);
-                    else if (pickerTarget === "editWorkout") setEwExercise(ex);
+                    if (pickerTarget === "editWorkout") setEwExercise(ex);
                     else if (pickerTarget === "goal") setGoalTargetExercise(ex);
-                    else setWExercise(ex);
                     setShowExPicker(false);
                   }}
                     style={{
@@ -1044,14 +1014,12 @@ export default function FitForge({ user }) {
                 ★ 我的自訂動作
               </div>
               {customExercises.map(ex => {
-                const currentEx = pickerTarget === "quick" ? quickExercise : pickerTarget === "editWorkout" ? ewExercise : pickerTarget === "goal" ? goalTargetExercise : wExercise;
+                const currentEx = pickerTarget === "editWorkout" ? ewExercise : pickerTarget === "goal" ? goalTargetExercise : ewExercise;
                 const sel = currentEx === ex.name;
                 return (
                   <button key={ex.id} onClick={() => {
-                    if (pickerTarget === "quick") setQuickExercise(ex.name);
-                    else if (pickerTarget === "editWorkout") setEwExercise(ex.name);
+                    if (pickerTarget === "editWorkout") setEwExercise(ex.name);
                     else if (pickerTarget === "goal") setGoalTargetExercise(ex.name);
-                    else setWExercise(ex.name);
                     setShowExPicker(false);
                   }}
                     style={{
@@ -1349,21 +1317,183 @@ export default function FitForge({ user }) {
                 <input type="date" style={styles.input} value={wDate} onChange={e => setWDate(e.target.value)} />
               </div>
 
-              <div style={{ marginBottom: "12px" }}>
-                <label style={styles.label}>選擇動作</label>
-                <button
-                  style={styles.exPickerTrigger}
-                  onClick={() => { setPickerTarget("workout"); setShowExPicker(true); }}
-                >
-                  <span>{wExercise}</span>
-                  <span style={{ color: "#666", fontSize: "12px" }}>▼</span>
-                </button>
-              </div>
+              {!exPickerExpanded ? (
+                <div style={{ marginBottom: "12px" }}>
+                  <label style={styles.label}>動作</label>
+                  <button
+                    style={styles.exPickerTrigger}
+                    onClick={() => setExPickerExpanded(true)}
+                  >
+                    <span>{wExercise}</span>
+                    <span style={{ color: "#666", fontSize: "12px" }}>▼ 更換</span>
+                  </button>
+                </div>
+              ) : (
+                <div style={{ marginBottom: "12px" }}>
+                  {/* 搜尋框 */}
+                  <div style={{ position: "relative", marginBottom: "10px" }}>
+                    <input
+                      autoFocus
+                      style={{ ...styles.input, paddingRight: "36px" }}
+                      placeholder="搜尋或選擇動作..."
+                      value={exSearchQuery}
+                      onChange={e => setExSearchQuery(e.target.value)}
+                    />
+                    {exSearchQuery && (
+                      <button
+                        onClick={() => setExSearchQuery("")}
+                        style={{
+                          position: "absolute", right: "12px", top: "50%", transform: "translateY(-50%)",
+                          background: "none", border: "none", color: "#888", fontSize: "16px", cursor: "pointer",
+                        }}
+                      >✕</button>
+                    )}
+                  </div>
 
-              <div style={{ marginBottom: "16px" }}>
-                <label style={styles.label}>臨時動作名稱（可選，不儲存）</label>
-                <input style={styles.input} placeholder="輸入一次性動作名稱..." value={wCustom} onChange={e => setWCustom(e.target.value)} />
-              </div>
+                  {/* 部位 Tag 列 */}
+                  <div style={{
+                    display: "flex", gap: "8px", overflowX: "auto",
+                    WebkitOverflowScrolling: "touch", scrollbarWidth: "none",
+                    paddingBottom: "4px", marginBottom: "10px",
+                  }}>
+                    {["胸", "背", "肩", "腿", "手臂", "核心", "有氧", "自訂"].map(tag => (
+                      <button key={tag} onClick={() => {
+                        const next = exActiveTag === tag ? null : tag;
+                        setExActiveTag(next);
+                        if (next) localStorage.setItem("ex_active_tag", next);
+                        else localStorage.removeItem("ex_active_tag");
+                        setExSearchQuery("");
+                      }}
+                        style={{
+                          flexShrink: 0, padding: "5px 12px", borderRadius: "20px", cursor: "pointer",
+                          fontFamily: "inherit", fontSize: "13px", fontWeight: exActiveTag === tag ? 700 : 400,
+                          border: exActiveTag === tag ? "1px solid #ff6a00" : "1px solid rgba(255,255,255,0.12)",
+                          background: exActiveTag === tag ? "rgba(255,106,0,0.2)" : "rgba(255,255,255,0.04)",
+                          color: exActiveTag === tag ? "#ff6a00" : "#888",
+                        }}>
+                        {tag}
+                      </button>
+                    ))}
+                  </div>
+
+                  {/* 動作列表 */}
+                  <div style={{
+                    maxHeight: "220px", overflowY: "auto", WebkitOverflowScrolling: "touch",
+                    border: "1px solid rgba(255,255,255,0.08)", borderRadius: "10px", background: "#12121a",
+                  }}>
+                    {!exSearchQuery && !exActiveTag && recentExercises.length === 0 && (
+                      <div style={{ padding: "20px", textAlign: "center", color: "#555", fontSize: "13px" }}>
+                        輸入動作名稱或選擇部位開始
+                      </div>
+                    )}
+                    {!exSearchQuery && !exActiveTag && recentExercises.length > 0 && (
+                      <div style={{ padding: "8px 14px 4px", fontSize: "11px", color: "#555", letterSpacing: "0.08em", textTransform: "uppercase" }}>
+                        最近使用
+                      </div>
+                    )}
+
+                    {pickerDisplayList.map(ex => (
+                      <button key={ex.name} onClick={() => {
+                        setWExercise(ex.name);
+                        setExPickerExpanded(false);
+                        setExSearchQuery("");
+                      }}
+                        style={{
+                          display: "flex", alignItems: "center", gap: "8px",
+                          width: "100%", padding: "11px 14px",
+                          background: wExercise === ex.name ? "rgba(255,106,0,0.12)" : "transparent",
+                          border: "none", borderLeft: wExercise === ex.name ? "3px solid #ff6a00" : "3px solid transparent",
+                          color: wExercise === ex.name ? "#ff9500" : "#e8e4dc",
+                          fontSize: "15px", textAlign: "left", cursor: "pointer",
+                          fontFamily: "inherit", boxSizing: "border-box",
+                        }}>
+                        {ex.category && (
+                          <span style={{
+                            fontSize: "10px", fontWeight: 700, color: "#666",
+                            background: "rgba(255,255,255,0.06)", borderRadius: "4px",
+                            padding: "2px 6px", flexShrink: 0, letterSpacing: "0.04em",
+                          }}>{ex.category}</span>
+                        )}
+                        {ex.name}
+                        {ex.category === "自訂" && (
+                          <button
+                            onClick={e => { e.stopPropagation(); deleteCustomExercise(ex.id); }}
+                            style={{
+                              marginLeft: "auto", background: "rgba(255,50,50,0.12)",
+                              border: "1px solid rgba(255,50,50,0.2)", borderRadius: "6px",
+                              color: "#ff5555", fontSize: "11px", padding: "2px 8px",
+                              cursor: "pointer", fontFamily: "inherit", flexShrink: 0,
+                            }}>
+                            刪除
+                          </button>
+                        )}
+                      </button>
+                    ))}
+
+                    {/* 自訂 Tag：底部新增按鈕 */}
+                    {exActiveTag === "自訂" && (
+                      <div style={{ padding: "8px 14px 12px", borderTop: pickerDisplayList.length > 0 ? "1px solid rgba(255,255,255,0.06)" : "none" }}>
+                        {showAddCustomEx ? (
+                          <div style={{ display: "flex", gap: "8px" }}>
+                            <input
+                              autoFocus
+                              style={{ ...styles.input, flex: 1, padding: "8px 12px", fontSize: "14px" }}
+                              placeholder="動作名稱..."
+                              value={newExName}
+                              onChange={e => setNewExName(e.target.value)}
+                              onKeyDown={e => {
+                                if (e.key === "Enter") { addCustomExercise(); setShowAddCustomEx(false); }
+                                if (e.key === "Escape") { setShowAddCustomEx(false); setNewExName(""); }
+                              }}
+                            />
+                            <button
+                              style={{
+                                padding: "8px 12px", border: "none", borderRadius: "8px",
+                                background: "linear-gradient(135deg,#ff6a00,#ff9500)",
+                                color: "#fff", fontSize: "13px", fontWeight: 800,
+                                cursor: "pointer", fontFamily: "inherit", whiteSpace: "nowrap",
+                              }}
+                              onClick={() => { addCustomExercise(); setShowAddCustomEx(false); }}
+                            >新增</button>
+                            <button
+                              style={{
+                                padding: "8px 10px", border: "1px solid rgba(255,255,255,0.12)",
+                                borderRadius: "8px", background: "transparent",
+                                color: "#888", fontSize: "13px", cursor: "pointer", fontFamily: "inherit",
+                              }}
+                              onClick={() => { setShowAddCustomEx(false); setNewExName(""); }}
+                            >取消</button>
+                          </div>
+                        ) : (
+                          <button
+                            onClick={() => setShowAddCustomEx(true)}
+                            style={{
+                              width: "100%", padding: "8px", background: "rgba(255,106,0,0.08)",
+                              border: "1px dashed rgba(255,106,0,0.3)", borderRadius: "8px",
+                              color: "#ff9500", fontSize: "13px", fontWeight: 700,
+                              cursor: "pointer", fontFamily: "inherit",
+                            }}>
+                            ＋ 新增動作
+                          </button>
+                        )}
+                      </div>
+                    )}
+
+                    {exSearchQuery && pickerDisplayList.length === 0 && (
+                      <div style={{ padding: "20px", textAlign: "center", color: "#555", fontSize: "13px" }}>
+                        沒有找到「{exSearchQuery}」相關動作
+                      </div>
+                    )}
+                  </div>
+
+                  {/* 取消按鈕 */}
+                  <button
+                    onClick={() => { setExPickerExpanded(false); setExSearchQuery(""); }}
+                    style={{ ...styles.btnSecondary, marginTop: "8px", width: "100%", textAlign: "center" }}>
+                    取消選擇
+                  </button>
+                </div>
+              )}
 
               <div style={{ marginBottom: "12px" }}>
                 <div style={{ display: "flex", justifyContent: "space-between", alignItems: "center", marginBottom: "10px" }}>
@@ -1405,132 +1535,6 @@ export default function FitForge({ user }) {
               </button>
             </div>
 
-            {/* CUSTOM EXERCISES MANAGEMENT */}
-            <div style={styles.card}>
-              <div style={{
-                display: "flex", justifyContent: "space-between", alignItems: "center",
-                marginBottom: showManageEx ? "16px" : 0,
-              }}>
-                <div
-                  style={{ ...styles.sectionTitle, marginBottom: 0, cursor: "pointer", userSelect: "none" }}
-                  onClick={() => setShowManageEx(!showManageEx)}>
-                  ★ 我的自訂動作 {customExercises.length > 0 && `(${customExercises.length})`}
-                </div>
-                <button
-                  style={{ ...styles.btnSecondary, fontSize: "18px", padding: "2px 10px", lineHeight: 1 }}
-                  onClick={() => setShowManageEx(!showManageEx)}
-                >
-                  {showManageEx ? "▲" : "▼"}
-                </button>
-              </div>
-
-              {showManageEx && (
-                <div>
-                  {/* Add new custom exercise */}
-                  <div style={{ display: "flex", gap: "8px", marginBottom: "16px" }}>
-                    <input
-                      style={{ ...styles.input, marginBottom: 0 }}
-                      placeholder="輸入自訂動作名稱..."
-                      value={newExName}
-                      onChange={e => setNewExName(e.target.value)}
-                      onKeyDown={e => e.key === "Enter" && addCustomExercise()}
-                    />
-                    <button
-                      style={{
-                        padding: "10px 16px", border: "none", borderRadius: "10px",
-                        background: "linear-gradient(135deg, #ff6a00, #ff9500)",
-                        color: "#fff", fontSize: "14px", fontWeight: 800,
-                        cursor: "pointer", whiteSpace: "nowrap", flexShrink: 0,
-                      }}
-                      onClick={addCustomExercise}
-                    >
-                      + 新增
-                    </button>
-                  </div>
-
-                  {/* List of custom exercises */}
-                  {customExercises.length === 0 ? (
-                    <div style={{ color: "#555", fontSize: "13px", textAlign: "center", padding: "12px 0" }}>
-                      還沒有自訂動作，新增你獨有的訓練動作！
-                    </div>
-                  ) : (
-                    <div>
-                      {customExercises.map(ex => (
-                        <div key={ex.id} style={{
-                          padding: "10px 12px", marginBottom: "8px",
-                          background: "rgba(255,106,0,0.06)",
-                          border: "1px solid rgba(255,106,0,0.18)",
-                          borderRadius: "10px",
-                        }}>
-                          {editingExId === ex.id ? (
-                            /* ── Editing row ── */
-                            <div style={{ display: "flex", gap: "6px", alignItems: "center" }}>
-                              <input
-                                style={{ ...styles.input, flex: 1, padding: "7px 12px", fontSize: "14px" }}
-                                value={editingExName}
-                                onChange={e => setEditingExName(e.target.value)}
-                                onKeyDown={e => {
-                                  if (e.key === "Enter") renameCustomExercise();
-                                  if (e.key === "Escape") { setEditingExId(null); setEditingExName(""); }
-                                }}
-                                autoFocus
-                              />
-                              <button
-                                style={{
-                                  padding: "7px 12px", border: "none", borderRadius: "8px",
-                                  background: "linear-gradient(135deg,#ff6a00,#ff9500)",
-                                  color: "#fff", fontSize: "13px", fontWeight: 800, cursor: "pointer",
-                                  whiteSpace: "nowrap", fontFamily: "inherit",
-                                }}
-                                onClick={renameCustomExercise}
-                              >儲存</button>
-                              <button
-                                style={{
-                                  padding: "7px 12px", border: "1px solid rgba(255,255,255,0.15)",
-                                  borderRadius: "8px", background: "transparent",
-                                  color: "#888", fontSize: "13px", cursor: "pointer", fontFamily: "inherit",
-                                }}
-                                onClick={() => { setEditingExId(null); setEditingExName(""); }}
-                              >取消</button>
-                            </div>
-                          ) : (
-                            /* ── Normal row ── */
-                            <div style={{ display: "flex", justifyContent: "space-between", alignItems: "center" }}>
-                              <div style={{ display: "flex", alignItems: "center", gap: "8px" }}>
-                                <span style={{ color: "#ff9500", fontSize: "13px" }}>★</span>
-                                <span style={{ fontSize: "14px", fontWeight: 600 }}>{ex.name}</span>
-                              </div>
-                              <div style={{ display: "flex", gap: "6px" }}>
-                                <button
-                                  style={{
-                                    padding: "4px 12px",
-                                    background: "rgba(255,255,255,0.06)",
-                                    border: "1px solid rgba(255,255,255,0.14)",
-                                    borderRadius: "6px", color: "#ccc",
-                                    cursor: "pointer", fontSize: "12px", fontFamily: "inherit",
-                                  }}
-                                  onClick={() => { setEditingExId(ex.id); setEditingExName(ex.name); }}
-                                >改名</button>
-                                <button
-                                  style={{
-                                    padding: "4px 12px",
-                                    background: "rgba(255,50,50,0.12)",
-                                    border: "1px solid rgba(255,50,50,0.2)",
-                                    borderRadius: "6px", color: "#ff5555",
-                                    cursor: "pointer", fontSize: "12px", fontFamily: "inherit",
-                                  }}
-                                  onClick={() => deleteCustomExercise(ex.id)}
-                                >刪除</button>
-                              </div>
-                            </div>
-                          )}
-                        </div>
-                      ))}
-                    </div>
-                  )}
-                </div>
-              )}
-            </div>
             {/* ── 歷史紀錄（合併自原 history tab） ── */}
             <div style={styles.card}>
               <div style={styles.sectionTitle}>所有訓練紀錄</div>
@@ -1825,20 +1829,25 @@ export default function FitForge({ user }) {
         </div>
       )}
 
-      {/* Quick-Log FAB */}
+      {/* FAB */}
       <button
         style={{
           position: "fixed", bottom: "28px", right: "20px", zIndex: 150,
           width: "56px", height: "56px", borderRadius: "50%", border: "none",
           background: "linear-gradient(135deg, #ff6a00, #ff9500)",
-          color: "#fff", fontSize: "28px", cursor: "pointer",
+          color: "#fff", fontSize: "22px", cursor: "pointer",
           boxShadow: "0 4px 20px rgba(255,106,0,0.45)",
           display: "flex", alignItems: "center", justifyContent: "center",
           fontFamily: "inherit",
+          animation: !todayWorked ? "fitforge-pulse 1.5s ease-out infinite" : "none",
         }}
-        onClick={() => setShowQuickLog(true)}
+        onClick={() => {
+          setTab("workout");
+          setWDate(today);
+          setExPickerExpanded(true);
+        }}
       >
-        +
+        {todayWorked ? "✓" : "💪"}
       </button>
 
 
@@ -2012,10 +2021,10 @@ export default function FitForge({ user }) {
               版本更新記錄
             </div>
 
-            {/* v1.3.1 */}
+            {/* v1.3.2 */}
             <div style={{ marginBottom: "24px" }}>
               <div style={{ display: "flex", alignItems: "center", gap: "10px", marginBottom: "10px" }}>
-                <span style={{ fontSize: "17px", fontWeight: 900, color: "#ffd700" }}>v1.3.1</span>
+                <span style={{ fontSize: "17px", fontWeight: 900, color: "#ffd700" }}>v1.3.2</span>
                 <span style={{
                   fontSize: "11px", fontWeight: 800, color: "#ff6a00",
                   background: "rgba(255,106,0,0.15)", border: "1px solid rgba(255,106,0,0.3)",
@@ -2026,6 +2035,30 @@ export default function FitForge({ user }) {
               <div style={{ display: "flex", flexDirection: "column", gap: "7px" }}>
                 <div style={{ fontSize: "14px", color: "#c8c4bc", display: "flex", gap: "8px" }}>
                   <span style={{ color: "#ffd700", flexShrink: 0 }}>✨</span>
+                  <span>動作選擇器全面升級：搜尋框 + 部位 Tag + 最近使用，一鍵找到想練的動作</span>
+                </div>
+                <div style={{ fontSize: "14px", color: "#c8c4bc", display: "flex", gap: "8px" }}>
+                  <span style={{ color: "#ffd700", flexShrink: 0 }}>✨</span>
+                  <span>自訂動作整合進「自訂」Tag，直接在選擇器內新增 / 刪除</span>
+                </div>
+                <div style={{ fontSize: "14px", color: "#c8c4bc", display: "flex", gap: "8px" }}>
+                  <span style={{ color: "#ffd700", flexShrink: 0 }}>✨</span>
+                  <span>浮動按鈕升級：今日已訓練改顯示「✓」，點擊直接進入訓練日誌並展開動作選擇</span>
+                </div>
+              </div>
+            </div>
+
+            <div style={{ height: "1px", background: "rgba(255,255,255,0.07)", marginBottom: "20px" }} />
+
+            {/* v1.3.1 */}
+            <div style={{ marginBottom: "24px" }}>
+              <div style={{ display: "flex", alignItems: "center", gap: "10px", marginBottom: "10px" }}>
+                <span style={{ fontSize: "16px", fontWeight: 800, color: "#888" }}>v1.3.1</span>
+                <span style={{ fontSize: "12px", color: "#555", marginLeft: "auto" }}>2026-03-01</span>
+              </div>
+              <div style={{ display: "flex", flexDirection: "column", gap: "7px" }}>
+                <div style={{ fontSize: "14px", color: "#888", display: "flex", gap: "8px" }}>
+                  <span style={{ flexShrink: 0 }}>•</span>
                   <span>新版本通知：頭像紅點提示 + More Panel 內 NEW badge，有更新時自動提醒</span>
                 </div>
               </div>
@@ -2234,170 +2267,6 @@ export default function FitForge({ user }) {
       document.body
     )}
 
-    {showQuickLog && createPortal(
-      <div
-        style={{
-          position: "fixed", inset: 0, zIndex: 9997,
-          background: "rgba(0,0,0,0.65)",
-          display: "flex", alignItems: "flex-end", justifyContent: "center",
-        }}
-        onClick={() => setShowQuickLog(false)}
-      >
-        <div
-          style={{
-            width: "100%", maxWidth: "480px", maxHeight: "75vh",
-            background: "#13131c", borderRadius: "20px 20px 0 0",
-            border: "1px solid rgba(255,255,255,0.1)", borderBottom: "none",
-            display: "flex", flexDirection: "column", overflow: "hidden",
-          }}
-          onClick={e => e.stopPropagation()}
-        >
-          {/* Header */}
-          <div style={{
-            display: "flex", alignItems: "center", justifyContent: "space-between",
-            padding: "16px 20px 14px", borderBottom: "1px solid rgba(255,255,255,0.07)",
-            flexShrink: 0,
-          }}>
-            <span style={{ fontSize: "16px", fontWeight: 800, color: "#e8e4dc", letterSpacing: "0.05em" }}>
-              快速記錄
-            </span>
-            <button
-              style={{
-                background: "rgba(255,255,255,0.08)", border: "1px solid rgba(255,255,255,0.15)",
-                borderRadius: "8px", padding: "6px 16px", color: "#e8e4dc",
-                fontSize: "14px", fontWeight: 700, cursor: "pointer",
-                fontFamily: "'Barlow Condensed','Noto Sans TC',sans-serif",
-              }}
-              onClick={() => setShowQuickLog(false)}
-            >
-              取消
-            </button>
-          </div>
-
-          {/* Scrollable body */}
-          <div style={{ flex: 1, overflowY: "auto", WebkitOverflowScrolling: "touch", padding: "16px 20px 24px" }}>
-            {/* Date display */}
-            <div style={{ fontSize: "13px", color: "#666", marginBottom: "16px", letterSpacing: "0.04em" }}>
-              今天 · {new Date().toISOString().slice(0, 10)}
-            </div>
-
-            {/* Exercise picker trigger */}
-            <div style={{ marginBottom: "16px" }}>
-              <label style={{ fontSize: "12px", color: "#888", letterSpacing: "0.06em", marginBottom: "6px", display: "block" }}>
-                動作
-              </label>
-              <button
-                style={{
-                  width: "100%", background: "#12121a",
-                  border: "1px solid rgba(255,255,255,0.1)", borderRadius: "10px",
-                  padding: "10px 14px", color: "#e8e4dc", fontSize: "15px",
-                  cursor: "pointer", display: "flex", alignItems: "center", justifyContent: "space-between",
-                  textAlign: "left", fontFamily: "'Barlow Condensed','Noto Sans TC',sans-serif",
-                  boxSizing: "border-box",
-                }}
-                onClick={() => { setPickerTarget("quick"); setShowExPicker(true); }}
-              >
-                <span>{quickExercise}</span>
-                <span style={{ color: "#666", fontSize: "12px" }}>▼</span>
-              </button>
-            </div>
-
-            {/* Sets */}
-            <div style={{ marginBottom: "12px" }}>
-              <div style={{ display: "flex", justifyContent: "space-between", alignItems: "center", marginBottom: "10px" }}>
-                <label style={{ fontSize: "12px", color: "#888", letterSpacing: "0.06em" }}>訓練組數</label>
-                <button
-                  style={{
-                    padding: "6px 12px", border: "1px solid rgba(255,255,255,0.15)", borderRadius: "8px",
-                    background: "transparent", color: "#888", fontSize: "13px",
-                    cursor: "pointer", fontFamily: "'Barlow Condensed','Noto Sans TC',sans-serif",
-                  }}
-                  onClick={() => setQuickSets([...quickSets, { reps: "", weight: "" }])}
-                >
-                  + 新增一組
-                </button>
-              </div>
-              {quickSets.map((s, i) => (
-                <div key={i} style={{ display: "flex", gap: "8px", alignItems: "center", marginBottom: "8px" }}>
-                  <div style={{ textAlign: "center", color: "#ff6a00", fontWeight: 900, fontSize: "18px", minWidth: "24px" }}>
-                    {i + 1}
-                  </div>
-                  <div style={{ flex: 1 }}>
-                    <input
-                      type="number"
-                      style={{
-                        flex: 1, width: "100%", background: "rgba(255,255,255,0.05)",
-                        border: "1px solid rgba(255,255,255,0.1)", borderRadius: "8px",
-                        padding: "8px 12px", color: "#e8e4dc", fontSize: "15px",
-                        outline: "none", textAlign: "center", fontFamily: "inherit", boxSizing: "border-box",
-                      }}
-                      placeholder="次數"
-                      value={s.reps}
-                      onChange={e => {
-                        const updated = [...quickSets];
-                        updated[i] = { ...updated[i], reps: e.target.value };
-                        setQuickSets(updated);
-                      }}
-                    />
-                    <div style={{ fontSize: "11px", color: "#666", textAlign: "center", marginTop: "2px" }}>次數 (reps)</div>
-                  </div>
-                  <div style={{ flex: 1 }}>
-                    <input
-                      type="number"
-                      style={{
-                        flex: 1, width: "100%", background: "rgba(255,255,255,0.05)",
-                        border: "1px solid rgba(255,255,255,0.1)", borderRadius: "8px",
-                        padding: "8px 12px", color: "#e8e4dc", fontSize: "15px",
-                        outline: "none", textAlign: "center", fontFamily: "inherit", boxSizing: "border-box",
-                      }}
-                      placeholder="重量"
-                      value={s.weight}
-                      onChange={e => {
-                        const updated = [...quickSets];
-                        updated[i] = { ...updated[i], weight: e.target.value };
-                        setQuickSets(updated);
-                      }}
-                    />
-                    <div style={{ fontSize: "11px", color: "#666", textAlign: "center", marginTop: "2px" }}>重量 (kg)</div>
-                  </div>
-                  {quickSets.length > 1 && (
-                    <button
-                      style={{
-                        background: "rgba(255,50,50,0.15)", border: "1px solid rgba(255,50,50,0.2)",
-                        borderRadius: "8px", padding: "8px 10px", color: "#ff5555",
-                        cursor: "pointer", fontSize: "14px",
-                      }}
-                      onClick={() => setQuickSets(quickSets.filter((_, idx) => idx !== i))}
-                    >
-                      ✕
-                    </button>
-                  )}
-                </div>
-              ))}
-            </div>
-
-            {/* Save button */}
-            <button
-              style={{
-                width: "100%", padding: "14px", border: "none", borderRadius: "12px",
-                background: quickAnim
-                  ? "linear-gradient(135deg, #22c55e, #16a34a)"
-                  : "linear-gradient(135deg, #ff6a00, #ff9500)",
-                color: "#fff", fontSize: "16px", fontWeight: 800,
-                cursor: "pointer", letterSpacing: "0.06em", textTransform: "uppercase",
-                marginTop: "8px", transition: "background 0.3s",
-                fontFamily: "'Barlow Condensed','Noto Sans TC',sans-serif",
-              }}
-              onClick={saveQuickWorkout}
-              disabled={quickAnim}
-            >
-              {quickAnim ? "✓ 已儲存！" : "💾 儲存訓練"}
-            </button>
-          </div>
-        </div>
-      </div>,
-      document.body
-    )}
 
     {showEditWorkout && createPortal(
       <div
