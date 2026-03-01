@@ -1,5 +1,5 @@
 # FitForge — 產品需求文件 (PRD)
-**版本：v1.3.5　　最後更新：2026-03-01**
+**版本：v1.3.6　　最後更新：2026-03-01**
 
 ---
 
@@ -128,6 +128,11 @@
 - 每筆顯示：日期、動作名稱、各組標籤（次數 × 重量）、備註
 - 每筆可「編輯」或「刪除」（刪除需確認彈窗）
 
+**分組收合（v1.3.6）：**
+- 右上角可切換「依週」／「依月」分組模式（偏好存 localStorage）
+- 預設只展開最新一組，點擊群組 Header 可手動收合展開
+- 週群組顯示 MM/DD – MM/DD 範圍；月群組顯示 YYYY 年 M 月
+
 **編輯訓練 Bottom Sheet：**
 - 可修改：日期、動作、組數、備註
 - 使用同樣的動作選擇器（pickerTarget = "editWorkout"）
@@ -174,7 +179,7 @@
 
 ### 4.4 目標追蹤（Goal Tracking）
 
-#### 目標類型（4 種）
+#### 目標類型（5 種）
 
 | 類型 | 欄位 | 進度計算 |
 |------|------|---------|
@@ -182,8 +187,13 @@
 | 訓練頻率 | 目標天數/週、截止日 | 本週已訓練天數 vs 目標 |
 | 動作 PR | 動作名稱、目標重量（kg）、截止日 | 該動作最大重量 vs 目標 |
 | 身材圍度 | 部位（腰/胸/臀/手臂/大腿）、目標值（cm）、截止日 | 最新圍度 vs 目標 |
+| BMI 目標 | 目標 BMI 值、截止日 | 當前 BMI vs 目標（需有體重＋身高紀錄） |
 
-進度公式：`min(100, max(0, (current - start) / (target - start) × 100))`
+**進度方向判斷（v1.3.6）：**
+- 儲存目標時自動寫入 `goalDirection`（`increase` / `decrease`）
+- 舊目標無此欄位時，以 `targetValue < startValue` 自動 fallback
+- 減少型公式：`(start - current) / (start - target) × 100`
+- 增加型公式：`(current - start) / (target - start) × 100`
 
 #### 目標卡片顯示
 
@@ -312,10 +322,11 @@ users/{userId}/
 │   └── createdAt: Timestamp
 │
 ├── goals/{autoId}
-│   ├── type: "weight" | "frequency" | "exercise_pr" | "body_measurement"
+│   ├── type: "weight" | "frequency" | "exercise_pr" | "body_measurement" | "bmi"
 │   ├── targetValue: number
 │   ├── startValue: number
 │   ├── unit: string
+│   ├── goalDirection: "increase" | "decrease"   ← v1.3.6 新增
 │   ├── targetExercise?: string
 │   ├── targetBodyPart?: string
 │   ├── deadline: string (YYYY-MM-DD)
@@ -354,6 +365,7 @@ userPushTokens/{userId}
 | `popup_seen_body_overwrite_v121` | 身材覆蓋說明彈窗（一次性） |
 | `body_migrated_date_key_v122` | 身材資料遷移旗標（一次性） |
 | `popup_seen_goals_intro_v130` | 目標追蹤引導彈窗（一次性） |
+| `history_group_mode` | 歷史紀錄分組模式（"week" / "month"） |
 | `popup_seen_{title}` | Remote Config 彈窗顯示計數 |
 
 ---
@@ -379,6 +391,7 @@ userPushTokens/{userId}
 
 | 版本 | 日期 | 主要內容 |
 |------|------|---------|
+| v1.3.6 | 2026-03-01 | 新增 BMI 目標類型、修正目標進度方向計算、歷史紀錄依週／月分組收合 |
 | v1.3.5 | 2026-03-01 | 優化推播通知圖示，Android 狀態列現在顯示正確的 FitForge 圖示 |
 | v1.3.4 | 2026-03-01 | FAB 優化（訓練頁隱藏、已記錄改顯示「+」）；動作預設留空＋儲存禁用驗證；組數輸入框改上下排列 |
 | v1.3.3 | 2026-03-01 | 目標追蹤頁首次進入引導彈窗 |
