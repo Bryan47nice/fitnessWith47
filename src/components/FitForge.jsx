@@ -13,7 +13,7 @@ import {
   XAxis, YAxis, Tooltip, ReferenceLine,
 } from "recharts";
 
-const APP_VERSION = "1.3.0";
+const APP_VERSION = "1.3.1";
 
 const exerciseCategories = [
   {
@@ -129,6 +129,9 @@ export default function FitForge({ user }) {
   const [showMorePanel, setShowMorePanel] = useState(false);
   const [showChangelog, setShowChangelog] = useState(false);
   const [shareCopied, setShareCopied] = useState(false);
+  const [hasNewChangelog, setHasNewChangelog] = useState(
+    () => localStorage.getItem("last_seen_changelog") !== APP_VERSION
+  );
 
   // Quick-Log FAB state
   const [showQuickLog, setShowQuickLog] = useState(false);
@@ -1100,24 +1103,33 @@ export default function FitForge({ user }) {
           <div style={styles.streakBadge}>
             🔥 {streak.count} 天連續
           </div>
-          <button
-            onClick={() => setShowMorePanel(true)}
-            title={`帳號設定 ${user.displayName || ""}`}
-            style={{
-              background: "rgba(255,255,255,0.08)",
-              border: "1px solid rgba(255,255,255,0.1)",
-              borderRadius: "50%",
-              width: "36px", height: "36px",
-              cursor: "pointer", overflow: "hidden", padding: 0,
-              display: "flex", alignItems: "center", justifyContent: "center",
-              flexShrink: 0,
-            }}
-          >
-            {user.photoURL
-              ? <img src={user.photoURL} alt="" style={{ width: "100%", height: "100%", objectFit: "cover" }} />
-              : <span style={{ fontSize: "16px" }}>👤</span>
-            }
-          </button>
+          <div style={{ position: "relative", flexShrink: 0 }}>
+            <button
+              onClick={() => setShowMorePanel(true)}
+              title={`帳號設定 ${user.displayName || ""}`}
+              style={{
+                background: "rgba(255,255,255,0.08)",
+                border: "1px solid rgba(255,255,255,0.1)",
+                borderRadius: "50%",
+                width: "36px", height: "36px",
+                cursor: "pointer", overflow: "hidden", padding: 0,
+                display: "flex", alignItems: "center", justifyContent: "center",
+              }}
+            >
+              {user.photoURL
+                ? <img src={user.photoURL} alt="" style={{ width: "100%", height: "100%", objectFit: "cover" }} />
+                : <span style={{ fontSize: "16px" }}>👤</span>
+              }
+            </button>
+            {hasNewChangelog && (
+              <div style={{
+                position: "absolute", top: "-2px", right: "-2px",
+                width: "10px", height: "10px", borderRadius: "50%",
+                background: "#ff3b30", border: "2px solid #0a0a0f",
+                pointerEvents: "none",
+              }} />
+            )}
+          </div>
         </div>
       </div>
 
@@ -1890,9 +1902,23 @@ export default function FitForge({ user }) {
                 fontFamily: "'Barlow Condensed','Noto Sans TC',sans-serif",
                 display: "flex", alignItems: "center", justifyContent: "space-between",
               }}
-              onClick={() => { setShowMorePanel(false); setShowChangelog(true); }}
+              onClick={() => {
+                setShowMorePanel(false);
+                setShowChangelog(true);
+                setHasNewChangelog(false);
+                localStorage.setItem("last_seen_changelog", APP_VERSION);
+              }}
             >
-              <span>📋 版本更新記錄</span>
+              <span style={{ display: "flex", alignItems: "center", gap: "8px" }}>
+                <span>📋 版本更新記錄</span>
+                {hasNewChangelog && (
+                  <span style={{
+                    fontSize: "11px", fontWeight: 800, color: "#fff",
+                    background: "#ff3b30", borderRadius: "10px",
+                    padding: "2px 7px", letterSpacing: "0.03em",
+                  }}>NEW</span>
+                )}
+              </span>
               <span style={{ color: "#555", fontSize: "18px" }}>›</span>
             </button>
           </div>
@@ -1986,15 +2012,31 @@ export default function FitForge({ user }) {
               版本更新記錄
             </div>
 
-            {/* v1.3.0 */}
+            {/* v1.3.1 */}
             <div style={{ marginBottom: "24px" }}>
               <div style={{ display: "flex", alignItems: "center", gap: "10px", marginBottom: "10px" }}>
-                <span style={{ fontSize: "17px", fontWeight: 900, color: "#ffd700" }}>v1.3.0</span>
+                <span style={{ fontSize: "17px", fontWeight: 900, color: "#ffd700" }}>v1.3.1</span>
                 <span style={{
                   fontSize: "11px", fontWeight: 800, color: "#ff6a00",
                   background: "rgba(255,106,0,0.15)", border: "1px solid rgba(255,106,0,0.3)",
                   borderRadius: "6px", padding: "2px 7px", letterSpacing: "0.05em",
                 }}>最新</span>
+                <span style={{ fontSize: "12px", color: "#555", marginLeft: "auto" }}>2026-03-01</span>
+              </div>
+              <div style={{ display: "flex", flexDirection: "column", gap: "7px" }}>
+                <div style={{ fontSize: "14px", color: "#c8c4bc", display: "flex", gap: "8px" }}>
+                  <span style={{ color: "#ffd700", flexShrink: 0 }}>✨</span>
+                  <span>新版本通知：頭像紅點提示 + More Panel 內 NEW badge，有更新時自動提醒</span>
+                </div>
+              </div>
+            </div>
+
+            <div style={{ height: "1px", background: "rgba(255,255,255,0.07)", marginBottom: "20px" }} />
+
+            {/* v1.3.0 */}
+            <div style={{ marginBottom: "24px" }}>
+              <div style={{ display: "flex", alignItems: "center", gap: "10px", marginBottom: "10px" }}>
+                <span style={{ fontSize: "16px", fontWeight: 800, color: "#888" }}>v1.3.0</span>
                 <span style={{ fontSize: "12px", color: "#555", marginLeft: "auto" }}>2026-03-01</span>
               </div>
               <div style={{ display: "flex", flexDirection: "column", gap: "7px" }}>
