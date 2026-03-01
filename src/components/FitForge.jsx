@@ -123,6 +123,10 @@ export default function FitForge({ user }) {
   const [goalDeadline, setGoalDeadline] = useState("");
   const [goalNote, setGoalNote] = useState("");
   const [goalCelebAnim, setGoalCelebAnim] = useState(false);
+  const [historyGroupMode, setHistoryGroupMode] = useState(
+    () => localStorage.getItem("history_group_mode") || "week"
+  );
+  const [expandedGroupKeys, setExpandedGroupKeys] = useState(null);
 
   const today = new Date().toISOString().slice(0, 10);
   const todayWorked = workouts.some(w => w.date === today);
@@ -477,6 +481,7 @@ export default function FitForge({ user }) {
 
   async function saveGoal() {
     if (!goalTargetValue || !goalDeadline) return;
+    if (goalType === "bmi" && !latestBMI) return;
     const ws = getWeekStart(today);
     let startValue = 0;
     let unit = "kg";
@@ -492,12 +497,17 @@ export default function FitForge({ user }) {
     } else if (goalType === "body_measurement") {
       startValue = latestBody?.[goalTargetBodyPart] ? parseFloat(latestBody[goalTargetBodyPart]) : 0;
       unit = "cm";
+    } else if (goalType === "bmi") {
+      startValue = latestBMI;
+      unit = "";
     }
+    const goalDirection = parseFloat(goalTargetValue) < startValue ? "decrease" : "increase";
     await addDoc(collection(db, "users", user.uid, "goals"), {
       type: goalType,
       targetValue: parseFloat(goalTargetValue),
       startValue,
       unit,
+      goalDirection,
       ...(goalType === "exercise_pr" ? { targetExercise: goalTargetExercise } : {}),
       ...(goalType === "body_measurement" ? { targetBodyPart: goalTargetBodyPart } : {}),
       deadline: goalDeadline,
@@ -549,6 +559,9 @@ export default function FitForge({ user }) {
     const h = parseFloat(latestBody.height) / 100;
     bmi = (parseFloat(latestBody.weight) / (h * h)).toFixed(1);
   }
+  const latestBMI = (latestBody?.weight && latestBody?.height)
+    ? parseFloat((parseFloat(latestBody.weight) / Math.pow(parseFloat(latestBody.height) / 100, 2)).toFixed(1))
+    : null;
 
   // Sort by date ASC so chart x-axis goes from oldest (left) to newest (right)
   const chartPoints = bodyData
@@ -642,8 +655,15 @@ export default function FitForge({ user }) {
       current = prMap[targetExercise]?.weight ?? 0;
     } else if (type === "body_measurement") {
       current = latestBody?.[targetBodyPart] ? parseFloat(latestBody[targetBodyPart]) : 0;
+    } else if (type === "bmi") {
+      current = latestBMI ?? 0;
     }
+    const isDecrease = goal.goalDirection === "decrease" ||
+      (goal.goalDirection == null && targetValue < startValue);
     if (startValue === targetValue) return current >= targetValue ? 100 : 0;
+    if (isDecrease) {
+      return Math.min(100, Math.max(0, (startValue - current) / (startValue - targetValue) * 100));
+    }
     return Math.min(100, Math.max(0, (current - startValue) / (targetValue - startValue) * 100));
   }
 
@@ -654,6 +674,7 @@ export default function FitForge({ user }) {
     if (goal.type === "frequency") return `訓練頻率目標：${goal.targetValue} 天/週`;
     if (goal.type === "exercise_pr") return `${goal.targetExercise} 目標：${goal.targetValue} kg`;
     if (goal.type === "body_measurement") return `${bodyPartLabels[goal.targetBodyPart] || goal.targetBodyPart} 目標：${goal.targetValue} cm`;
+    if (goal.type === "bmi") return `BMI 目標：${goal.targetValue}`;
     return "目標";
   }
 
@@ -1571,32 +1592,97 @@ export default function FitForge({ user }) {
 
             {/* ── 歷史紀錄（合併自原 history tab） ── */}
             <div style={styles.card}>
-              <div style={styles.sectionTitle}>所有訓練紀錄</div>
+              <div style={{ display: "flex", justifyContent: "space-between", alignItems: "center", marginBottom: "16px" }}>
+                <div style={styles.sectionTitle}>所有訓練紀錄</div>
+                <div style={{ display: "flex", gap: "6px" }}>
+                  {["week", "month"].map(mode => (
+                    <button key={mode} onClick={() => {
+                      setHistoryGroupMode(mode);
+                      localStorage.setItem("history_group_mode", mode);
+                      setExpandedGroupKeys(null);
+                    }} style={{
+                      padding: "5px 12px", borderRadius: "20px", cursor: "pointer", fontFamily: "inherit", fontSize: "12px", fontWeight: historyGroupMode === mode ? 700 : 400,
+                      border: historyGroupMode === mode ? "1px solid #ff6a00" : "1px solid rgba(255,255,255,0.12)",
+                      background: historyGroupMode === mode ? "rgba(255,106,0,0.2)" : "rgba(255,255,255,0.04)",
+                      color: historyGroupMode === mode ? "#ff6a00" : "#888",
+                    }}>{mode === "week" ? "依週" : "依月"}</button>
+                  ))}
+                </div>
+              </div>
               {workouts.length === 0 && (
                 <div style={{ color: "#555", fontSize: "14px", textAlign: "center", padding: "20px 0" }}>
                   還沒有訓練紀錄
                 </div>
               )}
-              {workouts.map(w => (
-                <div key={w.id} style={{ ...styles.workoutItem, marginBottom: "10px" }}>
-                  <div style={{ display: "flex", justifyContent: "space-between", alignItems: "center", marginBottom: "6px" }}>
-                    <div style={styles.historyDate}>{w.date}</div>
-                    <div style={{ display: "flex", gap: "6px" }}>
-                      <button style={styles.historyActionBtn} onClick={() => openEditWorkout(w)}>編輯</button>
-                      <button style={styles.historyDeleteBtn} onClick={() => deleteWorkout(w.id)}>刪除</button>
+              {workouts.length > 0 && (() => {
+                const groupMap = new Map();
+                workouts.forEach(w => {
+                  let key, label;
+                  if (historyGroupMode === "week") {
+                    key = getWeekStart(w.date);
+                    const monday = new Date(key + 'T00:00:00');
+                    const sunday = new Date(monday);
+                    sunday.setDate(monday.getDate() + 6);
+                    const fmt = d => `${String(d.getMonth()+1).padStart(2,'0')}/${String(d.getDate()).padStart(2,'0')}`;
+                    label = `${fmt(monday)} – ${fmt(sunday)}`;
+                  } else {
+                    const [y, m] = w.date.split('-');
+                    key = `${y}-${m}`;
+                    label = `${y} 年 ${parseInt(m)} 月`;
+                  }
+                  if (!groupMap.has(key)) groupMap.set(key, { key, label, items: [] });
+                  groupMap.get(key).items.push(w);
+                });
+                const workoutGroups = Array.from(groupMap.values());
+                return workoutGroups.map((group, idx) => {
+                  const isOpen = expandedGroupKeys === null
+                    ? idx === 0
+                    : expandedGroupKeys.has(group.key);
+                  return (
+                    <div key={group.key} style={{ marginBottom: "4px" }}>
+                      <div onClick={() => {
+                        setExpandedGroupKeys(prev => {
+                          const base = prev ?? new Set(workoutGroups[0] ? [workoutGroups[0].key] : []);
+                          const next = new Set(base);
+                          if (isOpen) next.delete(group.key);
+                          else next.add(group.key);
+                          return next;
+                        });
+                      }} style={{
+                        display: "flex", justifyContent: "space-between", alignItems: "center",
+                        padding: "10px 14px", borderRadius: "10px",
+                        background: "rgba(255,255,255,0.05)", cursor: "pointer",
+                        marginBottom: isOpen ? "8px" : 0,
+                      }}>
+                        <span style={{ fontSize: "13px", color: "#aaa", fontWeight: 600 }}>
+                          {group.label}（{group.items.length} 筆）
+                        </span>
+                        <span style={{ color: "#666", fontSize: "12px" }}>{isOpen ? "▲" : "▼"}</span>
+                      </div>
+                      {isOpen && group.items.map(w => (
+                        <div key={w.id} style={{ ...styles.workoutItem, marginBottom: "10px" }}>
+                          <div style={{ display: "flex", justifyContent: "space-between", alignItems: "center", marginBottom: "6px" }}>
+                            <div style={styles.historyDate}>{w.date}</div>
+                            <div style={{ display: "flex", gap: "6px" }}>
+                              <button style={styles.historyActionBtn} onClick={() => openEditWorkout(w)}>編輯</button>
+                              <button style={styles.historyDeleteBtn} onClick={() => deleteWorkout(w.id)}>刪除</button>
+                            </div>
+                          </div>
+                          <div style={{ fontSize: "17px", fontWeight: 700, marginBottom: "8px" }}>{w.exercise}</div>
+                          <div style={{ display: "flex", gap: "6px", flexWrap: "wrap", marginBottom: w.note ? "8px" : 0 }}>
+                            {w.sets?.map((s, i) => (
+                              <span key={i} style={styles.tag}>
+                                第{i + 1}組 {s.reps ? `${s.reps}下` : ""}{s.weight ? ` × ${s.weight}kg` : ""}
+                              </span>
+                            ))}
+                          </div>
+                          {w.note && <div style={{ fontSize: "13px", color: "#888", fontStyle: "italic" }}>📝 {w.note}</div>}
+                        </div>
+                      ))}
                     </div>
-                  </div>
-                  <div style={{ fontSize: "17px", fontWeight: 700, marginBottom: "8px" }}>{w.exercise}</div>
-                  <div style={{ display: "flex", gap: "6px", flexWrap: "wrap", marginBottom: w.note ? "8px" : 0 }}>
-                    {w.sets?.map((s, i) => (
-                      <span key={i} style={styles.tag}>
-                        第{i + 1}組 {s.reps ? `${s.reps}下` : ""}{s.weight ? ` × ${s.weight}kg` : ""}
-                      </span>
-                    ))}
-                  </div>
-                  {w.note && <div style={{ fontSize: "13px", color: "#888", fontStyle: "italic" }}>📝 {w.note}</div>}
-                </div>
-              ))}
+                  );
+                });
+              })()}
             </div>
           </div>
         )}
@@ -2711,6 +2797,7 @@ export default function FitForge({ user }) {
                   { id: "frequency", label: "訓練頻率" },
                   { id: "exercise_pr", label: "動作重量" },
                   { id: "body_measurement", label: "身材圍度" },
+                  { id: "bmi", label: "BMI 目標" },
                 ].map(t => (
                   <button key={t.id} onClick={() => setGoalType(t.id)} style={{
                     padding: "7px 14px", borderRadius: "20px", cursor: "pointer", fontFamily: "inherit", fontSize: "13px", fontWeight: goalType === t.id ? 700 : 400,
@@ -2750,9 +2837,19 @@ export default function FitForge({ user }) {
               </div>
             )}
 
+            {goalType === "bmi" && !latestBMI && (
+              <div style={{
+                marginBottom: "14px", padding: "10px 14px",
+                background: "rgba(255,165,0,0.08)", border: "1px solid rgba(255,165,0,0.35)",
+                borderRadius: "10px", fontSize: "13px", color: "#ffaa00", lineHeight: "1.5",
+              }}>
+                ⚠️ 請先在身材數據頁記錄體重和身高
+              </div>
+            )}
+
             <div style={{ marginBottom: "14px" }}>
               <label style={{ fontSize: "12px", color: "#888", letterSpacing: "0.06em", marginBottom: "6px", display: "block" }}>
-                目標數值（{goalType === "frequency" ? "天/週" : goalType === "body_measurement" ? "cm" : "kg"}）
+                {goalType === "bmi" ? "目標 BMI" : `目標數值（${goalType === "frequency" ? "天/週" : goalType === "body_measurement" ? "cm" : "kg"}）`}
               </label>
               <input
                 type="number"
@@ -2785,7 +2882,8 @@ export default function FitForge({ user }) {
             </div>
 
             <button
-              style={{ width: "100%", padding: "14px", border: "none", borderRadius: "12px", background: "linear-gradient(135deg, #ff6a00, #ff9500)", color: "#fff", fontSize: "16px", fontWeight: 800, cursor: "pointer", letterSpacing: "0.06em", textTransform: "uppercase", fontFamily: "inherit" }}
+              disabled={!goalTargetValue || !goalDeadline || (goalType === "bmi" && !latestBMI)}
+              style={{ width: "100%", padding: "14px", border: "none", borderRadius: "12px", background: "linear-gradient(135deg, #ff6a00, #ff9500)", color: "#fff", fontSize: "16px", fontWeight: 800, cursor: (!goalTargetValue || !goalDeadline || (goalType === "bmi" && !latestBMI)) ? "not-allowed" : "pointer", opacity: (!goalTargetValue || !goalDeadline || (goalType === "bmi" && !latestBMI)) ? 0.5 : 1, letterSpacing: "0.06em", textTransform: "uppercase", fontFamily: "inherit" }}
               onClick={saveGoal}
             >
               儲存目標
