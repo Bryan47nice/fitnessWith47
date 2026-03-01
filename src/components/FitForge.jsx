@@ -2,7 +2,7 @@ import { useState, useEffect } from "react";
 import { createPortal } from "react-dom";
 import {
   collection, addDoc, onSnapshot, query, orderBy,
-  doc, setDoc, serverTimestamp, deleteDoc, updateDoc,
+  doc, setDoc, serverTimestamp, deleteDoc, updateDoc, writeBatch,
 } from "firebase/firestore";
 import { signOut } from "firebase/auth";
 import { fetchAndActivate, getBoolean, getString, getNumber } from "firebase/remote-config";
@@ -10,8 +10,10 @@ import { getToken } from "firebase/messaging";
 import { db, auth, remoteConfig, getAppMessaging } from "../firebase";
 import {
   ResponsiveContainer, LineChart, Line,
-  XAxis, YAxis, Tooltip,
+  XAxis, YAxis, Tooltip, ReferenceLine,
 } from "recharts";
+
+const APP_VERSION = "1.3.0";
 
 const exerciseCategories = [
   {
@@ -79,6 +81,7 @@ const exerciseCategories = [
 
 const metricConfig = {
   weight: { label: "體重",   unit: "kg" },
+  bmi:    { label: "BMI",    unit: "" },
   height: { label: "身高",   unit: "cm" },
   chest:  { label: "胸圍",   unit: "cm" },
   waist:  { label: "腰圍",   unit: "cm" },
@@ -104,6 +107,14 @@ export default function FitForge({ user }) {
 
   // Activity popup state (null = hidden, object = show)
   const [popup, setPopup] = useState(null);
+
+  // Marquee state
+  const [marqueeEnabled, setMarqueeEnabled] = useState(true);
+  const [marqueeTexts, setMarqueeTexts] = useState([
+    "No pain, no gain．堅持就是勝利．鍛鍊的是身體，磨練的是意志．每一滴汗水都算數．今天的努力是明天的實力",
+  ]);
+  const [marqueePaused, setMarqueePaused] = useState(false);
+  const [marqueeSheet, setMarqueeSheet] = useState(false);
 
   // Workout form state
   const [wDate, setWDate] = useState(new Date().toISOString().slice(0, 10));
@@ -153,7 +164,19 @@ export default function FitForge({ user }) {
   const [activeMetric, setActiveMetric] = useState("weight");
   const [bSavedAnim, setBSavedAnim] = useState(false);
 
+  // Goals
+  const [goals, setGoals] = useState([]);
+  const [showGoalSheet, setShowGoalSheet] = useState(false);
+  const [goalType, setGoalType] = useState("weight");
+  const [goalTargetValue, setGoalTargetValue] = useState("");
+  const [goalTargetExercise, setGoalTargetExercise] = useState(exerciseCategories[0].exercises[0]);
+  const [goalTargetBodyPart, setGoalTargetBodyPart] = useState("waist");
+  const [goalDeadline, setGoalDeadline] = useState("");
+  const [goalNote, setGoalNote] = useState("");
+  const [goalCelebAnim, setGoalCelebAnim] = useState(false);
+
   const today = new Date().toISOString().slice(0, 10);
+  const todayWorked = workouts.some(w => w.date === today);
 
   // Subscribe to workouts
   useEffect(() => {
@@ -221,6 +244,16 @@ export default function FitForge({ user }) {
             showPopup();
           }
         }
+
+        // Marquee
+        setMarqueeEnabled(getBoolean(remoteConfig, "marquee_enabled"));
+        const mTextsRaw = getString(remoteConfig, "marquee_texts");
+        if (mTextsRaw) {
+          try {
+            const parsed = JSON.parse(mTextsRaw);
+            if (Array.isArray(parsed) && parsed.length > 0) setMarqueeTexts(parsed);
+          } catch { /* keep default */ }
+        }
       })
       .catch(() => { /* Remote Config fetch failed silently */ });
   }, []);
@@ -277,6 +310,32 @@ export default function FitForge({ user }) {
     return unsub;
   }, [user.uid]);
 
+  // Subscribe to goals
+  useEffect(() => {
+    const q = query(
+      collection(db, "users", user.uid, "goals"),
+      orderBy("createdAt", "desc")
+    );
+    const unsub = onSnapshot(q, snap => {
+      setGoals(snap.docs.map(d => ({ id: d.id, ...d.data() })));
+    });
+    return unsub;
+  }, [user.uid]);
+
+  // Achievement detection
+  useEffect(() => {
+    goals.forEach(goal => {
+      if (!goal.celebrated && getGoalProgress(goal) >= 100) {
+        updateDoc(doc(db, "users", user.uid, "goals", goal.id), {
+          celebrated: true,
+          completedAt: serverTimestamp(),
+        }).catch(() => {});
+        setGoalCelebAnim(true);
+        setTimeout(() => setGoalCelebAnim(false), 3000);
+      }
+    });
+  }, [goals]);
+
   // Update streak when workouts change
   useEffect(() => {
     if (loading) return;
@@ -300,6 +359,27 @@ export default function FitForge({ user }) {
       btnText: "知道了",
     });
   }, [tab]);
+
+  // One-time migration: rekey bodyData docs to use date as document ID
+  useEffect(() => {
+    const migKey = "body_migrated_date_key_v122";
+    if (localStorage.getItem(migKey)) return;
+    if (bodyData.length === 0) { localStorage.setItem(migKey, "1"); return; }
+    const byDate = {};
+    for (const r of bodyData) {
+      const prev = byDate[r.date];
+      if (!prev || (r.createdAt?.seconds || 0) > (prev.createdAt?.seconds || 0))
+        byDate[r.date] = r;
+    }
+    const batch = writeBatch(db);
+    for (const r of bodyData)
+      batch.delete(doc(db, "users", user.uid, "bodyData", r.id));
+    for (const [date, r] of Object.entries(byDate)) {
+      const { id, ...data } = r;
+      batch.set(doc(db, "users", user.uid, "bodyData", date), data);
+    }
+    batch.commit().then(() => localStorage.setItem(migKey, "1"));
+  }, [bodyData, user.uid]);
 
   async function addCustomExercise() {
     const name = newExName.trim();
@@ -366,18 +446,11 @@ export default function FitForge({ user }) {
   async function saveBody() {
     const hasData = [bWeight, bHeight, bChest, bWaist, bHip, bArm, bThigh].some(v => v !== "");
     if (!hasData) return;
-    const existing = bodyData.find(b => b.date === bDate);
-    if (existing) {
-      await updateDoc(doc(db, "users", user.uid, "bodyData", existing.id), {
-        date: bDate, weight: bWeight, height: bHeight, chest: bChest,
-        waist: bWaist, hip: bHip, arm: bArm, thigh: bThigh,
-      });
-    } else {
-      await addDoc(collection(db, "users", user.uid, "bodyData"), {
-        date: bDate, weight: bWeight, height: bHeight, chest: bChest,
-        waist: bWaist, hip: bHip, arm: bArm, thigh: bThigh, createdAt: serverTimestamp(),
-      });
-    }
+    await setDoc(doc(db, "users", user.uid, "bodyData", bDate), {
+      date: bDate, weight: bWeight, height: bHeight, chest: bChest,
+      waist: bWaist, hip: bHip, arm: bArm, thigh: bThigh,
+      createdAt: serverTimestamp(),
+    });
     setBSavedAnim(true);
     setTimeout(() => setBSavedAnim(false), 1500);
   }
@@ -445,6 +518,51 @@ export default function FitForge({ user }) {
     });
   }
 
+  function deleteGoal(id) {
+    setConfirmDialog({
+      message: "確認刪除此目標？",
+      onConfirm: async () => {
+        await deleteDoc(doc(db, "users", user.uid, "goals", id));
+        setConfirmDialog(null);
+      },
+    });
+  }
+
+  async function saveGoal() {
+    if (!goalTargetValue || !goalDeadline) return;
+    const ws = getWeekStart(today);
+    let startValue = 0;
+    let unit = "kg";
+    if (goalType === "weight") {
+      startValue = latestBody?.weight ? parseFloat(latestBody.weight) : 0;
+      unit = "kg";
+    } else if (goalType === "frequency") {
+      startValue = new Set(workouts.filter(w => w.date >= ws).map(w => w.date)).size;
+      unit = "天/週";
+    } else if (goalType === "exercise_pr") {
+      startValue = prMap[goalTargetExercise]?.weight ?? 0;
+      unit = "kg";
+    } else if (goalType === "body_measurement") {
+      startValue = latestBody?.[goalTargetBodyPart] ? parseFloat(latestBody[goalTargetBodyPart]) : 0;
+      unit = "cm";
+    }
+    await addDoc(collection(db, "users", user.uid, "goals"), {
+      type: goalType,
+      targetValue: parseFloat(goalTargetValue),
+      startValue,
+      unit,
+      ...(goalType === "exercise_pr" ? { targetExercise: goalTargetExercise } : {}),
+      ...(goalType === "body_measurement" ? { targetBodyPart: goalTargetBodyPart } : {}),
+      deadline: goalDeadline,
+      note: goalNote.trim(),
+      celebrated: false,
+      createdAt: serverTimestamp(),
+      completedAt: null,
+    });
+    setGoalTargetValue(""); setGoalDeadline(""); setGoalNote("");
+    setShowGoalSheet(false);
+  }
+
   function shareApp() {
     const APP_URL = "https://fitnesswith47.web.app";
     if (navigator.share) {
@@ -488,16 +606,24 @@ export default function FitForge({ user }) {
   // Sort by date ASC so chart x-axis goes from oldest (left) to newest (right)
   const chartPoints = bodyData
     .filter(b => {
+      if (activeMetric === "bmi") {
+        return parseFloat(b.weight) > 0 && parseFloat(b.height) > 0;
+      }
       const v = parseFloat(b[activeMetric]);
       return !isNaN(v) && b[activeMetric] !== "" && b[activeMetric] != null;
     })
     .slice()
     .sort((a, b) => a.date.localeCompare(b.date))
-    .map(b => ({
-      date: b.date,
-      value: parseFloat(b[activeMetric]),
-      label: b.date.slice(5),   // "MM-DD"
-    }));
+    .map(b => {
+      let value;
+      if (activeMetric === "bmi") {
+        const h = parseFloat(b.height) / 100;
+        value = parseFloat((parseFloat(b.weight) / (h * h)).toFixed(1));
+      } else {
+        value = parseFloat(b[activeMetric]);
+      }
+      return { date: b.date, value, label: b.date.slice(5) };
+    });
 
   const CustomTooltip = ({ active, payload }) => {
     if (!active || !payload || !payload.length) return null;
@@ -557,11 +683,50 @@ export default function FitForge({ user }) {
     return { label: ws.slice(5), sets: weeklyMap[ws] || 0 };
   });
 
+  function getGoalProgress(goal) {
+    const { type, targetValue, startValue, targetExercise, targetBodyPart } = goal;
+    let current = 0;
+    if (type === "weight") {
+      current = latestBody?.weight ? parseFloat(latestBody.weight) : 0;
+    } else if (type === "frequency") {
+      const ws = getWeekStart(today);
+      current = new Set(workouts.filter(w => w.date >= ws).map(w => w.date)).size;
+    } else if (type === "exercise_pr") {
+      current = prMap[targetExercise]?.weight ?? 0;
+    } else if (type === "body_measurement") {
+      current = latestBody?.[targetBodyPart] ? parseFloat(latestBody[targetBodyPart]) : 0;
+    }
+    if (startValue === targetValue) return current >= targetValue ? 100 : 0;
+    return Math.min(100, Math.max(0, (current - startValue) / (targetValue - startValue) * 100));
+  }
+
+  const bodyPartLabels = { waist: "腰圍", chest: "胸圍", hip: "臀圍", arm: "手臂圍", thigh: "大腿圍" };
+
+  function getGoalTitle(goal) {
+    if (goal.type === "weight") return `體重目標：${goal.targetValue} kg`;
+    if (goal.type === "frequency") return `訓練頻率目標：${goal.targetValue} 天/週`;
+    if (goal.type === "exercise_pr") return `${goal.targetExercise} 目標：${goal.targetValue} kg`;
+    if (goal.type === "body_measurement") return `${bodyPartLabels[goal.targetBodyPart] || goal.targetBodyPart} 目標：${goal.targetValue} cm`;
+    return "目標";
+  }
+
+  const sortedGoals = [...goals].sort((a, b) => {
+    const aProg = getGoalProgress(a);
+    const bProg = getGoalProgress(b);
+    const aComplete = aProg >= 100;
+    const bComplete = bProg >= 100;
+    const aExpired = !aComplete && a.deadline < today;
+    const bExpired = !bComplete && b.deadline < today;
+    if (aComplete !== bComplete) return aComplete ? 1 : -1;
+    if (aExpired !== bExpired) return aExpired ? 1 : -1;
+    return a.deadline.localeCompare(b.deadline);
+  });
+
   const tabs = [
     { id: "dashboard", label: "儀表板", icon: "⚡" },
-    { id: "workout", label: "訓練記錄", icon: "💪" },
-    { id: "body", label: "身材數據", icon: "📏" },
-    { id: "history", label: "歷史紀錄", icon: "📋" },
+    { id: "workout",   label: "訓練日誌", icon: "📋" },
+    { id: "body",      label: "身材數據", icon: "📏" },
+    { id: "goals",     label: "目標追蹤", icon: "🎯" },
   ];
 
   const styles = {
@@ -842,12 +1007,13 @@ export default function FitForge({ user }) {
                 {cat.label}
               </div>
               {cat.exercises.map(ex => {
-                const currentEx = pickerTarget === "quick" ? quickExercise : pickerTarget === "editWorkout" ? ewExercise : wExercise;
+                const currentEx = pickerTarget === "quick" ? quickExercise : pickerTarget === "editWorkout" ? ewExercise : pickerTarget === "goal" ? goalTargetExercise : wExercise;
                 const sel = currentEx === ex;
                 return (
                   <button key={ex} onClick={() => {
                     if (pickerTarget === "quick") setQuickExercise(ex);
                     else if (pickerTarget === "editWorkout") setEwExercise(ex);
+                    else if (pickerTarget === "goal") setGoalTargetExercise(ex);
                     else setWExercise(ex);
                     setShowExPicker(false);
                   }}
@@ -875,12 +1041,13 @@ export default function FitForge({ user }) {
                 ★ 我的自訂動作
               </div>
               {customExercises.map(ex => {
-                const currentEx = pickerTarget === "quick" ? quickExercise : pickerTarget === "editWorkout" ? ewExercise : wExercise;
+                const currentEx = pickerTarget === "quick" ? quickExercise : pickerTarget === "editWorkout" ? ewExercise : pickerTarget === "goal" ? goalTargetExercise : wExercise;
                 const sel = currentEx === ex.name;
                 return (
                   <button key={ex.id} onClick={() => {
                     if (pickerTarget === "quick") setQuickExercise(ex.name);
                     else if (pickerTarget === "editWorkout") setEwExercise(ex.name);
+                    else if (pickerTarget === "goal") setGoalTargetExercise(ex.name);
                     else setWExercise(ex.name);
                     setShowExPicker(false);
                   }}
@@ -906,6 +1073,17 @@ export default function FitForge({ user }) {
 
   return (
     <>
+    <style>{`
+      @keyframes fitforge-marquee {
+        0%   { transform: translateX(0); }
+        100% { transform: translateX(-50%); }
+      }
+      @keyframes fitforge-pulse {
+        0%   { box-shadow: 0 0 0 0    rgba(255,106,0,0.7); }
+        70%  { box-shadow: 0 0 0 14px rgba(255,106,0,0);   }
+        100% { box-shadow: 0 0 0 0    rgba(255,106,0,0);   }
+      }
+    `}</style>
     <div style={styles.app}>
       <div style={styles.bg} />
 
@@ -951,6 +1129,42 @@ export default function FitForge({ user }) {
           </button>
         ))}
       </div>
+
+      {/* Marquee */}
+      {marqueeEnabled && (() => {
+        const fullText = [...marqueeTexts, ...marqueeTexts].join("  ·  ");
+        return (
+          <div
+            style={{
+              position: "relative", overflow: "hidden", height: "28px",
+              background: "rgba(255,106,0,0.05)", cursor: "pointer",
+              display: "flex", alignItems: "center",
+            }}
+            onClick={() => { setMarqueeSheet(true); setMarqueePaused(true); }}
+            onMouseEnter={() => setMarqueePaused(true)}
+            onMouseLeave={() => { if (!marqueeSheet) setMarqueePaused(false); }}
+          >
+            <span style={{
+              display: "inline-block", whiteSpace: "nowrap",
+              fontSize: "11.5px", color: "#5a5a5a", letterSpacing: "0.05em",
+              animation: "fitforge-marquee 60s linear infinite",
+              animationPlayState: marqueePaused ? "paused" : "running",
+            }}>
+              {fullText}
+            </span>
+            <div style={{
+              position: "absolute", left: 0, top: 0, bottom: 0, width: "36px",
+              background: "linear-gradient(to right, #0a0a0f, transparent)",
+              pointerEvents: "none",
+            }} />
+            <div style={{
+              position: "absolute", right: 0, top: 0, bottom: 0, width: "36px",
+              background: "linear-gradient(to left, #0a0a0f, transparent)",
+              pointerEvents: "none",
+            }} />
+          </div>
+        );
+      })()}
 
       <div style={styles.content}>
 
@@ -1034,6 +1248,28 @@ export default function FitForge({ user }) {
                     }} />
                   </div>
                 )}
+                {bmi && latestBody?.height && (() => {
+                  const h = parseFloat(latestBody.height) / 100;
+                  const bmiVal = parseFloat(bmi);
+                  const targetLow  = (18.5 * h * h).toFixed(1);
+                  const targetHigh = (24   * h * h).toFixed(1);
+                  const cur = parseFloat(latestBody.weight);
+                  let hint;
+                  if (bmiVal < 18.5) {
+                    const diff = (targetLow - cur).toFixed(1);
+                    hint = `再增 ${diff} kg 可達標準體重`;
+                  } else if (bmiVal < 24) {
+                    hint = `維持在標準範圍（${targetLow}–${targetHigh} kg）`;
+                  } else {
+                    const diff = (cur - targetHigh).toFixed(1);
+                    hint = `再減 ${diff} kg 可達標準體重`;
+                  }
+                  return (
+                    <div style={{ fontSize: "12px", color: getBmiColor(bmi), marginTop: "6px", textAlign: "center", letterSpacing: "0.02em" }}>
+                      {hint}
+                    </div>
+                  );
+                })()}
               </div>
             )}
 
@@ -1283,6 +1519,35 @@ export default function FitForge({ user }) {
                 </div>
               )}
             </div>
+            {/* ── 歷史紀錄（合併自原 history tab） ── */}
+            <div style={styles.card}>
+              <div style={styles.sectionTitle}>所有訓練紀錄</div>
+              {workouts.length === 0 && (
+                <div style={{ color: "#555", fontSize: "14px", textAlign: "center", padding: "20px 0" }}>
+                  還沒有訓練紀錄
+                </div>
+              )}
+              {workouts.map(w => (
+                <div key={w.id} style={{ ...styles.workoutItem, marginBottom: "10px" }}>
+                  <div style={{ display: "flex", justifyContent: "space-between", alignItems: "center", marginBottom: "6px" }}>
+                    <div style={styles.historyDate}>{w.date}</div>
+                    <div style={{ display: "flex", gap: "6px" }}>
+                      <button style={styles.historyActionBtn} onClick={() => openEditWorkout(w)}>編輯</button>
+                      <button style={styles.historyDeleteBtn} onClick={() => deleteWorkout(w.id)}>刪除</button>
+                    </div>
+                  </div>
+                  <div style={{ fontSize: "17px", fontWeight: 700, marginBottom: "8px" }}>{w.exercise}</div>
+                  <div style={{ display: "flex", gap: "6px", flexWrap: "wrap", marginBottom: w.note ? "8px" : 0 }}>
+                    {w.sets?.map((s, i) => (
+                      <span key={i} style={styles.tag}>
+                        第{i + 1}組 {s.reps ? `${s.reps}下` : ""}{s.weight ? ` × ${s.weight}kg` : ""}
+                      </span>
+                    ))}
+                  </div>
+                  {w.note && <div style={{ fontSize: "13px", color: "#888", fontStyle: "italic" }}>📝 {w.note}</div>}
+                </div>
+              ))}
+            </div>
           </div>
         )}
 
@@ -1371,7 +1636,7 @@ export default function FitForge({ user }) {
                         interval="preserveStartEnd"
                       />
                       <YAxis
-                        domain={["auto", "auto"]}
+                        domain={activeMetric === "bmi" ? [14, 35] : ["auto", "auto"]}
                         tick={{ fill: "#666", fontSize: 11, fontFamily: "'Barlow Condensed','Noto Sans TC',sans-serif" }}
                         axisLine={false}
                         tickLine={false}
@@ -1381,6 +1646,14 @@ export default function FitForge({ user }) {
                         content={<CustomTooltip />}
                         cursor={{ stroke: "rgba(255,106,0,0.25)", strokeWidth: 1, strokeDasharray: "4 4" }}
                       />
+                      {activeMetric === "bmi" && (
+                        <>
+                          <ReferenceLine y={18.5} stroke="#60a5fa" strokeDasharray="4 3" strokeWidth={1}
+                            label={{ value: "18.5", position: "insideRight", fill: "#60a5fa", fontSize: 10 }} />
+                          <ReferenceLine y={24} stroke="#facc15" strokeDasharray="4 3" strokeWidth={1}
+                            label={{ value: "24", position: "insideRight", fill: "#facc15", fontSize: 10 }} />
+                        </>
+                      )}
                       <Line
                         type="monotone"
                         dataKey="value"
@@ -1448,38 +1721,82 @@ export default function FitForge({ user }) {
           </div>
         )}
 
-        {/* HISTORY */}
-        {tab === "history" && (
+        {/* GOALS */}
+        {tab === "goals" && (
           <div>
-            <div style={styles.card}>
-              <div style={styles.sectionTitle}>所有訓練紀錄</div>
-              {workouts.length === 0 && (
-                <div style={{ color: "#555", fontSize: "14px", textAlign: "center", padding: "20px 0" }}>還沒有訓練紀錄</div>
-              )}
-              {workouts.map(w => (
-                <div key={w.id} style={{ ...styles.workoutItem, marginBottom: "10px" }}>
-                  <div style={{ display: "flex", justifyContent: "space-between", alignItems: "center", marginBottom: "6px" }}>
-                    <div style={styles.historyDate}>{w.date}</div>
-                    <div style={{ display: "flex", gap: "6px" }}>
-                      <button style={styles.historyActionBtn} onClick={() => openEditWorkout(w)}>編輯</button>
-                      <button style={styles.historyDeleteBtn} onClick={() => deleteWorkout(w.id)}>刪除</button>
-                    </div>
-                  </div>
-                  <div style={{ fontSize: "17px", fontWeight: 700, marginBottom: "8px" }}>{w.exercise}</div>
-                  <div style={{ display: "flex", gap: "6px", flexWrap: "wrap", marginBottom: w.note ? "8px" : 0 }}>
-                    {w.sets?.map((s, i) => (
-                      <span key={i} style={styles.tag}>
-                        第{i + 1}組 {s.reps ? `${s.reps}下` : ""}{s.weight ? ` × ${s.weight}kg` : ""}
-                      </span>
-                    ))}
-                  </div>
-                  {w.note && <div style={{ fontSize: "13px", color: "#888", fontStyle: "italic" }}>📝 {w.note}</div>}
+            {goals.length === 0 && (
+              <div style={styles.card}>
+                <div style={{ textAlign: "center", padding: "32px 0", color: "#555" }}>
+                  <div style={{ fontSize: "40px", marginBottom: "12px" }}>🎯</div>
+                  <div style={{ fontSize: "15px" }}>設定你的第一個目標，開始追蹤進度！</div>
                 </div>
-              ))}
-            </div>
+              </div>
+            )}
+
+            {sortedGoals.map(goal => {
+              const progress = getGoalProgress(goal);
+              const isComplete = progress >= 100;
+              const isExpired = !isComplete && goal.deadline < today;
+              const daysLeft = Math.ceil((new Date(goal.deadline) - new Date(today)) / 86400000);
+              const isUrgent = !isComplete && !isExpired && daysLeft <= 7;
+              const barColor = isComplete ? "#4ade80" : isExpired ? "#555" : isUrgent ? "#f87171" : "#ff6a00";
+              return (
+                <div key={goal.id} style={{ ...styles.card, marginBottom: "12px" }}>
+                  <div style={{ display: "flex", justifyContent: "space-between", alignItems: "flex-start", marginBottom: "10px" }}>
+                    <div style={{ fontSize: "15px", fontWeight: 700, color: isComplete ? "#4ade80" : "#e8e4dc", flex: 1, paddingRight: "8px" }}>
+                      {getGoalTitle(goal)}
+                    </div>
+                    <button
+                      style={{ ...styles.historyDeleteBtn, fontSize: "11px", flexShrink: 0 }}
+                      onClick={() => deleteGoal(goal.id)}
+                    >刪除</button>
+                  </div>
+
+                  {/* Progress bar */}
+                  <div style={{ height: "6px", borderRadius: "3px", background: "rgba(255,255,255,0.08)", marginBottom: "8px", overflow: "hidden" }}>
+                    <div style={{
+                      height: "100%", borderRadius: "3px", transition: "width 0.5s",
+                      width: `${progress}%`,
+                      background: isComplete ? "linear-gradient(90deg,#4ade80,#22c55e)" : isExpired ? "#555" : isUrgent ? "linear-gradient(90deg,#f87171,#ef4444)" : "linear-gradient(90deg,#ff6a00,#ff9500)",
+                    }} />
+                  </div>
+
+                  <div style={{ display: "flex", justifyContent: "space-between", alignItems: "center", fontSize: "12px" }}>
+                    <span style={{ color: barColor, fontWeight: 700 }}>
+                      {isComplete ? "✓ 已達標！" : isExpired ? "已過期" : daysLeft === 0 ? "今天截止" : `距截止還有 ${daysLeft} 天`}
+                    </span>
+                    <span style={{ color: "#666" }}>{Math.round(progress)}%</span>
+                  </div>
+
+                  {goal.note ? (
+                    <div style={{ fontSize: "12px", color: "#666", marginTop: "6px", fontStyle: "italic" }}>📝 {goal.note}</div>
+                  ) : null}
+                </div>
+              );
+            })}
+
+            <button style={styles.btn} onClick={() => setShowGoalSheet(true)}>
+              + 新增目標
+            </button>
           </div>
         )}
 
+        {/* Footer */}
+        <div style={{
+          textAlign: "center",
+          padding: "20px 0 8px",
+          marginTop: "8px",
+          borderTop: "1px solid rgba(255,255,255,0.06)",
+        }}>
+          <div style={{
+            fontSize: "12px",
+            color: "#444",
+            letterSpacing: "0.08em",
+            fontFamily: "'Barlow Condensed','Noto Sans TC',sans-serif",
+          }}>
+            v{APP_VERSION} · Crafted by 47
+          </div>
+        </div>
       </div>
 
       {/* NEW PR Toast */}
@@ -1511,6 +1828,7 @@ export default function FitForge({ user }) {
       >
         +
       </button>
+
 
     </div>
     {showExPicker && createPortal(exPickerSheet, document.body)}
@@ -1668,28 +1986,136 @@ export default function FitForge({ user }) {
               版本更新記錄
             </div>
 
-            {/* v1.2.1 */}
+            {/* v1.3.0 */}
             <div style={{ marginBottom: "24px" }}>
               <div style={{ display: "flex", alignItems: "center", gap: "10px", marginBottom: "10px" }}>
-                <span style={{ fontSize: "17px", fontWeight: 900, color: "#ffd700" }}>v1.2.1</span>
+                <span style={{ fontSize: "17px", fontWeight: 900, color: "#ffd700" }}>v1.3.0</span>
                 <span style={{
                   fontSize: "11px", fontWeight: 800, color: "#ff6a00",
                   background: "rgba(255,106,0,0.15)", border: "1px solid rgba(255,106,0,0.3)",
                   borderRadius: "6px", padding: "2px 7px", letterSpacing: "0.05em",
                 }}>最新</span>
-                <span style={{ fontSize: "12px", color: "#555", marginLeft: "auto" }}>2026-02-28</span>
+                <span style={{ fontSize: "12px", color: "#555", marginLeft: "auto" }}>2026-03-01</span>
               </div>
               <div style={{ display: "flex", flexDirection: "column", gap: "7px" }}>
                 <div style={{ fontSize: "14px", color: "#c8c4bc", display: "flex", gap: "8px" }}>
-                  <span style={{ color: "#ffd700", flexShrink: 0 }}>🔧</span>
+                  <span style={{ color: "#ffd700", flexShrink: 0 }}>✨</span>
+                  <span>訓練日誌：合併訓練記錄與歷史紀錄，一頁完成新增與管理</span>
+                </div>
+                <div style={{ fontSize: "14px", color: "#c8c4bc", display: "flex", gap: "8px" }}>
+                  <span style={{ color: "#ffd700", flexShrink: 0 }}>✨</span>
+                  <span>目標追蹤：設定體重、訓練頻率、動作重量、身材圍度目標，自動追蹤進度，達標觸發慶祝動畫</span>
+                </div>
+              </div>
+            </div>
+
+            <div style={{ height: "1px", background: "rgba(255,255,255,0.07)", marginBottom: "20px" }} />
+
+            {/* v1.2.6 */}
+            <div style={{ marginBottom: "24px" }}>
+              <div style={{ display: "flex", alignItems: "center", gap: "10px", marginBottom: "10px" }}>
+                <span style={{ fontSize: "16px", fontWeight: 800, color: "#888" }}>v1.2.6</span>
+                <span style={{ fontSize: "12px", color: "#555", marginLeft: "auto" }}>2026-03-01</span>
+              </div>
+              <div style={{ display: "flex", flexDirection: "column", gap: "7px" }}>
+                <div style={{ fontSize: "14px", color: "#888", display: "flex", gap: "8px" }}>
+                  <span style={{ flexShrink: 0 }}>•</span>
+                  <span>BMI 目標體重提示，一眼知道還差幾公斤達標準</span>
+                </div>
+                <div style={{ fontSize: "14px", color: "#888", display: "flex", gap: "8px" }}>
+                  <span style={{ flexShrink: 0 }}>•</span>
+                  <span>BMI 歷史趨勢折線，附 18.5 / 24 標準參考線</span>
+                </div>
+              </div>
+            </div>
+
+            <div style={{ height: "1px", background: "rgba(255,255,255,0.07)", marginBottom: "20px" }} />
+
+            {/* v1.2.5 */}
+            <div style={{ marginBottom: "24px" }}>
+              <div style={{ display: "flex", alignItems: "center", gap: "10px", marginBottom: "10px" }}>
+                <span style={{ fontSize: "16px", fontWeight: 800, color: "#888" }}>v1.2.5</span>
+                <span style={{ fontSize: "12px", color: "#555", marginLeft: "auto" }}>2026-03-01</span>
+              </div>
+              <div style={{ display: "flex", flexDirection: "column", gap: "7px" }}>
+                <div style={{ fontSize: "14px", color: "#888", display: "flex", gap: "8px" }}>
+                  <span style={{ flexShrink: 0 }}>•</span>
+                  <span>移除右下角重複的浮動按鈕，介面更簡潔</span>
+                </div>
+              </div>
+            </div>
+
+            <div style={{ height: "1px", background: "rgba(255,255,255,0.07)", marginBottom: "20px" }} />
+
+            {/* v1.2.4 */}
+            <div style={{ marginBottom: "24px" }}>
+              <div style={{ display: "flex", alignItems: "center", gap: "10px", marginBottom: "10px" }}>
+                <span style={{ fontSize: "16px", fontWeight: 800, color: "#888" }}>v1.2.4</span>
+                <span style={{ fontSize: "12px", color: "#555", marginLeft: "auto" }}>2026-02-28</span>
+              </div>
+              <div style={{ display: "flex", flexDirection: "column", gap: "7px" }}>
+                <div style={{ fontSize: "14px", color: "#888", display: "flex", gap: "8px" }}>
+                  <span style={{ flexShrink: 0 }}>•</span>
+                  <span>頂部跑馬燈公告，支援遠端動態設定內容</span>
+                </div>
+                <div style={{ fontSize: "14px", color: "#888", display: "flex", gap: "8px" }}>
+                  <span style={{ flexShrink: 0 }}>•</span>
+                  <span>今日未記錄時顯示浮動脈衝提示按鈕</span>
+                </div>
+              </div>
+            </div>
+
+            <div style={{ height: "1px", background: "rgba(255,255,255,0.07)", marginBottom: "20px" }} />
+
+            {/* v1.2.3 */}
+            <div style={{ marginBottom: "24px" }}>
+              <div style={{ display: "flex", alignItems: "center", gap: "10px", marginBottom: "10px" }}>
+                <span style={{ fontSize: "16px", fontWeight: 800, color: "#888" }}>v1.2.3</span>
+                <span style={{ fontSize: "12px", color: "#555", marginLeft: "auto" }}>2026-02-28</span>
+              </div>
+              <div style={{ display: "flex", flexDirection: "column", gap: "7px" }}>
+                <div style={{ fontSize: "14px", color: "#888", display: "flex", gap: "8px" }}>
+                  <span style={{ flexShrink: 0 }}>•</span>
+                  <span>App 底部加入版本號與版權聲明</span>
+                </div>
+              </div>
+            </div>
+
+            <div style={{ height: "1px", background: "rgba(255,255,255,0.07)", marginBottom: "20px" }} />
+
+            {/* v1.2.2 */}
+            <div style={{ marginBottom: "24px" }}>
+              <div style={{ display: "flex", alignItems: "center", gap: "10px", marginBottom: "10px" }}>
+                <span style={{ fontSize: "16px", fontWeight: 800, color: "#888" }}>v1.2.2</span>
+                <span style={{ fontSize: "12px", color: "#555", marginLeft: "auto" }}>2026-02-28</span>
+              </div>
+              <div style={{ display: "flex", flexDirection: "column", gap: "7px" }}>
+                <div style={{ fontSize: "14px", color: "#888", display: "flex", gap: "8px" }}>
+                  <span style={{ flexShrink: 0 }}>•</span>
+                  <span>修正身材數據同日多筆重複問題，改用日期為唯一鍵值（覆蓋式寫入）</span>
+                </div>
+              </div>
+            </div>
+
+            <div style={{ height: "1px", background: "rgba(255,255,255,0.07)", marginBottom: "20px" }} />
+
+            {/* v1.2.1 */}
+            <div style={{ marginBottom: "24px" }}>
+              <div style={{ display: "flex", alignItems: "center", gap: "10px", marginBottom: "10px" }}>
+                <span style={{ fontSize: "16px", fontWeight: 800, color: "#888" }}>v1.2.1</span>
+                <span style={{ fontSize: "12px", color: "#555", marginLeft: "auto" }}>2026-02-28</span>
+              </div>
+              <div style={{ display: "flex", flexDirection: "column", gap: "7px" }}>
+                <div style={{ fontSize: "14px", color: "#888", display: "flex", gap: "8px" }}>
+                  <span style={{ flexShrink: 0 }}>•</span>
                   <span>身材趨勢圖 x 軸日期排序修正，補記過去資料不再亂序</span>
                 </div>
-                <div style={{ fontSize: "14px", color: "#c8c4bc", display: "flex", gap: "8px" }}>
-                  <span style={{ color: "#ffd700", flexShrink: 0 }}>🔧</span>
+                <div style={{ fontSize: "14px", color: "#888", display: "flex", gap: "8px" }}>
+                  <span style={{ flexShrink: 0 }}>•</span>
                   <span>身材紀錄漲跌箭頭與顏色方向修正</span>
                 </div>
-                <div style={{ fontSize: "14px", color: "#c8c4bc", display: "flex", gap: "8px" }}>
-                  <span style={{ color: "#ffd700", flexShrink: 0 }}>🔧</span>
+                <div style={{ fontSize: "14px", color: "#888", display: "flex", gap: "8px" }}>
+                  <span style={{ flexShrink: 0 }}>•</span>
                   <span>同日期身材數據改為覆蓋機制，自動帶入舊資料並提示覆蓋</span>
                 </div>
               </div>
@@ -2102,6 +2528,49 @@ export default function FitForge({ user }) {
       document.body
     )}
 
+    {/* Marquee Bottom Sheet */}
+    {marqueeSheet && createPortal(
+      <div
+        style={{ position: "fixed", inset: 0, zIndex: 500, background: "rgba(0,0,0,0.65)" }}
+        onClick={() => { setMarqueeSheet(false); setMarqueePaused(false); }}
+      >
+        <div
+          style={{
+            position: "absolute", bottom: 0, left: 0, right: 0,
+            background: "#13131c", borderRadius: "20px 20px 0 0",
+            border: "1px solid rgba(255,255,255,0.08)",
+            padding: "16px 24px 40px",
+            maxHeight: "70vh", overflowY: "auto",
+          }}
+          onClick={e => e.stopPropagation()}
+        >
+          <div style={{ textAlign: "center", marginBottom: "20px" }}>
+            <div style={{ width: "40px", height: "4px", borderRadius: "2px",
+              background: "rgba(255,255,255,0.15)", margin: "0 auto" }} />
+          </div>
+          <div style={{
+            fontSize: "13px", fontWeight: 800, color: "#555",
+            letterSpacing: "0.08em", marginBottom: "16px",
+            fontFamily: "'Barlow Condensed','Noto Sans TC',sans-serif",
+          }}>
+            今日勵志語句
+          </div>
+          {marqueeTexts.map((text, i) => (
+            <div key={i} style={{
+              fontSize: "14px", color: "#c8c4bc", lineHeight: "1.75",
+              padding: "12px 0",
+              borderBottom: i < marqueeTexts.length - 1
+                ? "1px solid rgba(255,255,255,0.05)" : "none",
+              fontFamily: "'Barlow Condensed','Noto Sans TC',sans-serif",
+            }}>
+              {text}
+            </div>
+          ))}
+        </div>
+      </div>,
+      document.body
+    )}
+
     {popup && createPortal(
       <div
         style={{
@@ -2209,6 +2678,155 @@ export default function FitForge({ user }) {
       </div>,
       document.body
     )}
+    {/* Goal Add Sheet */}
+    {showGoalSheet && createPortal(
+      <div
+        style={{
+          position: "fixed", inset: 0, zIndex: 9994,
+          background: "rgba(0,0,0,0.72)",
+          display: "flex", alignItems: "flex-end", justifyContent: "center",
+        }}
+        onClick={() => setShowGoalSheet(false)}
+      >
+        <div
+          style={{
+            width: "100%", maxWidth: "480px", maxHeight: "80vh",
+            background: "#13131c", borderRadius: "20px 20px 0 0",
+            border: "1px solid rgba(255,255,255,0.1)", borderBottom: "none",
+            display: "flex", flexDirection: "column", overflow: "hidden",
+          }}
+          onClick={e => e.stopPropagation()}
+        >
+          <div style={{ display: "flex", alignItems: "center", justifyContent: "space-between", padding: "16px 20px 14px", borderBottom: "1px solid rgba(255,255,255,0.07)", flexShrink: 0 }}>
+            <span style={{ fontSize: "16px", fontWeight: 800, color: "#e8e4dc", letterSpacing: "0.05em" }}>新增目標</span>
+            <button style={{ background: "rgba(255,255,255,0.08)", border: "1px solid rgba(255,255,255,0.15)", borderRadius: "8px", padding: "6px 16px", color: "#e8e4dc", fontSize: "14px", fontWeight: 700, cursor: "pointer", fontFamily: "inherit" }} onClick={() => setShowGoalSheet(false)}>取消</button>
+          </div>
+
+          <div style={{ flex: 1, overflowY: "auto", WebkitOverflowScrolling: "touch", padding: "16px 20px 32px" }}>
+            {/* Goal type pills */}
+            <div style={{ marginBottom: "16px" }}>
+              <label style={{ fontSize: "12px", color: "#888", letterSpacing: "0.06em", marginBottom: "8px", display: "block" }}>目標類型</label>
+              <div style={{ display: "flex", gap: "8px", flexWrap: "wrap" }}>
+                {[
+                  { id: "weight", label: "體重" },
+                  { id: "frequency", label: "訓練頻率" },
+                  { id: "exercise_pr", label: "動作重量" },
+                  { id: "body_measurement", label: "身材圍度" },
+                ].map(t => (
+                  <button key={t.id} onClick={() => setGoalType(t.id)} style={{
+                    padding: "7px 14px", borderRadius: "20px", cursor: "pointer", fontFamily: "inherit", fontSize: "13px", fontWeight: goalType === t.id ? 700 : 400,
+                    border: goalType === t.id ? "1px solid #ff6a00" : "1px solid rgba(255,255,255,0.12)",
+                    background: goalType === t.id ? "rgba(255,106,0,0.2)" : "rgba(255,255,255,0.04)",
+                    color: goalType === t.id ? "#ff6a00" : "#888",
+                  }}>{t.label}</button>
+                ))}
+              </div>
+            </div>
+
+            {/* Dynamic fields by goalType */}
+            {goalType === "exercise_pr" && (
+              <div style={{ marginBottom: "14px" }}>
+                <label style={{ fontSize: "12px", color: "#888", letterSpacing: "0.06em", marginBottom: "6px", display: "block" }}>選擇動作</label>
+                <button style={{ width: "100%", background: "#12121a", border: "1px solid rgba(255,255,255,0.1)", borderRadius: "10px", padding: "10px 14px", color: "#e8e4dc", fontSize: "15px", cursor: "pointer", display: "flex", alignItems: "center", justifyContent: "space-between", textAlign: "left", fontFamily: "inherit", boxSizing: "border-box" }}
+                  onClick={() => { setPickerTarget("goal"); setShowExPicker(true); }}>
+                  <span>{goalTargetExercise}</span>
+                  <span style={{ color: "#666", fontSize: "12px" }}>▼</span>
+                </button>
+              </div>
+            )}
+
+            {goalType === "body_measurement" && (
+              <div style={{ marginBottom: "14px" }}>
+                <label style={{ fontSize: "12px", color: "#888", letterSpacing: "0.06em", marginBottom: "8px", display: "block" }}>部位</label>
+                <div style={{ display: "flex", gap: "8px", flexWrap: "wrap" }}>
+                  {Object.entries(bodyPartLabels).map(([key, label]) => (
+                    <button key={key} onClick={() => setGoalTargetBodyPart(key)} style={{
+                      padding: "6px 12px", borderRadius: "20px", cursor: "pointer", fontFamily: "inherit", fontSize: "13px",
+                      border: goalTargetBodyPart === key ? "1px solid #ff6a00" : "1px solid rgba(255,255,255,0.12)",
+                      background: goalTargetBodyPart === key ? "rgba(255,106,0,0.2)" : "rgba(255,255,255,0.04)",
+                      color: goalTargetBodyPart === key ? "#ff6a00" : "#888",
+                    }}>{label}</button>
+                  ))}
+                </div>
+              </div>
+            )}
+
+            <div style={{ marginBottom: "14px" }}>
+              <label style={{ fontSize: "12px", color: "#888", letterSpacing: "0.06em", marginBottom: "6px", display: "block" }}>
+                目標數值（{goalType === "frequency" ? "天/週" : goalType === "body_measurement" ? "cm" : "kg"}）
+              </label>
+              <input
+                type="number"
+                style={{ width: "100%", background: "rgba(255,255,255,0.05)", border: "1px solid rgba(255,255,255,0.1)", borderRadius: "10px", padding: "10px 14px", color: "#e8e4dc", fontSize: "15px", outline: "none", boxSizing: "border-box", fontFamily: "inherit" }}
+                placeholder="輸入目標數值"
+                value={goalTargetValue}
+                onChange={e => setGoalTargetValue(e.target.value)}
+              />
+            </div>
+
+            <div style={{ marginBottom: "14px" }}>
+              <label style={{ fontSize: "12px", color: "#888", letterSpacing: "0.06em", marginBottom: "6px", display: "block" }}>截止日期</label>
+              <input
+                type="date"
+                style={{ width: "100%", background: "rgba(255,255,255,0.05)", border: "1px solid rgba(255,255,255,0.1)", borderRadius: "10px", padding: "10px 14px", color: "#e8e4dc", fontSize: "15px", outline: "none", boxSizing: "border-box", fontFamily: "inherit" }}
+                value={goalDeadline}
+                onChange={e => setGoalDeadline(e.target.value)}
+              />
+            </div>
+
+            <div style={{ marginBottom: "16px" }}>
+              <label style={{ fontSize: "12px", color: "#888", letterSpacing: "0.06em", marginBottom: "6px", display: "block" }}>備註（可選）</label>
+              <input
+                type="text"
+                style={{ width: "100%", background: "rgba(255,255,255,0.05)", border: "1px solid rgba(255,255,255,0.1)", borderRadius: "10px", padding: "10px 14px", color: "#e8e4dc", fontSize: "15px", outline: "none", boxSizing: "border-box", fontFamily: "inherit" }}
+                placeholder="備註..."
+                value={goalNote}
+                onChange={e => setGoalNote(e.target.value)}
+              />
+            </div>
+
+            <button
+              style={{ width: "100%", padding: "14px", border: "none", borderRadius: "12px", background: "linear-gradient(135deg, #ff6a00, #ff9500)", color: "#fff", fontSize: "16px", fontWeight: 800, cursor: "pointer", letterSpacing: "0.06em", textTransform: "uppercase", fontFamily: "inherit" }}
+              onClick={saveGoal}
+            >
+              儲存目標
+            </button>
+          </div>
+        </div>
+      </div>,
+      document.body
+    )}
+
+    {/* Goal Celebration Animation */}
+    {goalCelebAnim && createPortal(
+      <div style={{
+        position: "fixed", inset: 0, zIndex: 10000,
+        background: "rgba(0,0,0,0.88)",
+        display: "flex", flexDirection: "column",
+        alignItems: "center", justifyContent: "center", gap: "16px",
+      }}>
+        <style>{`@keyframes gp { 0%{opacity:1;transform:translate(0,0) scale(1)} 100%{opacity:0;transform:translate(var(--tx),var(--ty)) scale(0)} }`}</style>
+        {[...Array(30)].map((_, i) => (
+          <div key={i} style={{
+            position: "absolute",
+            left: `${10 + (i * 37) % 80}%`,
+            top: `${10 + (i * 53) % 80}%`,
+            width: "10px", height: "10px", borderRadius: "50%",
+            background: i % 3 === 0 ? "#ffd700" : i % 3 === 1 ? "#ff6a00" : "#fff",
+            "--tx": `${(i % 2 === 0 ? 1 : -1) * (20 + i * 3)}px`,
+            "--ty": `${-(30 + i * 4)}px`,
+            animation: `gp ${0.8 + ((i * 17) % 10) * 0.1}s ease-out ${((i * 7) % 5) * 0.1}s forwards`,
+          }} />
+        ))}
+        <div style={{ fontSize: "72px", lineHeight: 1 }}>🎉</div>
+        <div style={{ fontSize: "34px", fontWeight: 900, background: "linear-gradient(135deg,#ffd700,#ff9500)", WebkitBackgroundClip: "text", WebkitTextFillColor: "transparent" }}>
+          目標達成！
+        </div>
+        <div style={{ fontSize: "15px", color: "#888" }}>繼續保持 💪</div>
+      </div>,
+      document.body
+    )}
+
     {confirmDialog && createPortal(
       <div
         style={{
