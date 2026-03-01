@@ -9,6 +9,11 @@ import { fetchAndActivate, getBoolean, getString, getNumber } from "firebase/rem
 import { getToken } from "firebase/messaging";
 import { db, auth, remoteConfig, getAppMessaging } from "../firebase";
 import {
+  getWeekStart, calcBMI, bodyPartLabels,
+  getGoalTitle, getGoalProgress as _getGoalProgress,
+  detectNewPR, canSaveWorkout, canSaveGoal,
+} from "../utils/fitforge.utils.js";
+import {
   ResponsiveContainer, LineChart, Line,
   XAxis, YAxis, Tooltip, ReferenceLine,
 } from "recharts";
@@ -376,10 +381,7 @@ export default function FitForge({ user }) {
 
   async function saveWorkout() {
     const name = wExercise;
-    const isNewPR = wSets.some(s => {
-      const wt = parseFloat(s.weight);
-      return !isNaN(wt) && wt > 0 && (!prMap[name] || wt > prMap[name].weight);
-    });
+    const isNewPR = detectNewPR(name, wSets, prMap);
     await addDoc(collection(db, "users", user.uid, "workouts"), {
       date: wDate, exercise: name, sets: wSets, note: wNote, createdAt: serverTimestamp(),
     });
@@ -433,10 +435,7 @@ export default function FitForge({ user }) {
   async function saveEditWorkout() {
     if (!editWorkoutId) return;
     const name = ewExercise;
-    const isNewPR = ewSets.some(s => {
-      const wt = parseFloat(s.weight);
-      return !isNaN(wt) && wt > 0 && (!prMap[name] || wt > prMap[name].weight);
-    });
+    const isNewPR = detectNewPR(name, ewSets, prMap);
     await updateDoc(
       doc(db, "users", user.uid, "workouts", editWorkoutId),
       { date: ewDate, exercise: ewExercise, sets: ewSets, note: ewNote }
@@ -559,9 +558,7 @@ export default function FitForge({ user }) {
     const h = parseFloat(latestBody.height) / 100;
     bmi = (parseFloat(latestBody.weight) / (h * h)).toFixed(1);
   }
-  const latestBMI = (latestBody?.weight && latestBody?.height)
-    ? parseFloat((parseFloat(latestBody.weight) / Math.pow(parseFloat(latestBody.height) / 100, 2)).toFixed(1))
-    : null;
+  const latestBMI = calcBMI(latestBody?.weight, latestBody?.height);
 
   // Sort by date ASC so chart x-axis goes from oldest (left) to newest (right)
   const chartPoints = bodyData
@@ -625,12 +622,6 @@ export default function FitForge({ user }) {
     .slice(0, 5);
 
   // Weekly volume: past 8 weeks (Mon as week start)
-  function getWeekStart(dateStr) {
-    const d = new Date(dateStr);
-    const day = d.getDay();
-    d.setDate(d.getDate() - (day === 0 ? 6 : day - 1));
-    return d.toISOString().slice(0, 10);
-  }
   const weeklyMap = {};
   workouts.forEach(w => {
     const ws = getWeekStart(w.date);
@@ -643,40 +634,8 @@ export default function FitForge({ user }) {
     return { label: ws.slice(5), sets: weeklyMap[ws] || 0 };
   });
 
-  function getGoalProgress(goal) {
-    const { type, targetValue, startValue, targetExercise, targetBodyPart } = goal;
-    let current = 0;
-    if (type === "weight") {
-      current = latestBody?.weight ? parseFloat(latestBody.weight) : 0;
-    } else if (type === "frequency") {
-      const ws = getWeekStart(today);
-      current = new Set(workouts.filter(w => w.date >= ws).map(w => w.date)).size;
-    } else if (type === "exercise_pr") {
-      current = prMap[targetExercise]?.weight ?? 0;
-    } else if (type === "body_measurement") {
-      current = latestBody?.[targetBodyPart] ? parseFloat(latestBody[targetBodyPart]) : 0;
-    } else if (type === "bmi") {
-      current = latestBMI ?? 0;
-    }
-    const isDecrease = goal.goalDirection === "decrease" ||
-      (goal.goalDirection == null && targetValue < startValue);
-    if (startValue === targetValue) return current >= targetValue ? 100 : 0;
-    if (isDecrease) {
-      return Math.min(100, Math.max(0, (startValue - current) / (startValue - targetValue) * 100));
-    }
-    return Math.min(100, Math.max(0, (current - startValue) / (targetValue - startValue) * 100));
-  }
-
-  const bodyPartLabels = { waist: "腰圍", chest: "胸圍", hip: "臀圍", arm: "手臂圍", thigh: "大腿圍" };
-
-  function getGoalTitle(goal) {
-    if (goal.type === "weight") return `體重目標：${goal.targetValue} kg`;
-    if (goal.type === "frequency") return `訓練頻率目標：${goal.targetValue} 天/週`;
-    if (goal.type === "exercise_pr") return `${goal.targetExercise} 目標：${goal.targetValue} kg`;
-    if (goal.type === "body_measurement") return `${bodyPartLabels[goal.targetBodyPart] || goal.targetBodyPart} 目標：${goal.targetValue} cm`;
-    if (goal.type === "bmi") return `BMI 目標：${goal.targetValue}`;
-    return "目標";
-  }
+  const getGoalProgress = (goal) =>
+    _getGoalProgress(goal, { latestBody, latestBMI, workouts, prMap, today });
 
   function getCategoryForExercise(name) {
     for (const cat of exerciseCategories) {
@@ -1571,7 +1530,7 @@ export default function FitForge({ user }) {
               </div>
 
               {(() => {
-                const canSave = wExercise.trim() !== "" && wSets.some(s => s.reps !== "" || s.weight !== "");
+                const canSave = canSaveWorkout(wExercise, wSets);
                 return (
                   <button
                     style={{
@@ -2898,8 +2857,8 @@ export default function FitForge({ user }) {
             </div>
 
             <button
-              disabled={!goalTargetValue || !goalDeadline || (goalType === "bmi" && !latestBMI)}
-              style={{ width: "100%", padding: "14px", border: "none", borderRadius: "12px", background: "linear-gradient(135deg, #ff6a00, #ff9500)", color: "#fff", fontSize: "16px", fontWeight: 800, cursor: (!goalTargetValue || !goalDeadline || (goalType === "bmi" && !latestBMI)) ? "not-allowed" : "pointer", opacity: (!goalTargetValue || !goalDeadline || (goalType === "bmi" && !latestBMI)) ? 0.5 : 1, letterSpacing: "0.06em", textTransform: "uppercase", fontFamily: "inherit" }}
+              disabled={!canSaveGoal(goalTargetValue, goalDeadline, goalType, latestBMI)}
+              style={{ width: "100%", padding: "14px", border: "none", borderRadius: "12px", background: "linear-gradient(135deg, #ff6a00, #ff9500)", color: "#fff", fontSize: "16px", fontWeight: 800, cursor: canSaveGoal(goalTargetValue, goalDeadline, goalType, latestBMI) ? "pointer" : "not-allowed", opacity: canSaveGoal(goalTargetValue, goalDeadline, goalType, latestBMI) ? 1 : 0.5, letterSpacing: "0.06em", textTransform: "uppercase", fontFamily: "inherit" }}
               onClick={saveGoal}
             >
               儲存目標

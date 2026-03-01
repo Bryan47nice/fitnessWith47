@@ -6,6 +6,9 @@ export default defineConfig({
   build: {
     outDir: 'build',
   },
+  test: {
+    environment: 'jsdom',
+  },
   plugins: [
     react(),
     VitePWA({
