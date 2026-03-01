@@ -15,7 +15,7 @@ messaging.onBackgroundMessage((payload) => {
   self.registration.showNotification(title || 'FitForge', {
     body: body || '記得今天訓練了嗎？',
     icon: '/icons/icon-192.png',
-    badge: '/icons/icon-192.png',
+    badge: '/icons/badge-72.png',
     tag: 'fitforge-reminder',
     data: { url: 'https://fitnesswith47.web.app' },
   });

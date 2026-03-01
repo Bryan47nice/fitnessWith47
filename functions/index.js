@@ -42,7 +42,7 @@ exports.sendWorkoutReminders = onSchedule(
           notification: { title: msg.title, body: msg.body },
           webpush: {
             notification: { icon: 'https://fitnesswith47.web.app/icons/icon-192.png',
-                            badge: 'https://fitnesswith47.web.app/icons/icon-192.png',
+                            badge: 'https://fitnesswith47.web.app/icons/badge-72.png',
                             tag: 'fitforge-reminder' },
             fcmOptions: { link: 'https://fitnesswith47.web.app' },
           },
