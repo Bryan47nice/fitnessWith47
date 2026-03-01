@@ -13,7 +13,7 @@ import {
   XAxis, YAxis, Tooltip, ReferenceLine,
 } from "recharts";
 
-const APP_VERSION = "1.3.3";
+const APP_VERSION = "1.3.5";
 
 const exerciseCategories = [
   { label: "胸", exercises: ["臥推", "上斜臥推", "雙槓撐體", "飛鳥", "胸推機", "蝴蝶機", "伏地挺身"] },
@@ -63,7 +63,7 @@ export default function FitForge({ user }) {
 
   // Workout form state
   const [wDate, setWDate] = useState(new Date().toISOString().slice(0, 10));
-  const [wExercise, setWExercise] = useState(exerciseCategories[0].exercises[0]);
+  const [wExercise, setWExercise] = useState("");
   const [wSets, setWSets] = useState([{ reps: "", weight: "" }]);
   const [wNote, setWNote] = useState("");
   const [savedAnim, setSavedAnim] = useState(false);
@@ -856,16 +856,16 @@ export default function FitForge({ user }) {
       display: "flex", gap: "8px", alignItems: "center", marginBottom: "8px",
     },
     setInput: {
-      flex: 1, background: "rgba(255,255,255,0.05)",
+      width: "100%", boxSizing: "border-box", background: "rgba(255,255,255,0.05)",
       border: "1px solid rgba(255,255,255,0.1)", borderRadius: "8px",
-      padding: "8px 12px", color: "#e8e4dc", fontSize: "15px",
+      padding: "7px 10px", color: "#e8e4dc", fontSize: "15px",
       outline: "none", textAlign: "center", fontFamily: "inherit",
     },
     setLabel: { fontSize: "11px", color: "#666", textAlign: "center", marginTop: "2px" },
     deleteBtn: {
       background: "rgba(255,50,50,0.15)", border: "1px solid rgba(255,50,50,0.2)",
       borderRadius: "8px", padding: "8px 10px", color: "#ff5555",
-      cursor: "pointer", fontSize: "14px",
+      cursor: "pointer", fontSize: "14px", flexShrink: 0,
     },
     workoutItem: {
       background: "rgba(255,255,255,0.03)", border: "1px solid rgba(255,255,255,0.06)",
@@ -1334,11 +1334,11 @@ export default function FitForge({ user }) {
                 <div style={{ marginBottom: "12px" }}>
                   <label style={styles.label}>動作</label>
                   <button
-                    style={styles.exPickerTrigger}
+                    style={{ ...styles.exPickerTrigger, color: wExercise ? "#e8e4dc" : "#555" }}
                     onClick={() => setExPickerExpanded(true)}
                   >
-                    <span>{wExercise}</span>
-                    <span style={{ color: "#666", fontSize: "12px" }}>▼ 更換</span>
+                    <span>{wExercise || "請選擇或搜尋動作"}</span>
+                    <span style={{ color: "#666", fontSize: "12px" }}>▼ {wExercise ? "更換" : "選擇"}</span>
                   </button>
                 </div>
               ) : (
@@ -1525,16 +1525,16 @@ export default function FitForge({ user }) {
                 {wSets.map((s, i) => (
                   <div key={i}>
                     <div style={styles.setRow}>
-                      <div style={{ textAlign: "center", color: "#ff6a00", fontWeight: 900, fontSize: "18px", minWidth: "24px" }}>
+                      <div style={{ textAlign: "center", color: "#ff6a00", fontWeight: 900, fontSize: "18px", minWidth: "24px", flexShrink: 0 }}>
                         {i + 1}
                       </div>
-                      <div style={{ flex: 1 }}>
-                        <input type="number" style={styles.setInput} placeholder="次數" value={s.reps} onChange={e => updateSet(i, "reps", e.target.value)} />
-                        <div style={styles.setLabel}>次數 (reps)</div>
-                      </div>
-                      <div style={{ flex: 1 }}>
-                        <input type="number" style={styles.setInput} placeholder="重量" value={s.weight} onChange={e => updateSet(i, "weight", e.target.value)} />
-                        <div style={styles.setLabel}>重量 (kg)</div>
+                      <div style={{ flex: 1, display: "flex", flexDirection: "column", gap: "4px" }}>
+                        <div>
+                          <input type="number" style={styles.setInput} placeholder="次數 (reps)" value={s.reps} onChange={e => updateSet(i, "reps", e.target.value)} />
+                        </div>
+                        <div>
+                          <input type="number" style={styles.setInput} placeholder="重量 (kg)" value={s.weight} onChange={e => updateSet(i, "weight", e.target.value)} />
+                        </div>
                       </div>
                       {wSets.length > 1 && (
                         <button style={styles.deleteBtn} onClick={() => removeSet(i)}>✕</button>
@@ -1549,12 +1549,24 @@ export default function FitForge({ user }) {
                 <input style={styles.input} placeholder="例：感覺很好、需要加重..." value={wNote} onChange={e => setWNote(e.target.value)} />
               </div>
 
-              <button
-                style={{ ...styles.btn, transform: savedAnim ? "scale(0.97)" : "scale(1)", opacity: savedAnim ? 0.8 : 1 }}
-                onClick={saveWorkout}
-              >
-                {savedAnim ? "✓ 已儲存！" : "💾 儲存訓練"}
-              </button>
+              {(() => {
+                const canSave = wExercise.trim() !== "" && wSets.some(s => s.reps !== "" || s.weight !== "");
+                return (
+                  <button
+                    style={{
+                      ...styles.btn,
+                      transform: savedAnim ? "scale(0.97)" : "scale(1)",
+                      opacity: canSave ? (savedAnim ? 0.8 : 1) : 0.4,
+                      cursor: canSave ? "pointer" : "not-allowed",
+                      background: canSave ? styles.btn.background : "#333",
+                    }}
+                    onClick={canSave ? saveWorkout : undefined}
+                    disabled={!canSave}
+                  >
+                    {savedAnim ? "✓ 已儲存！" : "💾 儲存訓練"}
+                  </button>
+                );
+              })()}
             </div>
 
             {/* ── 歷史紀錄（合併自原 history tab） ── */}
@@ -1852,25 +1864,27 @@ export default function FitForge({ user }) {
       )}
 
       {/* FAB */}
-      <button
-        style={{
-          position: "fixed", bottom: "28px", right: "20px", zIndex: 150,
-          width: "56px", height: "56px", borderRadius: "50%", border: "none",
-          background: "linear-gradient(135deg, #ff6a00, #ff9500)",
-          color: "#fff", fontSize: "22px", cursor: "pointer",
-          boxShadow: "0 4px 20px rgba(255,106,0,0.45)",
-          display: "flex", alignItems: "center", justifyContent: "center",
-          fontFamily: "inherit",
-          animation: !todayWorked ? "fitforge-pulse 1.5s ease-out infinite" : "none",
-        }}
-        onClick={() => {
-          setTab("workout");
-          setWDate(today);
-          setExPickerExpanded(true);
-        }}
-      >
-        {todayWorked ? "✓" : "💪"}
-      </button>
+      {tab !== "workout" && (
+        <button
+          style={{
+            position: "fixed", bottom: "28px", right: "20px", zIndex: 150,
+            width: "56px", height: "56px", borderRadius: "50%", border: "none",
+            background: "linear-gradient(135deg, #ff6a00, #ff9500)",
+            color: "#fff", fontSize: todayWorked ? "26px" : "22px", cursor: "pointer",
+            boxShadow: "0 4px 20px rgba(255,106,0,0.45)",
+            display: "flex", alignItems: "center", justifyContent: "center",
+            fontFamily: "inherit",
+            animation: !todayWorked ? "fitforge-pulse 1.5s ease-out infinite" : "none",
+          }}
+          onClick={() => {
+            setTab("workout");
+            setWDate(today);
+            setExPickerExpanded(true);
+          }}
+        >
+          {todayWorked ? "+" : "💪"}
+        </button>
+      )}
 
 
     </div>
@@ -2043,10 +2057,10 @@ export default function FitForge({ user }) {
               版本更新記錄
             </div>
 
-            {/* v1.3.3 */}
+            {/* v1.3.5 */}
             <div style={{ marginBottom: "24px" }}>
               <div style={{ display: "flex", alignItems: "center", gap: "10px", marginBottom: "10px" }}>
-                <span style={{ fontSize: "17px", fontWeight: 900, color: "#ffd700" }}>v1.3.3</span>
+                <span style={{ fontSize: "17px", fontWeight: 900, color: "#ffd700" }}>v1.3.5</span>
                 <span style={{
                   fontSize: "11px", fontWeight: 800, color: "#ff6a00",
                   background: "rgba(255,106,0,0.15)", border: "1px solid rgba(255,106,0,0.3)",
@@ -2056,7 +2070,43 @@ export default function FitForge({ user }) {
               </div>
               <div style={{ display: "flex", flexDirection: "column", gap: "7px" }}>
                 <div style={{ fontSize: "14px", color: "#c8c4bc", display: "flex", gap: "8px" }}>
+                  <span style={{ flexShrink: 0 }}>•</span>
+                  <span>優化推播通知圖示，Android 狀態列現在顯示正確的 FitForge 圖示</span>
+                </div>
+              </div>
+            </div>
+
+            <div style={{ height: "1px", background: "rgba(255,255,255,0.07)", marginBottom: "20px" }} />
+
+            {/* v1.3.4 */}
+            <div style={{ marginBottom: "24px" }}>
+              <div style={{ display: "flex", alignItems: "center", gap: "10px", marginBottom: "10px" }}>
+                <span style={{ fontSize: "17px", fontWeight: 900, color: "#ffd700" }}>v1.3.4</span>
+                <span style={{ fontSize: "12px", color: "#555", marginLeft: "auto" }}>2026-03-01</span>
+              </div>
+              <div style={{ display: "flex", flexDirection: "column", gap: "7px" }}>
+                <div style={{ fontSize: "14px", color: "#c8c4bc", display: "flex", gap: "8px" }}>
                   <span style={{ color: "#ffd700", flexShrink: 0 }}>✨</span>
+                  <span>浮動按鈕優化：在訓練日誌頁自動隱藏，已記錄改顯示「+」；動作選擇預設留空並新增禁用驗證</span>
+                </div>
+                <div style={{ fontSize: "14px", color: "#c8c4bc", display: "flex", gap: "8px" }}>
+                  <span style={{ flexShrink: 0 }}>•</span>
+                  <span>組數輸入框版面修正：次數與重量改為上下排列，避免超出畫面</span>
+                </div>
+              </div>
+            </div>
+
+            <div style={{ height: "1px", background: "rgba(255,255,255,0.07)", marginBottom: "20px" }} />
+
+            {/* v1.3.3 */}
+            <div style={{ marginBottom: "24px" }}>
+              <div style={{ display: "flex", alignItems: "center", gap: "10px", marginBottom: "10px" }}>
+                <span style={{ fontSize: "16px", fontWeight: 800, color: "#888" }}>v1.3.3</span>
+                <span style={{ fontSize: "12px", color: "#555", marginLeft: "auto" }}>2026-03-01</span>
+              </div>
+              <div style={{ display: "flex", flexDirection: "column", gap: "7px" }}>
+                <div style={{ fontSize: "14px", color: "#888", display: "flex", gap: "8px" }}>
+                  <span style={{ color: "#888", flexShrink: 0 }}>✨</span>
                   <span>目標追蹤頁新用戶引導：首次進入時自動說明四種目標類型與使用方式</span>
                 </div>
               </div>
