@@ -2157,11 +2157,7 @@ export default function FitForge({ user }) {
               <div style={{ display: "flex", flexDirection: "column", gap: "7px" }}>
                 <div style={{ fontSize: "14px", color: "#c8c4bc", display: "flex", gap: "8px" }}>
                   <span style={{ color: "#ffd700", flexShrink: 0 }}>✨</span>
-                  <span>儀表板訓練量圖表新增 D / W / M 切換（日 / 週 / 月三種維度）</span>
-                </div>
-                <div style={{ fontSize: "14px", color: "#c8c4bc", display: "flex", gap: "8px" }}>
-                  <span style={{ color: "#ffd700", flexShrink: 0 }}>✨</span>
-                  <span>修正 Y 軸數值顯示截斷問題</span>
+                  <span>訓練量圖表升級：支援日 / 週 / 月切換（K 線圖風格），並修正 Y 軸數值截斷</span>
                 </div>
               </div>
             </div>
