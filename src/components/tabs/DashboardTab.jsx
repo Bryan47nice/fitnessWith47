@@ -1,0 +1,246 @@
+import { ResponsiveContainer, LineChart, Line, XAxis, YAxis, Tooltip } from "recharts";
+import { getWeekStart } from "../../utils/fitforge.utils.js";
+import styles from "../../styles/fitforge.styles.js";
+
+function getBmiColor(b) {
+  if (!b) return "#888";
+  const v = parseFloat(b);
+  if (v < 18.5) return "#60a5fa";
+  if (v < 24)   return "#4ade80";
+  if (v < 28)   return "#facc15";
+  return "#f87171";
+}
+
+function getBmiLabel(b) {
+  if (!b) return "";
+  const v = parseFloat(b);
+  if (v < 18.5) return "體重過輕";
+  if (v < 24)   return "標準體重";
+  if (v < 28)   return "體重過重";
+  return "肥胖";
+}
+
+export default function DashboardTab({ workouts, bodyData, prMap, volumePeriod, setVolumePeriod }) {
+  const workoutDays  = new Set(workouts.map(w => w.date)).size;
+  const totalSets    = workouts.reduce((a, w) => a + (w.sets?.length || 0), 0);
+  const latestBody   = bodyData[0];
+  const recentWorkouts = workouts.slice(0, 5);
+  const topPRs = Object.entries(prMap)
+    .sort(([, a], [, b]) => b.weight - a.weight)
+    .slice(0, 5);
+
+  let bmi = null;
+  if (latestBody?.weight && latestBody?.height) {
+    const h = parseFloat(latestBody.height) / 100;
+    bmi = (parseFloat(latestBody.weight) / (h * h)).toFixed(1);
+  }
+
+  // Weekly volume: past 8 weeks
+  const weeklyMap = {};
+  workouts.forEach(w => {
+    const ws = getWeekStart(w.date);
+    weeklyMap[ws] = (weeklyMap[ws] || 0) + (w.sets?.length || 0);
+  });
+  const weeklyPoints = Array.from({ length: 8 }, (_, i) => {
+    const d = new Date();
+    d.setDate(d.getDate() - 7 * (7 - i));
+    const ws = getWeekStart(d.toISOString().slice(0, 10));
+    return { label: ws.slice(5), sets: weeklyMap[ws] || 0 };
+  });
+
+  // Daily volume: past 30 days
+  const dailyPoints = Array.from({ length: 30 }, (_, i) => {
+    const d = new Date();
+    d.setDate(d.getDate() - (29 - i));
+    const dateStr = d.toISOString().slice(0, 10);
+    const daySets = workouts
+      .filter(w => w.date === dateStr)
+      .reduce((a, w) => a + (w.sets?.length || 0), 0);
+    return { label: dateStr.slice(5), sets: daySets };
+  });
+
+  // Monthly volume: past 12 months
+  const monthlyMap = {};
+  workouts.forEach(w => {
+    const month = w.date.slice(0, 7);
+    monthlyMap[month] = (monthlyMap[month] || 0) + (w.sets?.length || 0);
+  });
+  const monthlyPoints = Array.from({ length: 12 }, (_, i) => {
+    const d = new Date();
+    d.setDate(1);
+    d.setMonth(d.getMonth() - (11 - i));
+    const month = d.toISOString().slice(0, 7);
+    return { label: month.slice(2), sets: monthlyMap[month] || 0 };
+  });
+
+  const volumePoints = volumePeriod === "day" ? dailyPoints
+    : volumePeriod === "month" ? monthlyPoints
+    : weeklyPoints;
+
+  return (
+    <div>
+      <div style={styles.statRow}>
+        <div style={styles.stat}>
+          <div style={styles.statNum}>{workoutDays}</div>
+          <div style={styles.statLabel}>訓練天數</div>
+        </div>
+        <div style={styles.stat}>
+          <div style={styles.statNum}>{totalSets}</div>
+          <div style={styles.statLabel}>總組數</div>
+        </div>
+        <div style={styles.stat}>
+          <div style={{ ...styles.statNum, color: bmi ? getBmiColor(bmi) : "#ff6a00" }}>{bmi || "—"}</div>
+          <div style={styles.statLabel}>BMI</div>
+        </div>
+      </div>
+
+      {/* 訓練量趨勢圖 */}
+      <div style={styles.card}>
+        <div style={{ display: "flex", justifyContent: "space-between", alignItems: "center", marginBottom: 12 }}>
+          <div style={styles.sectionTitle}>
+            {volumePeriod === "day" ? "每日訓練量" : volumePeriod === "week" ? "每週訓練量" : "每月訓練量"}
+          </div>
+          <div style={{ display: "flex", gap: 4 }}>
+            {[["D", "day"], ["W", "week"], ["M", "month"]].map(([btnLabel, key]) => (
+              <button key={key} onClick={() => setVolumePeriod(key)}
+                style={{
+                  padding: "3px 10px", borderRadius: 6, border: "none", cursor: "pointer",
+                  fontSize: 11, fontWeight: 700, letterSpacing: 0.5,
+                  fontFamily: "'Barlow Condensed', sans-serif",
+                  background: volumePeriod === key ? "#ff6a00" : "rgba(255,255,255,0.08)",
+                  color: volumePeriod === key ? "#fff" : "#888",
+                  transition: "all 0.15s",
+                }}
+              >{btnLabel}</button>
+            ))}
+          </div>
+        </div>
+        <ResponsiveContainer width="100%" height={160}>
+          <LineChart data={volumePoints} margin={{ top: 8, right: 8, bottom: 0, left: -8 }}>
+            <XAxis
+              dataKey="label"
+              tick={{ fill: "#666", fontSize: 10, fontFamily: "'Barlow Condensed','Noto Sans TC',sans-serif" }}
+              axisLine={{ stroke: "rgba(255,255,255,0.08)" }}
+              tickLine={false}
+              interval={volumePeriod === "day" ? 4 : 1}
+            />
+            <YAxis
+              allowDecimals={false}
+              tick={{ fill: "#666", fontSize: 10, fontFamily: "'Barlow Condensed','Noto Sans TC',sans-serif" }}
+              axisLine={false} tickLine={false} width={36}
+            />
+            <Tooltip
+              content={({ active, payload }) => {
+                if (!active || !payload?.length) return null;
+                const { label, sets } = payload[0].payload;
+                const sublabel = volumePeriod === "day" ? label : volumePeriod === "week" ? `${label} 週` : `${label} 月`;
+                return (
+                  <div style={{ background: "rgba(18,18,28,0.96)", border: "1px solid rgba(255,106,0,0.4)", borderRadius: "10px", padding: "8px 14px", fontFamily: "'Barlow Condensed','Noto Sans TC',sans-serif", pointerEvents: "none" }}>
+                    <div style={{ fontSize: "11px", color: "#888", marginBottom: "2px" }}>{sublabel}</div>
+                    <div style={{ fontSize: "20px", fontWeight: 900, color: "#ff6a00" }}>{sets}<span style={{ fontSize: "12px", fontWeight: 400, color: "#888", marginLeft: "4px" }}>組</span></div>
+                  </div>
+                );
+              }}
+              cursor={{ stroke: "rgba(255,106,0,0.25)", strokeWidth: 1, strokeDasharray: "4 4" }}
+            />
+            <Line type="monotone" dataKey="sets" stroke="#ff6a00" strokeWidth={2}
+              dot={{ r: 3, fill: "#ff6a00", strokeWidth: 0 }}
+              activeDot={{ r: 6, fill: "#ff9500", stroke: "#fff", strokeWidth: 2 }}
+            />
+          </LineChart>
+        </ResponsiveContainer>
+      </div>
+
+      {latestBody && (
+        <div style={styles.card}>
+          <div style={styles.sectionTitle}>最新身材數據</div>
+          <div style={{ display: "flex", justifyContent: "space-between", alignItems: "center" }}>
+            <div>
+              <div style={{ fontSize: "36px", fontWeight: 900, color: "#e8e4dc" }}>
+                {latestBody.weight}<span style={{ fontSize: "16px", color: "#888" }}>kg</span>
+              </div>
+              <div style={{ fontSize: "13px", color: getBmiColor(bmi) }}>{getBmiLabel(bmi)}</div>
+            </div>
+            <div style={{ textAlign: "right", fontSize: "13px", color: "#888", lineHeight: "1.8" }}>
+              {latestBody.chest && <div>胸 {latestBody.chest}cm</div>}
+              {latestBody.waist && <div>腰 {latestBody.waist}cm</div>}
+              {latestBody.hip && <div>臀 {latestBody.hip}cm</div>}
+            </div>
+          </div>
+          {bmi && (
+            <div style={styles.bmiBar}>
+              <div style={{
+                height: "100%", width: `${Math.min(100, (parseFloat(bmi) - 10) / 30 * 100)}%`,
+                background: getBmiColor(bmi), borderRadius: "3px", transition: "width 0.5s",
+              }} />
+            </div>
+          )}
+          {bmi && latestBody?.height && (() => {
+            const h = parseFloat(latestBody.height) / 100;
+            const bmiVal = parseFloat(bmi);
+            const targetLow  = (18.5 * h * h).toFixed(1);
+            const targetHigh = (24   * h * h).toFixed(1);
+            const cur = parseFloat(latestBody.weight);
+            let hint;
+            if (bmiVal < 18.5) {
+              const diff = (targetLow - cur).toFixed(1);
+              hint = `再增 ${diff} kg 可達標準體重`;
+            } else if (bmiVal < 24) {
+              hint = `維持在標準範圍（${targetLow}–${targetHigh} kg）`;
+            } else {
+              const diff = (cur - targetHigh).toFixed(1);
+              hint = `再減 ${diff} kg 可達標準體重`;
+            }
+            return (
+              <div style={{ fontSize: "12px", color: getBmiColor(bmi), marginTop: "6px", textAlign: "center", letterSpacing: "0.02em" }}>
+                {hint}
+              </div>
+            );
+          })()}
+        </div>
+      )}
+
+      {/* 個人最佳 PR */}
+      {topPRs.length > 0 && (
+        <div style={styles.card}>
+          <div style={styles.sectionTitle}>個人最佳 PR</div>
+          {topPRs.map(([exercise, { weight, date }]) => (
+            <div key={exercise} style={{ ...styles.workoutItem, display: "flex", justifyContent: "space-between", alignItems: "center" }}>
+              <div style={{ fontWeight: 700, fontSize: "15px" }}>{exercise}</div>
+              <div style={{ textAlign: "right" }}>
+                <div style={{ fontSize: "20px", fontWeight: 900, color: "#ffd700" }}>
+                  {weight}<span style={{ fontSize: "13px", fontWeight: 400, color: "#888", marginLeft: "2px" }}>kg</span>
+                </div>
+                <div style={{ fontSize: "11px", color: "#555" }}>{date}</div>
+              </div>
+            </div>
+          ))}
+        </div>
+      )}
+
+      <div style={styles.card}>
+        <div style={styles.sectionTitle}>近期訓練</div>
+        {recentWorkouts.length === 0 && (
+          <div style={{ color: "#555", fontSize: "14px", textAlign: "center", padding: "20px 0" }}>
+            還沒有訓練紀錄，開始記錄你的第一次訓練！
+          </div>
+        )}
+        {recentWorkouts.map(w => (
+          <div key={w.id} style={styles.workoutItem}>
+            <div style={{ display: "flex", justifyContent: "space-between", alignItems: "center" }}>
+              <span style={{ fontWeight: 700, fontSize: "15px" }}>{w.exercise}</span>
+              <span style={{ fontSize: "12px", color: "#666" }}>{w.date}</span>
+            </div>
+            <div style={{ marginTop: "6px", display: "flex", gap: "6px", flexWrap: "wrap" }}>
+              {w.sets?.map((s, i) => (
+                <span key={i} style={styles.tag}>
+                  {s.reps ? `${s.reps}下` : ""}{s.weight ? ` × ${s.weight}kg` : ""}
+                </span>
+              ))}
+            </div>
+          </div>
+        ))}
+      </div>
+    </div>
+  );
+}

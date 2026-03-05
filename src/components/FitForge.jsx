@@ -9,15 +9,15 @@ import { fetchAndActivate, getBoolean, getString, getNumber } from "firebase/rem
 import { getToken } from "firebase/messaging";
 import { db, auth, remoteConfig, getAppMessaging } from "../firebase";
 import {
-  getWeekStart, calcBMI, bodyPartLabels,
-  getGoalTitle, getGoalProgress as _getGoalProgress,
-  detectNewPR, canSaveWorkout, canSaveGoal,
+  getWeekStart, calcBMI,
+  getGoalProgress as _getGoalProgress,
+  detectNewPR,
 } from "../utils/fitforge.utils.js";
-import {
-  ResponsiveContainer, LineChart, Line,
-  XAxis, YAxis, Tooltip, ReferenceLine,
-} from "recharts";
 import styles from "../styles/fitforge.styles.js";
+import DashboardTab from "./tabs/DashboardTab.jsx";
+import WorkoutTab from "./tabs/WorkoutTab.jsx";
+import BodyTab from "./tabs/BodyTab.jsx";
+import GoalsTab from "./tabs/GoalsTab.jsx";
 
 const APP_VERSION = "1.4.1";
 
@@ -32,17 +32,6 @@ const exerciseCategories = [
 ];
 
 const INCLINE_EXERCISES = ["跑步機", "慢跑", "室內健走", "橢圓機"];
-
-const metricConfig = {
-  weight: { label: "體重",   unit: "kg" },
-  bmi:    { label: "BMI",    unit: "" },
-  height: { label: "身高",   unit: "cm" },
-  chest:  { label: "胸圍",   unit: "cm" },
-  waist:  { label: "腰圍",   unit: "cm" },
-  hip:    { label: "臀圍",   unit: "cm" },
-  arm:    { label: "手臂圍", unit: "cm" },
-  thigh:  { label: "大腿圍", unit: "cm" },
-};
 
 export default function FitForge({ user }) {
   const [tab, setTab] = useState("dashboard");
@@ -581,63 +570,9 @@ export default function FitForge({ user }) {
     setShowNotifBanner(false);
   }
 
-  const recentWorkouts = workouts.slice(0, 5);
   const latestBody = bodyData[0];
   const existingBodyForDate = bodyData.find(b => b.date === bDate) || null;
-  const workoutDays = new Set(workouts.map(w => w.date)).size;
-  const totalSets = workouts.reduce((a, w) => a + (w.sets?.length || 0), 0);
-
-  let bmi = null;
-  if (latestBody?.weight && latestBody?.height) {
-    const h = parseFloat(latestBody.height) / 100;
-    bmi = (parseFloat(latestBody.weight) / (h * h)).toFixed(1);
-  }
   const latestBMI = calcBMI(latestBody?.weight, latestBody?.height);
-
-  // Sort by date ASC so chart x-axis goes from oldest (left) to newest (right)
-  const chartPoints = bodyData
-    .filter(b => {
-      if (activeMetric === "bmi") {
-        return parseFloat(b.weight) > 0 && parseFloat(b.height) > 0;
-      }
-      const v = parseFloat(b[activeMetric]);
-      return !isNaN(v) && b[activeMetric] !== "" && b[activeMetric] != null;
-    })
-    .slice()
-    .sort((a, b) => a.date.localeCompare(b.date))
-    .map(b => {
-      let value;
-      if (activeMetric === "bmi") {
-        const h = parseFloat(b.height) / 100;
-        value = parseFloat((parseFloat(b.weight) / (h * h)).toFixed(1));
-      } else {
-        value = parseFloat(b[activeMetric]);
-      }
-      return { date: b.date, value, label: b.date.slice(5) };
-    });
-
-  const CustomTooltip = ({ active, payload }) => {
-    if (!active || !payload || !payload.length) return null;
-    const { date, value } = payload[0].payload;
-    return (
-      <div style={{
-        background: "rgba(18,18,28,0.96)",
-        border: "1px solid rgba(255,106,0,0.4)",
-        borderRadius: "10px", padding: "10px 14px",
-        fontFamily: "'Barlow Condensed','Noto Sans TC',sans-serif",
-        boxShadow: "0 4px 20px rgba(0,0,0,0.5)",
-        pointerEvents: "none",
-      }}>
-        <div style={{ fontSize: "11px", color: "#888", marginBottom: "4px", letterSpacing: "0.06em" }}>{date}</div>
-        <div style={{ fontSize: "22px", fontWeight: 900, color: "#ff6a00", lineHeight: 1 }}>
-          {value}
-          <span style={{ fontSize: "13px", fontWeight: 400, color: "#888", marginLeft: "4px" }}>
-            {metricConfig[activeMetric].unit}
-          </span>
-        </div>
-      </div>
-    );
-  };
 
   // PR Map: key=exercise, value={ weight, date }
   const prMap = {};
@@ -651,51 +586,6 @@ export default function FitForge({ user }) {
       }
     });
   });
-  const topPRs = Object.entries(prMap)
-    .sort(([, a], [, b]) => b.weight - a.weight)
-    .slice(0, 5);
-
-  // Weekly volume: past 8 weeks (Mon as week start)
-  const weeklyMap = {};
-  workouts.forEach(w => {
-    const ws = getWeekStart(w.date);
-    weeklyMap[ws] = (weeklyMap[ws] || 0) + (w.sets?.length || 0);
-  });
-  const weeklyPoints = Array.from({ length: 8 }, (_, i) => {
-    const d = new Date();
-    d.setDate(d.getDate() - 7 * (7 - i));
-    const ws = getWeekStart(d.toISOString().slice(0, 10));
-    return { label: ws.slice(5), sets: weeklyMap[ws] || 0 };
-  });
-
-  // Daily volume: past 30 days
-  const dailyPoints = Array.from({ length: 30 }, (_, i) => {
-    const d = new Date();
-    d.setDate(d.getDate() - (29 - i));
-    const dateStr = d.toISOString().slice(0, 10);
-    const daySets = workouts
-      .filter(w => w.date === dateStr)
-      .reduce((a, w) => a + (w.sets?.length || 0), 0);
-    return { label: dateStr.slice(5), sets: daySets };
-  });
-
-  // Monthly volume: past 12 months
-  const monthlyMap = {};
-  workouts.forEach(w => {
-    const month = w.date.slice(0, 7);
-    monthlyMap[month] = (monthlyMap[month] || 0) + (w.sets?.length || 0);
-  });
-  const monthlyPoints = Array.from({ length: 12 }, (_, i) => {
-    const d = new Date();
-    d.setDate(1);
-    d.setMonth(d.getMonth() - (11 - i));
-    const month = d.toISOString().slice(0, 7);
-    return { label: month.slice(2), sets: monthlyMap[month] || 0 };
-  });
-
-  const volumePoints = volumePeriod === "day" ? dailyPoints
-    : volumePeriod === "month" ? monthlyPoints
-    : weeklyPoints;
 
   const getGoalProgress = (goal) =>
     _getGoalProgress(goal, { latestBody, latestBMI, workouts, prMap, today });
@@ -718,18 +608,6 @@ export default function FitForge({ user }) {
     const sec = Math.round((total - min) * 60);
     return `${min}:${String(sec).padStart(2, "0")} /km`;
   }
-
-  const sortedGoals = [...goals].sort((a, b) => {
-    const aProg = getGoalProgress(a);
-    const bProg = getGoalProgress(b);
-    const aComplete = aProg >= 100;
-    const bComplete = bProg >= 100;
-    const aExpired = !aComplete && a.deadline < today;
-    const bExpired = !bComplete && b.deadline < today;
-    if (aComplete !== bComplete) return aComplete ? 1 : -1;
-    if (aExpired !== bExpired) return aExpired ? 1 : -1;
-    return a.deadline.localeCompare(b.deadline);
-  });
 
   const recentExercises = (() => {
     const seen = new Set();
@@ -770,24 +648,6 @@ export default function FitForge({ user }) {
     { id: "body",      label: "身材數據", icon: "📏" },
     { id: "goals",     label: "目標追蹤", icon: "🎯" },
   ];
-
-  const getBmiColor = (b) => {
-    if (!b) return "#888";
-    const v = parseFloat(b);
-    if (v < 18.5) return "#60a5fa";
-    if (v < 24) return "#4ade80";
-    if (v < 28) return "#facc15";
-    return "#f87171";
-  };
-
-  const getBmiLabel = (b) => {
-    if (!b) return "";
-    const v = parseFloat(b);
-    if (v < 18.5) return "體重過輕";
-    if (v < 24) return "標準體重";
-    if (v < 28) return "體重過重";
-    return "肥胖";
-  };
 
   if (loading) {
     return (
@@ -1014,832 +874,89 @@ export default function FitForge({ user }) {
 
       <div style={styles.content}>
 
-        {/* DASHBOARD */}
         {tab === "dashboard" && (
-          <div>
-            <div style={styles.statRow}>
-              <div style={styles.stat}>
-                <div style={styles.statNum}>{workoutDays}</div>
-                <div style={styles.statLabel}>訓練天數</div>
-              </div>
-              <div style={styles.stat}>
-                <div style={styles.statNum}>{totalSets}</div>
-                <div style={styles.statLabel}>總組數</div>
-              </div>
-              <div style={styles.stat}>
-                <div style={{ ...styles.statNum, color: bmi ? getBmiColor(bmi) : "#ff6a00" }}>{bmi || "—"}</div>
-                <div style={styles.statLabel}>BMI</div>
-              </div>
-            </div>
-
-            {/* 訓練量趨勢圖 */}
-            <div style={styles.card}>
-              <div style={{ display: "flex", justifyContent: "space-between", alignItems: "center", marginBottom: 12 }}>
-                <div style={styles.sectionTitle}>
-                  {volumePeriod === "day" ? "每日訓練量" : volumePeriod === "week" ? "每週訓練量" : "每月訓練量"}
-                </div>
-                <div style={{ display: "flex", gap: 4 }}>
-                  {[["D", "day"], ["W", "week"], ["M", "month"]].map(([btnLabel, key]) => (
-                    <button key={key} onClick={() => setVolumePeriod(key)}
-                      style={{
-                        padding: "3px 10px", borderRadius: 6, border: "none", cursor: "pointer",
-                        fontSize: 11, fontWeight: 700, letterSpacing: 0.5,
-                        fontFamily: "'Barlow Condensed', sans-serif",
-                        background: volumePeriod === key ? "#ff6a00" : "rgba(255,255,255,0.08)",
-                        color: volumePeriod === key ? "#fff" : "#888",
-                        transition: "all 0.15s",
-                      }}
-                    >{btnLabel}</button>
-                  ))}
-                </div>
-              </div>
-              <ResponsiveContainer width="100%" height={160}>
-                <LineChart data={volumePoints} margin={{ top: 8, right: 8, bottom: 0, left: -8 }}>
-                  <XAxis
-                    dataKey="label"
-                    tick={{ fill: "#666", fontSize: 10, fontFamily: "'Barlow Condensed','Noto Sans TC',sans-serif" }}
-                    axisLine={{ stroke: "rgba(255,255,255,0.08)" }}
-                    tickLine={false}
-                    interval={volumePeriod === "day" ? 4 : 1}
-                  />
-                  <YAxis
-                    allowDecimals={false}
-                    tick={{ fill: "#666", fontSize: 10, fontFamily: "'Barlow Condensed','Noto Sans TC',sans-serif" }}
-                    axisLine={false} tickLine={false} width={36}
-                  />
-                  <Tooltip
-                    content={({ active, payload }) => {
-                      if (!active || !payload?.length) return null;
-                      const { label, sets } = payload[0].payload;
-                      const sublabel = volumePeriod === "day" ? label : volumePeriod === "week" ? `${label} 週` : `${label} 月`;
-                      return (
-                        <div style={{ background: "rgba(18,18,28,0.96)", border: "1px solid rgba(255,106,0,0.4)", borderRadius: "10px", padding: "8px 14px", fontFamily: "'Barlow Condensed','Noto Sans TC',sans-serif", pointerEvents: "none" }}>
-                          <div style={{ fontSize: "11px", color: "#888", marginBottom: "2px" }}>{sublabel}</div>
-                          <div style={{ fontSize: "20px", fontWeight: 900, color: "#ff6a00" }}>{sets}<span style={{ fontSize: "12px", fontWeight: 400, color: "#888", marginLeft: "4px" }}>組</span></div>
-                        </div>
-                      );
-                    }}
-                    cursor={{ stroke: "rgba(255,106,0,0.25)", strokeWidth: 1, strokeDasharray: "4 4" }}
-                  />
-                  <Line type="monotone" dataKey="sets" stroke="#ff6a00" strokeWidth={2}
-                    dot={{ r: 3, fill: "#ff6a00", strokeWidth: 0 }}
-                    activeDot={{ r: 6, fill: "#ff9500", stroke: "#fff", strokeWidth: 2 }}
-                  />
-                </LineChart>
-              </ResponsiveContainer>
-            </div>
-
-            {latestBody && (
-              <div style={styles.card}>
-                <div style={styles.sectionTitle}>最新身材數據</div>
-                <div style={{ display: "flex", justifyContent: "space-between", alignItems: "center" }}>
-                  <div>
-                    <div style={{ fontSize: "36px", fontWeight: 900, color: "#e8e4dc" }}>
-                      {latestBody.weight}<span style={{ fontSize: "16px", color: "#888" }}>kg</span>
-                    </div>
-                    <div style={{ fontSize: "13px", color: getBmiColor(bmi) }}>{getBmiLabel(bmi)}</div>
-                  </div>
-                  <div style={{ textAlign: "right", fontSize: "13px", color: "#888", lineHeight: "1.8" }}>
-                    {latestBody.chest && <div>胸 {latestBody.chest}cm</div>}
-                    {latestBody.waist && <div>腰 {latestBody.waist}cm</div>}
-                    {latestBody.hip && <div>臀 {latestBody.hip}cm</div>}
-                  </div>
-                </div>
-                {bmi && (
-                  <div style={styles.bmiBar}>
-                    <div style={{
-                      height: "100%", width: `${Math.min(100, (parseFloat(bmi) - 10) / 30 * 100)}%`,
-                      background: getBmiColor(bmi), borderRadius: "3px", transition: "width 0.5s",
-                    }} />
-                  </div>
-                )}
-                {bmi && latestBody?.height && (() => {
-                  const h = parseFloat(latestBody.height) / 100;
-                  const bmiVal = parseFloat(bmi);
-                  const targetLow  = (18.5 * h * h).toFixed(1);
-                  const targetHigh = (24   * h * h).toFixed(1);
-                  const cur = parseFloat(latestBody.weight);
-                  let hint;
-                  if (bmiVal < 18.5) {
-                    const diff = (targetLow - cur).toFixed(1);
-                    hint = `再增 ${diff} kg 可達標準體重`;
-                  } else if (bmiVal < 24) {
-                    hint = `維持在標準範圍（${targetLow}–${targetHigh} kg）`;
-                  } else {
-                    const diff = (cur - targetHigh).toFixed(1);
-                    hint = `再減 ${diff} kg 可達標準體重`;
-                  }
-                  return (
-                    <div style={{ fontSize: "12px", color: getBmiColor(bmi), marginTop: "6px", textAlign: "center", letterSpacing: "0.02em" }}>
-                      {hint}
-                    </div>
-                  );
-                })()}
-              </div>
-            )}
-
-            {/* 個人最佳 PR */}
-            {topPRs.length > 0 && (
-              <div style={styles.card}>
-                <div style={styles.sectionTitle}>個人最佳 PR</div>
-                {topPRs.map(([exercise, { weight, date }]) => (
-                  <div key={exercise} style={{ ...styles.workoutItem, display: "flex", justifyContent: "space-between", alignItems: "center" }}>
-                    <div style={{ fontWeight: 700, fontSize: "15px" }}>{exercise}</div>
-                    <div style={{ textAlign: "right" }}>
-                      <div style={{ fontSize: "20px", fontWeight: 900, color: "#ffd700" }}>
-                        {weight}<span style={{ fontSize: "13px", fontWeight: 400, color: "#888", marginLeft: "2px" }}>kg</span>
-                      </div>
-                      <div style={{ fontSize: "11px", color: "#555" }}>{date}</div>
-                    </div>
-                  </div>
-                ))}
-              </div>
-            )}
-
-            <div style={styles.card}>
-              <div style={styles.sectionTitle}>近期訓練</div>
-              {recentWorkouts.length === 0 && (
-                <div style={{ color: "#555", fontSize: "14px", textAlign: "center", padding: "20px 0" }}>
-                  還沒有訓練紀錄，開始記錄你的第一次訓練！
-                </div>
-              )}
-              {recentWorkouts.map(w => (
-                <div key={w.id} style={styles.workoutItem}>
-                  <div style={{ display: "flex", justifyContent: "space-between", alignItems: "center" }}>
-                    <span style={{ fontWeight: 700, fontSize: "15px" }}>{w.exercise}</span>
-                    <span style={{ fontSize: "12px", color: "#666" }}>{w.date}</span>
-                  </div>
-                  <div style={{ marginTop: "6px", display: "flex", gap: "6px", flexWrap: "wrap" }}>
-                    {w.sets?.map((s, i) => (
-                      <span key={i} style={styles.tag}>
-                        {s.reps ? `${s.reps}下` : ""}{s.weight ? ` × ${s.weight}kg` : ""}
-                      </span>
-                    ))}
-                  </div>
-                </div>
-              ))}
-            </div>
-
-          </div>
+          <DashboardTab
+            workouts={workouts}
+            bodyData={bodyData}
+            prMap={prMap}
+            volumePeriod={volumePeriod}
+            setVolumePeriod={setVolumePeriod}
+          />
         )}
 
-        {/* WORKOUT */}
         {tab === "workout" && (
-          <div>
-            <div style={styles.card}>
-              <div style={styles.sectionTitle}>新增訓練</div>
-
-              <div style={{ marginBottom: "12px" }}>
-                <label style={styles.label}>日期</label>
-                <input type="date" style={styles.input} value={wDate} onChange={e => setWDate(e.target.value)} />
-              </div>
-
-              {!exPickerExpanded ? (
-                <div style={{ marginBottom: "12px" }}>
-                  <label style={styles.label}>動作</label>
-                  <button
-                    style={{ ...styles.exPickerTrigger, color: wExercise ? "#e8e4dc" : "#555" }}
-                    onClick={() => setExPickerExpanded(true)}
-                  >
-                    <span>{wExercise || "請選擇或搜尋動作"}</span>
-                    <span style={{ color: "#666", fontSize: "12px" }}>▼ {wExercise ? "更換" : "選擇"}</span>
-                  </button>
-                </div>
-              ) : (
-                <div style={{ marginBottom: "12px" }}>
-                  {/* 搜尋框 */}
-                  <div style={{ position: "relative", marginBottom: "10px" }}>
-                    <input
-                      autoFocus
-                      style={{ ...styles.input, paddingRight: "36px" }}
-                      placeholder="搜尋或選擇動作..."
-                      value={exSearchQuery}
-                      onChange={e => setExSearchQuery(e.target.value)}
-                    />
-                    {exSearchQuery && (
-                      <button
-                        onClick={() => setExSearchQuery("")}
-                        style={{
-                          position: "absolute", right: "12px", top: "50%", transform: "translateY(-50%)",
-                          background: "none", border: "none", color: "#888", fontSize: "16px", cursor: "pointer",
-                        }}
-                      >✕</button>
-                    )}
-                  </div>
-
-                  {/* 部位 Tag 列 */}
-                  <div style={{
-                    display: "flex", gap: "8px", overflowX: "auto",
-                    WebkitOverflowScrolling: "touch", scrollbarWidth: "none",
-                    paddingBottom: "4px", marginBottom: "10px",
-                  }}>
-                    {["胸", "背", "肩", "腿", "手臂", "核心", "有氧", "自訂"].map(tag => (
-                      <button key={tag} onClick={() => {
-                        const next = exActiveTag === tag ? null : tag;
-                        setExActiveTag(next);
-                        if (next) localStorage.setItem("ex_active_tag", next);
-                        else localStorage.removeItem("ex_active_tag");
-                        setExSearchQuery("");
-                      }}
-                        style={{
-                          flexShrink: 0, padding: "5px 12px", borderRadius: "20px", cursor: "pointer",
-                          fontFamily: "inherit", fontSize: "13px", fontWeight: exActiveTag === tag ? 700 : 400,
-                          border: exActiveTag === tag ? "1px solid #ff6a00" : "1px solid rgba(255,255,255,0.12)",
-                          background: exActiveTag === tag ? "rgba(255,106,0,0.2)" : "rgba(255,255,255,0.04)",
-                          color: exActiveTag === tag ? "#ff6a00" : "#888",
-                        }}>
-                        {tag}
-                      </button>
-                    ))}
-                  </div>
-
-                  {/* 動作列表 */}
-                  <div style={{
-                    maxHeight: "220px", overflowY: "auto", WebkitOverflowScrolling: "touch",
-                    border: "1px solid rgba(255,255,255,0.08)", borderRadius: "10px", background: "#12121a",
-                  }}>
-                    {!exSearchQuery && !exActiveTag && recentExercises.length === 0 && (
-                      <div style={{ padding: "20px", textAlign: "center", color: "#555", fontSize: "13px" }}>
-                        輸入動作名稱或選擇部位開始
-                      </div>
-                    )}
-                    {!exSearchQuery && !exActiveTag && recentExercises.length > 0 && (
-                      <div style={{ padding: "8px 14px 4px", fontSize: "11px", color: "#555", letterSpacing: "0.08em", textTransform: "uppercase" }}>
-                        最近使用
-                      </div>
-                    )}
-
-                    {pickerDisplayList.map(ex => (
-                      <button key={ex.name} onClick={() => {
-                        const newIsCardio = getCategoryForExercise(ex.name) === "有氧";
-                        const curIsCardio = getCategoryForExercise(wExercise) === "有氧";
-                        if (newIsCardio !== curIsCardio) {
-                          setWSets(newIsCardio ? [{ duration: "", distance: "", speed: "", incline: "" }] : [{ reps: "", weight: "" }]);
-                        }
-                        setWExercise(ex.name);
-                        setExPickerExpanded(false);
-                        setExSearchQuery("");
-                      }}
-                        style={{
-                          display: "flex", alignItems: "center", gap: "8px",
-                          width: "100%", padding: "11px 14px",
-                          background: wExercise === ex.name ? "rgba(255,106,0,0.12)" : "transparent",
-                          border: "none", borderLeft: wExercise === ex.name ? "3px solid #ff6a00" : "3px solid transparent",
-                          color: wExercise === ex.name ? "#ff9500" : "#e8e4dc",
-                          fontSize: "15px", textAlign: "left", cursor: "pointer",
-                          fontFamily: "inherit", boxSizing: "border-box",
-                        }}>
-                        {ex.category && (
-                          <span style={{
-                            fontSize: "10px", fontWeight: 700, color: "#666",
-                            background: "rgba(255,255,255,0.06)", borderRadius: "4px",
-                            padding: "2px 6px", flexShrink: 0, letterSpacing: "0.04em",
-                          }}>{ex.category}</span>
-                        )}
-                        {ex.name}
-                        {ex.category === "自訂" && (
-                          <button
-                            onClick={e => {
-                              e.stopPropagation();
-                              setConfirmDialog({
-                                message: `確認刪除自訂動作「${ex.name}」？`,
-                                onConfirm: async () => {
-                                  await deleteCustomExercise(ex.id);
-                                  setConfirmDialog(null);
-                                },
-                              });
-                            }}
-                            style={{
-                              marginLeft: "auto", background: "rgba(255,50,50,0.12)",
-                              border: "1px solid rgba(255,50,50,0.2)", borderRadius: "6px",
-                              color: "#ff5555", fontSize: "11px", padding: "2px 8px",
-                              cursor: "pointer", fontFamily: "inherit", flexShrink: 0,
-                            }}>
-                            刪除
-                          </button>
-                        )}
-                      </button>
-                    ))}
-
-                    {/* 自訂 Tag：底部新增按鈕 */}
-                    {exActiveTag === "自訂" && (
-                      <div style={{ padding: "8px 14px 12px", borderTop: pickerDisplayList.length > 0 ? "1px solid rgba(255,255,255,0.06)" : "none" }}>
-                        {showAddCustomEx ? (
-                          <div style={{ display: "flex", gap: "8px" }}>
-                            <input
-                              autoFocus
-                              style={{ ...styles.input, flex: 1, padding: "8px 12px", fontSize: "14px" }}
-                              placeholder="動作名稱..."
-                              value={newExName}
-                              onChange={e => setNewExName(e.target.value)}
-                              onKeyDown={e => {
-                                if (e.key === "Enter") { addCustomExercise(); setShowAddCustomEx(false); }
-                                if (e.key === "Escape") { setShowAddCustomEx(false); setNewExName(""); }
-                              }}
-                            />
-                            <button
-                              style={{
-                                padding: "8px 12px", border: "none", borderRadius: "8px",
-                                background: "linear-gradient(135deg,#ff6a00,#ff9500)",
-                                color: "#fff", fontSize: "13px", fontWeight: 800,
-                                cursor: "pointer", fontFamily: "inherit", whiteSpace: "nowrap",
-                              }}
-                              onClick={() => { addCustomExercise(); setShowAddCustomEx(false); }}
-                            >新增</button>
-                            <button
-                              style={{
-                                padding: "8px 10px", border: "1px solid rgba(255,255,255,0.12)",
-                                borderRadius: "8px", background: "transparent",
-                                color: "#888", fontSize: "13px", cursor: "pointer", fontFamily: "inherit",
-                              }}
-                              onClick={() => { setShowAddCustomEx(false); setNewExName(""); }}
-                            >取消</button>
-                          </div>
-                        ) : (
-                          <button
-                            onClick={() => setShowAddCustomEx(true)}
-                            style={{
-                              width: "100%", padding: "8px", background: "rgba(255,106,0,0.08)",
-                              border: "1px dashed rgba(255,106,0,0.3)", borderRadius: "8px",
-                              color: "#ff9500", fontSize: "13px", fontWeight: 700,
-                              cursor: "pointer", fontFamily: "inherit",
-                            }}>
-                            ＋ 新增動作
-                          </button>
-                        )}
-                      </div>
-                    )}
-
-                    {exSearchQuery && pickerDisplayList.length === 0 && (
-                      <div style={{ padding: "20px", textAlign: "center", color: "#555", fontSize: "13px" }}>
-                        沒有找到「{exSearchQuery}」相關動作
-                      </div>
-                    )}
-                  </div>
-
-                  {/* 取消按鈕 */}
-                  <button
-                    onClick={() => { setExPickerExpanded(false); setExSearchQuery(""); }}
-                    style={{ ...styles.btnSecondary, marginTop: "8px", width: "100%", textAlign: "center" }}>
-                    取消選擇
-                  </button>
-                </div>
-              )}
-
-              <div style={{ marginBottom: "12px" }}>
-                <div style={{ display: "flex", justifyContent: "space-between", alignItems: "center", marginBottom: "10px" }}>
-                  <label style={{ ...styles.label, marginBottom: 0 }}>{isCardio(wExercise) ? "有氧記錄" : "訓練組數"}</label>
-                  {!isCardio(wExercise) && (
-                    <button style={styles.btnSecondary} onClick={addSet}>+ 新增一組</button>
-                  )}
-                </div>
-
-                {/* 有氧模式：單次平面表單 */}
-                {isCardio(wExercise) ? (
-                  <div style={{ display: "flex", flexDirection: "column", gap: "8px" }}>
-                    <div>
-                      <input type="number" style={styles.setInput} placeholder="時間（分鐘）*" value={wSets[0]?.duration || ""} onChange={e => updateSet(0, "duration", e.target.value)} />
-                    </div>
-                    <div>
-                      <input type="number" style={styles.setInput} placeholder="距離（km）" value={wSets[0]?.distance || ""} onChange={e => updateSet(0, "distance", e.target.value)} />
-                    </div>
-                    <div>
-                      <input type="number" style={styles.setInput} placeholder="速度（km/h）" value={wSets[0]?.speed || ""} onChange={e => updateSet(0, "speed", e.target.value)} />
-                      {wSets[0]?.speed && <div style={{ fontSize: "10px", color: "#ff6a00", marginTop: "2px", paddingLeft: "2px" }}>→ {toMinPerKm(wSets[0].speed)}</div>}
-                    </div>
-                    {showIncline(wExercise) && (
-                      <div>
-                        <input type="number" style={styles.setInput} placeholder="坡度（%）" value={wSets[0]?.incline || ""} onChange={e => updateSet(0, "incline", e.target.value)} />
-                      </div>
-                    )}
-                  </div>
-                ) : (
-                  <>
-                    {/* 重訓模式：快速新增列 */}
-                    <div style={{ display: "flex", gap: "4px", alignItems: "center", marginBottom: "8px" }}>
-                      <input
-                        type="number"
-                        placeholder="次數"
-                        value={batchReps}
-                        onChange={e => setBatchReps(e.target.value)}
-                        style={{ ...styles.setInput, flex: 1 }}
-                      />
-                      <span style={{ color: "#666", fontSize: "11px", flexShrink: 0 }}>下 ×</span>
-                      <input
-                        type="number"
-                        placeholder="重量"
-                        value={batchWeight}
-                        onChange={e => setBatchWeight(e.target.value)}
-                        style={{ ...styles.setInput, flex: 1 }}
-                      />
-                      <span style={{ color: "#666", fontSize: "11px", flexShrink: 0 }}>kg ×</span>
-                      <input
-                        type="number" min={1} max={10}
-                        value={batchCount}
-                        onChange={e => setBatchCount(e.target.value)}
-                        style={{ ...styles.setInput, width: "40px", textAlign: "center", flex: "none" }}
-                      />
-                      <span style={{ color: "#666", fontSize: "11px", flexShrink: 0 }}>組</span>
-                      <button onClick={batchAddSets} style={styles.btnSecondary}>套用</button>
-                    </div>
-
-                    {/* 逐組列表 */}
-                    {wSets.map((s, i) => (
-                      <div key={i}>
-                        <div style={styles.setRow}>
-                          <div style={{ textAlign: "center", color: "#ff6a00", fontWeight: 900, fontSize: "18px", minWidth: "24px", flexShrink: 0 }}>
-                            {i + 1}
-                          </div>
-                          <div style={{ flex: 1, display: "flex", flexDirection: "column", gap: "4px" }}>
-                            <div>
-                              <input type="number" style={styles.setInput} placeholder="次數 (reps)" value={s.reps || ""} onChange={e => updateSet(i, "reps", e.target.value)} />
-                            </div>
-                            <div>
-                              <input type="number" style={styles.setInput} placeholder="重量 (kg)" value={s.weight || ""} onChange={e => updateSet(i, "weight", e.target.value)} />
-                            </div>
-                          </div>
-                          {wSets.length > 1 && (
-                            <button style={styles.deleteBtn} onClick={() => removeSet(i)}>✕</button>
-                          )}
-                        </div>
-                      </div>
-                    ))}
-                  </>
-                )}
-              </div>
-
-              <div style={{ marginBottom: "12px" }}>
-                <label style={styles.label}>消耗卡路里（選填）</label>
-                <div style={{ position: "relative" }}>
-                  <input type="number" style={styles.input} placeholder="kcal"
-                    value={wCalories} onChange={e => setWCalories(e.target.value)} />
-                  <span style={{ position: "absolute", right: "12px", top: "50%", transform: "translateY(-50%)", color: "#666", fontSize: "12px" }}>kcal</span>
-                </div>
-              </div>
-
-              <div style={{ marginBottom: "12px" }}>
-                <label style={styles.label}>備註（可選）</label>
-                <input style={styles.input} placeholder="例：感覺很好、需要加重..." value={wNote} onChange={e => setWNote(e.target.value)} />
-              </div>
-
-              {(() => {
-                const canSave = isCardio(wExercise)
-                  ? (wExercise.trim() !== "" && !!wSets[0]?.duration)
-                  : canSaveWorkout(wExercise, wSets);
-                return (
-                  <button
-                    style={{
-                      ...styles.btn,
-                      transform: savedAnim ? "scale(0.97)" : "scale(1)",
-                      opacity: canSave ? (savedAnim ? 0.8 : 1) : 0.4,
-                      cursor: canSave ? "pointer" : "not-allowed",
-                      background: canSave ? styles.btn.background : "#333",
-                    }}
-                    onClick={canSave ? saveWorkout : undefined}
-                    disabled={!canSave}
-                  >
-                    {savedAnim ? "✓ 已儲存！" : "💾 儲存訓練"}
-                  </button>
-                );
-              })()}
-            </div>
-
-            {/* ── 歷史紀錄（合併自原 history tab） ── */}
-            <div style={styles.card}>
-              <div style={{ display: "flex", justifyContent: "space-between", alignItems: "center", marginBottom: "16px" }}>
-                <div style={styles.sectionTitle}>所有訓練紀錄</div>
-                <div style={{ display: "flex", gap: "6px" }}>
-                  {["week", "month"].map(mode => (
-                    <button key={mode} onClick={() => {
-                      setHistoryGroupMode(mode);
-                      localStorage.setItem("history_group_mode", mode);
-                      setExpandedGroupKeys(null);
-                    }} style={{
-                      padding: "5px 12px", borderRadius: "20px", cursor: "pointer", fontFamily: "inherit", fontSize: "12px", fontWeight: historyGroupMode === mode ? 700 : 400,
-                      border: historyGroupMode === mode ? "1px solid #ff6a00" : "1px solid rgba(255,255,255,0.12)",
-                      background: historyGroupMode === mode ? "rgba(255,106,0,0.2)" : "rgba(255,255,255,0.04)",
-                      color: historyGroupMode === mode ? "#ff6a00" : "#888",
-                    }}>{mode === "week" ? "依週" : "依月"}</button>
-                  ))}
-                </div>
-              </div>
-              {workouts.length === 0 && (
-                <div style={{ color: "#555", fontSize: "14px", textAlign: "center", padding: "20px 0" }}>
-                  還沒有訓練紀錄
-                </div>
-              )}
-              {workouts.length > 0 && (() => {
-                const groupMap = new Map();
-                workouts.forEach(w => {
-                  let key, label;
-                  if (historyGroupMode === "week") {
-                    key = getWeekStart(w.date);
-                    const monday = new Date(key + 'T00:00:00');
-                    const sunday = new Date(monday);
-                    sunday.setDate(monday.getDate() + 6);
-                    const fmt = d => `${String(d.getMonth()+1).padStart(2,'0')}/${String(d.getDate()).padStart(2,'0')}`;
-                    label = `${fmt(monday)} – ${fmt(sunday)}`;
-                  } else {
-                    const [y, m] = w.date.split('-');
-                    key = `${y}-${m}`;
-                    label = `${y} 年 ${parseInt(m)} 月`;
-                  }
-                  if (!groupMap.has(key)) groupMap.set(key, { key, label, items: [] });
-                  groupMap.get(key).items.push(w);
-                });
-                const workoutGroups = Array.from(groupMap.values());
-                return workoutGroups.map((group, idx) => {
-                  const isOpen = expandedGroupKeys === null
-                    ? idx === 0
-                    : expandedGroupKeys.has(group.key);
-                  return (
-                    <div key={group.key} style={{ marginBottom: "4px" }}>
-                      <div onClick={() => {
-                        setExpandedGroupKeys(prev => {
-                          const base = prev ?? new Set(workoutGroups[0] ? [workoutGroups[0].key] : []);
-                          const next = new Set(base);
-                          if (isOpen) next.delete(group.key);
-                          else next.add(group.key);
-                          return next;
-                        });
-                      }} style={{
-                        display: "flex", justifyContent: "space-between", alignItems: "center",
-                        padding: "10px 14px", borderRadius: "10px",
-                        background: "rgba(255,255,255,0.05)", cursor: "pointer",
-                        marginBottom: isOpen ? "8px" : 0,
-                      }}>
-                        <span style={{ fontSize: "13px", color: "#aaa", fontWeight: 600 }}>
-                          {group.label}（{group.items.length} 筆）
-                        </span>
-                        <span style={{ color: "#666", fontSize: "12px" }}>{isOpen ? "▲" : "▼"}</span>
-                      </div>
-                      {isOpen && group.items.map(w => (
-                        <div key={w.id} style={{ ...styles.workoutItem, marginBottom: "10px" }}>
-                          <div style={{ display: "flex", justifyContent: "space-between", alignItems: "center", marginBottom: "6px" }}>
-                            <div style={styles.historyDate}>{w.date}</div>
-                            <div style={{ display: "flex", gap: "6px" }}>
-                              <button style={styles.historyActionBtn} onClick={() => openEditWorkout(w)}>編輯</button>
-                              <button style={styles.historyDeleteBtn} onClick={() => deleteWorkout(w.id)}>刪除</button>
-                            </div>
-                          </div>
-                          <div style={{ fontSize: "17px", fontWeight: 700, marginBottom: "8px" }}>{w.exercise}</div>
-                          <div style={{ display: "flex", gap: "6px", flexWrap: "wrap", marginBottom: w.note ? "8px" : 0 }}>
-                            {w.sets?.map((s, i) => {
-                              if (s.duration !== undefined) {
-                                const parts = [
-                                  s.duration && `${s.duration}分鐘`,
-                                  s.distance && `${s.distance} km`,
-                                  s.speed && `${s.speed} km/h`,
-                                  s.incline && `坡度${s.incline}%`,
-                                ].filter(Boolean);
-                                return <span key={i} style={styles.tag}>{parts.join(" · ") || "—"}</span>;
-                              }
-                              return (
-                                <span key={i} style={styles.tag}>
-                                  第{i + 1}組 {s.reps ? `${s.reps}下` : ""}{s.weight ? ` × ${s.weight}kg` : ""}
-                                </span>
-                              );
-                            })}
-                          </div>
-                          {w.note && <div style={{ fontSize: "13px", color: "#888", fontStyle: "italic" }}>📝 {w.note}</div>}
-                        </div>
-                      ))}
-                    </div>
-                  );
-                });
-              })()}
-            </div>
-          </div>
+          <WorkoutTab
+            workouts={workouts}
+            customExercises={customExercises}
+            pickerDisplayList={pickerDisplayList}
+            recentExercises={recentExercises}
+            wDate={wDate} setWDate={setWDate}
+            wExercise={wExercise} setWExercise={setWExercise}
+            wSets={wSets} setWSets={setWSets}
+            wNote={wNote} setWNote={setWNote}
+            wCalories={wCalories} setWCalories={setWCalories}
+            batchReps={batchReps} setBatchReps={setBatchReps}
+            batchWeight={batchWeight} setBatchWeight={setBatchWeight}
+            batchCount={batchCount} setBatchCount={setBatchCount}
+            savedAnim={savedAnim}
+            exPickerExpanded={exPickerExpanded} setExPickerExpanded={setExPickerExpanded}
+            exSearchQuery={exSearchQuery} setExSearchQuery={setExSearchQuery}
+            exActiveTag={exActiveTag} setExActiveTag={setExActiveTag}
+            showAddCustomEx={showAddCustomEx} setShowAddCustomEx={setShowAddCustomEx}
+            newExName={newExName} setNewExName={setNewExName}
+            historyGroupMode={historyGroupMode} setHistoryGroupMode={setHistoryGroupMode}
+            expandedGroupKeys={expandedGroupKeys} setExpandedGroupKeys={setExpandedGroupKeys}
+            saveWorkout={saveWorkout}
+            addSet={addSet}
+            updateSet={updateSet}
+            removeSet={removeSet}
+            batchAddSets={batchAddSets}
+            deleteWorkout={deleteWorkout}
+            openEditWorkout={openEditWorkout}
+            addCustomExercise={addCustomExercise}
+            deleteCustomExercise={deleteCustomExercise}
+            setConfirmDialog={setConfirmDialog}
+          />
         )}
 
-        {/* BODY */}
         {tab === "body" && (
-          <div>
-            <div style={styles.card}>
-              <div style={styles.sectionTitle}>記錄身材數據</div>
-
-              <div style={{ marginBottom: "12px" }}>
-                <label style={styles.label}>日期</label>
-                <input type="date" style={styles.input} value={bDate} onChange={e => setBDate(e.target.value)} />
-              </div>
-
-              <div style={styles.bodyGrid}>
-                {[
-                  ["體重", "kg", bWeight, setBWeight],
-                  ["身高", "cm", bHeight, setBHeight],
-                  ["胸圍", "cm", bChest, setBChest],
-                  ["腰圍", "cm", bWaist, setBWaist],
-                  ["臀圍", "cm", bHip, setBHip],
-                  ["手臂圍", "cm", bArm, setBArm],
-                  ["大腿圍", "cm", bThigh, setBThigh],
-                ].map(([label, unit, val, setter]) => (
-                  <div key={label}>
-                    <label style={styles.label}>{label} ({unit})</label>
-                    <input type="number" style={styles.input} placeholder={`輸入${label}`} value={val} onChange={e => setter(e.target.value)} />
-                  </div>
-                ))}
-              </div>
-
-              {existingBodyForDate && (
-                <div style={{
-                  marginBottom: "10px", padding: "10px 14px",
-                  background: "rgba(255,165,0,0.08)", border: "1px solid rgba(255,165,0,0.35)",
-                  borderRadius: "10px", fontSize: "13px", color: "#ffaa00", lineHeight: "1.5",
-                }}>
-                  ⚠️ 此日期已有紀錄，儲存將覆蓋現有數據
-                </div>
-              )}
-              <button
-                style={{ ...styles.btn, transform: bSavedAnim ? "scale(0.97)" : "scale(1)", opacity: bSavedAnim ? 0.8 : 1 }}
-                onClick={saveBody}
-              >
-                {bSavedAnim ? "✓ 已儲存！" : existingBodyForDate ? "✏️ 更新身材數據" : "📏 儲存身材數據"}
-              </button>
-            </div>
-
-            {bodyData.length > 0 && (
-              <div style={styles.card}>
-                <div style={styles.sectionTitle}>身材趨勢</div>
-
-                {/* Metric selector pills */}
-                <div style={{
-                  display: "flex", gap: "8px", overflowX: "auto",
-                  WebkitOverflowScrolling: "touch", scrollbarWidth: "none",
-                  msOverflowStyle: "none", paddingBottom: "4px", marginBottom: "16px",
-                }}>
-                  {Object.entries(metricConfig).map(([key, cfg]) => {
-                    const isActive = activeMetric === key;
-                    return (
-                      <button key={key} onClick={() => setActiveMetric(key)} style={{
-                        flexShrink: 0, padding: "6px 14px", borderRadius: "20px",
-                        border: isActive ? "1px solid #ff6a00" : "1px solid rgba(255,255,255,0.12)",
-                        background: isActive ? "rgba(255,106,0,0.2)" : "rgba(255,255,255,0.04)",
-                        color: isActive ? "#ff6a00" : "#888",
-                        fontSize: "13px", fontWeight: isActive ? 700 : 400,
-                        cursor: "pointer", letterSpacing: "0.03em",
-                        fontFamily: "'Barlow Condensed','Noto Sans TC',sans-serif",
-                      }}>
-                        {cfg.label}
-                      </button>
-                    );
-                  })}
-                </div>
-
-                {/* Line chart or empty state */}
-                {chartPoints.length >= 2 ? (
-                  <ResponsiveContainer width="100%" height={200}>
-                    <LineChart data={chartPoints} margin={{ top: 8, right: 8, bottom: 0, left: -16 }}>
-                      <XAxis
-                        dataKey="label"
-                        tick={{ fill: "#666", fontSize: 11, fontFamily: "'Barlow Condensed','Noto Sans TC',sans-serif" }}
-                        axisLine={{ stroke: "rgba(255,255,255,0.08)" }}
-                        tickLine={false}
-                        interval="preserveStartEnd"
-                      />
-                      <YAxis
-                        domain={activeMetric === "bmi" ? [14, 35] : ["auto", "auto"]}
-                        tick={{ fill: "#666", fontSize: 11, fontFamily: "'Barlow Condensed','Noto Sans TC',sans-serif" }}
-                        axisLine={false}
-                        tickLine={false}
-                        width={36}
-                      />
-                      <Tooltip
-                        content={<CustomTooltip />}
-                        cursor={{ stroke: "rgba(255,106,0,0.25)", strokeWidth: 1, strokeDasharray: "4 4" }}
-                      />
-                      {activeMetric === "bmi" && (
-                        <>
-                          <ReferenceLine y={18.5} stroke="#60a5fa" strokeDasharray="4 3" strokeWidth={1}
-                            label={{ value: "18.5", position: "insideRight", fill: "#60a5fa", fontSize: 10 }} />
-                          <ReferenceLine y={24} stroke="#facc15" strokeDasharray="4 3" strokeWidth={1}
-                            label={{ value: "24", position: "insideRight", fill: "#facc15", fontSize: 10 }} />
-                        </>
-                      )}
-                      <Line
-                        type="monotone"
-                        dataKey="value"
-                        stroke="#ff6a00"
-                        strokeWidth={2}
-                        dot={{ r: 4, fill: "#ff6a00", strokeWidth: 0 }}
-                        activeDot={{ r: 7, fill: "#ff9500", stroke: "#fff", strokeWidth: 2 }}
-                        connectNulls={false}
-                      />
-                    </LineChart>
-                  </ResponsiveContainer>
-                ) : (
-                  <div style={{
-                    height: "120px", display: "flex", flexDirection: "column",
-                    alignItems: "center", justifyContent: "center", gap: "8px",
-                    color: "#555", borderRadius: "12px",
-                    border: "1px dashed rgba(255,255,255,0.08)", marginBottom: "16px",
-                  }}>
-                    <div style={{ fontSize: "28px", opacity: 0.4 }}>📈</div>
-                    <div style={{ fontSize: "13px", letterSpacing: "0.04em" }}>
-                      至少需要 2 筆紀錄才能顯示趨勢圖
-                    </div>
-                    <div style={{ fontSize: "11px", color: "#444" }}>
-                      {metricConfig[activeMetric].label} 目前只有 {chartPoints.length} 筆有效數據
-                    </div>
-                  </div>
-                )}
-
-                {bodyData.slice(0, 5).map((b, i) => {
-                  const cfg = metricConfig[activeMetric];
-                  const val = parseFloat(b[activeMetric]);
-                  const prevVal = parseFloat(bodyData[i - 1]?.[activeMetric]);
-                  const hasDiff = i > 0 && !isNaN(val) && !isNaN(prevVal);
-                  return (
-                    <div key={b.id} style={{ ...styles.workoutItem, display: "flex", justifyContent: "space-between", alignItems: "flex-start" }}>
-                      <div>
-                        <div style={{ fontSize: "20px", fontWeight: 900, color: i === 0 ? "#ff6a00" : "#e8e4dc" }}>
-                          {b[activeMetric] ? `${b[activeMetric]}${cfg.unit}` : "—"}
-                        </div>
-                        <div style={{ fontSize: "12px", color: "#666", marginTop: "2px" }}>
-                          {b.chest && `胸${b.chest} `}{b.waist && `腰${b.waist} `}{b.hip && `臀${b.hip}`}
-                        </div>
-                      </div>
-                      <div style={{ textAlign: "right" }}>
-                        <div style={{ fontSize: "12px", color: "#666" }}>{b.date}</div>
-                        {i === 0 && <div style={{ fontSize: "11px", color: "#ff6a00", marginTop: "2px" }}>最新</div>}
-                        {hasDiff && (
-                          <div style={{ fontSize: "13px", fontWeight: 700, color: val > prevVal ? "#4ade80" : "#f87171" }}>
-                            {val > prevVal ? "↓" : "↑"}
-                            {Math.abs(val - prevVal).toFixed(1)}{cfg.unit}
-                          </div>
-                        )}
-                        <button
-                          style={{ ...styles.historyDeleteBtn, fontSize: "11px", marginTop: "6px" }}
-                          onClick={() => deleteBodyRecord(b.id)}
-                        >
-                          刪除
-                        </button>
-                      </div>
-                    </div>
-                  );
-                })}
-              </div>
-            )}
-          </div>
+          <BodyTab
+            bodyData={bodyData}
+            existingBodyForDate={existingBodyForDate}
+            bDate={bDate} setBDate={setBDate}
+            bWeight={bWeight} setBWeight={setBWeight}
+            bHeight={bHeight} setBHeight={setBHeight}
+            bChest={bChest} setBChest={setBChest}
+            bWaist={bWaist} setBWaist={setBWaist}
+            bHip={bHip} setBHip={setBHip}
+            bArm={bArm} setBArm={setBArm}
+            bThigh={bThigh} setBThigh={setBThigh}
+            activeMetric={activeMetric} setActiveMetric={setActiveMetric}
+            bSavedAnim={bSavedAnim}
+            saveBody={saveBody}
+            deleteBodyRecord={deleteBodyRecord}
+          />
         )}
 
-        {/* GOALS */}
         {tab === "goals" && (
-          <div>
-            {goals.length === 0 && (
-              <div style={styles.card}>
-                <div style={{ textAlign: "center", padding: "32px 0", color: "#555" }}>
-                  <div style={{ fontSize: "40px", marginBottom: "12px" }}>🎯</div>
-                  <div style={{ fontSize: "15px" }}>設定你的第一個目標，開始追蹤進度！</div>
-                </div>
-              </div>
-            )}
-
-            {sortedGoals.map(goal => {
-              const progress = getGoalProgress(goal);
-              const isComplete = progress >= 100;
-              const isExpired = !isComplete && goal.deadline < today;
-              const daysLeft = Math.ceil((new Date(goal.deadline) - new Date(today)) / 86400000);
-              const isUrgent = !isComplete && !isExpired && daysLeft <= 7;
-              const barColor = isComplete ? "#4ade80" : isExpired ? "#555" : isUrgent ? "#f87171" : "#ff6a00";
-              return (
-                <div key={goal.id} style={{ ...styles.card, marginBottom: "12px" }}>
-                  <div style={{ display: "flex", justifyContent: "space-between", alignItems: "flex-start", marginBottom: "10px" }}>
-                    <div style={{ fontSize: "15px", fontWeight: 700, color: isComplete ? "#4ade80" : "#e8e4dc", flex: 1, paddingRight: "8px" }}>
-                      {getGoalTitle(goal)}
-                    </div>
-                    <button
-                      style={{ ...styles.historyDeleteBtn, fontSize: "11px", flexShrink: 0 }}
-                      onClick={() => deleteGoal(goal.id)}
-                    >刪除</button>
-                  </div>
-
-                  {/* Progress bar */}
-                  <div style={{ height: "6px", borderRadius: "3px", background: "rgba(255,255,255,0.08)", marginBottom: "8px", overflow: "hidden" }}>
-                    <div style={{
-                      height: "100%", borderRadius: "3px", transition: "width 0.5s",
-                      width: `${progress}%`,
-                      background: isComplete ? "linear-gradient(90deg,#4ade80,#22c55e)" : isExpired ? "#555" : isUrgent ? "linear-gradient(90deg,#f87171,#ef4444)" : "linear-gradient(90deg,#ff6a00,#ff9500)",
-                    }} />
-                  </div>
-
-                  <div style={{ display: "flex", justifyContent: "space-between", alignItems: "center", fontSize: "12px" }}>
-                    <span style={{ color: barColor, fontWeight: 700 }}>
-                      {isComplete ? "✓ 已達標！" : isExpired ? "已過期" : daysLeft === 0 ? "今天截止" : `距截止還有 ${daysLeft} 天`}
-                    </span>
-                    <span style={{ color: "#666" }}>{Math.round(progress)}%</span>
-                  </div>
-
-                  {goal.note ? (
-                    <div style={{ fontSize: "12px", color: "#666", marginTop: "6px", fontStyle: "italic" }}>📝 {goal.note}</div>
-                  ) : null}
-                </div>
-              );
-            })}
-
-            <button style={styles.btn} onClick={() => setShowGoalSheet(true)}>
-              + 新增目標
-            </button>
-          </div>
+          <GoalsTab
+            goals={goals}
+            today={today}
+            getGoalProgress={getGoalProgress}
+            showGoalSheet={showGoalSheet} setShowGoalSheet={setShowGoalSheet}
+            goalType={goalType} setGoalType={setGoalType}
+            goalTargetValue={goalTargetValue} setGoalTargetValue={setGoalTargetValue}
+            goalTargetExercise={goalTargetExercise} setGoalTargetExercise={setGoalTargetExercise}
+            goalTargetBodyPart={goalTargetBodyPart} setGoalTargetBodyPart={setGoalTargetBodyPart}
+            goalDeadline={goalDeadline} setGoalDeadline={setGoalDeadline}
+            goalNote={goalNote} setGoalNote={setGoalNote}
+            goalCelebAnim={goalCelebAnim}
+            latestBMI={latestBMI}
+            deleteGoal={deleteGoal}
+            saveGoal={saveGoal}
+            setPickerTarget={setPickerTarget}
+            setShowExPicker={setShowExPicker}
+          />
         )}
 
         {/* Footer */}
@@ -2826,167 +1943,6 @@ export default function FitForge({ user }) {
       </div>,
       document.body
     )}
-    {/* Goal Add Sheet */}
-    {showGoalSheet && createPortal(
-      <div
-        style={{
-          position: "fixed", inset: 0, zIndex: 9994,
-          background: "rgba(0,0,0,0.72)",
-          display: "flex", alignItems: "flex-end", justifyContent: "center",
-        }}
-        onClick={() => setShowGoalSheet(false)}
-      >
-        <div
-          style={{
-            width: "100%", maxWidth: "480px", maxHeight: "80vh",
-            background: "#13131c", borderRadius: "20px 20px 0 0",
-            border: "1px solid rgba(255,255,255,0.1)", borderBottom: "none",
-            display: "flex", flexDirection: "column", overflow: "hidden",
-          }}
-          onClick={e => e.stopPropagation()}
-        >
-          <div style={{ display: "flex", alignItems: "center", justifyContent: "space-between", padding: "16px 20px 14px", borderBottom: "1px solid rgba(255,255,255,0.07)", flexShrink: 0 }}>
-            <span style={{ fontSize: "16px", fontWeight: 800, color: "#e8e4dc", letterSpacing: "0.05em" }}>新增目標</span>
-            <button style={{ background: "rgba(255,255,255,0.08)", border: "1px solid rgba(255,255,255,0.15)", borderRadius: "8px", padding: "6px 16px", color: "#e8e4dc", fontSize: "14px", fontWeight: 700, cursor: "pointer", fontFamily: "inherit" }} onClick={() => setShowGoalSheet(false)}>取消</button>
-          </div>
-
-          <div style={{ flex: 1, overflowY: "auto", WebkitOverflowScrolling: "touch", padding: "16px 20px 32px" }}>
-            {/* Goal type pills */}
-            <div style={{ marginBottom: "16px" }}>
-              <label style={{ fontSize: "12px", color: "#888", letterSpacing: "0.06em", marginBottom: "8px", display: "block" }}>目標類型</label>
-              <div style={{ display: "flex", gap: "8px", flexWrap: "wrap" }}>
-                {[
-                  { id: "weight", label: "體重" },
-                  { id: "frequency", label: "訓練頻率" },
-                  { id: "exercise_pr", label: "動作重量" },
-                  { id: "body_measurement", label: "身材圍度" },
-                  { id: "bmi", label: "BMI 目標" },
-                ].map(t => (
-                  <button key={t.id} onClick={() => setGoalType(t.id)} style={{
-                    padding: "7px 14px", borderRadius: "20px", cursor: "pointer", fontFamily: "inherit", fontSize: "13px", fontWeight: goalType === t.id ? 700 : 400,
-                    border: goalType === t.id ? "1px solid #ff6a00" : "1px solid rgba(255,255,255,0.12)",
-                    background: goalType === t.id ? "rgba(255,106,0,0.2)" : "rgba(255,255,255,0.04)",
-                    color: goalType === t.id ? "#ff6a00" : "#888",
-                  }}>{t.label}</button>
-                ))}
-              </div>
-            </div>
-
-            {/* Dynamic fields by goalType */}
-            {goalType === "exercise_pr" && (
-              <div style={{ marginBottom: "14px" }}>
-                <label style={{ fontSize: "12px", color: "#888", letterSpacing: "0.06em", marginBottom: "6px", display: "block" }}>選擇動作</label>
-                <button style={{ width: "100%", background: "#12121a", border: "1px solid rgba(255,255,255,0.1)", borderRadius: "10px", padding: "10px 14px", color: "#e8e4dc", fontSize: "15px", cursor: "pointer", display: "flex", alignItems: "center", justifyContent: "space-between", textAlign: "left", fontFamily: "inherit", boxSizing: "border-box" }}
-                  onClick={() => { setPickerTarget("goal"); setShowExPicker(true); }}>
-                  <span>{goalTargetExercise}</span>
-                  <span style={{ color: "#666", fontSize: "12px" }}>▼</span>
-                </button>
-              </div>
-            )}
-
-            {goalType === "body_measurement" && (
-              <div style={{ marginBottom: "14px" }}>
-                <label style={{ fontSize: "12px", color: "#888", letterSpacing: "0.06em", marginBottom: "8px", display: "block" }}>部位</label>
-                <div style={{ display: "flex", gap: "8px", flexWrap: "wrap" }}>
-                  {Object.entries(bodyPartLabels).map(([key, label]) => (
-                    <button key={key} onClick={() => setGoalTargetBodyPart(key)} style={{
-                      padding: "6px 12px", borderRadius: "20px", cursor: "pointer", fontFamily: "inherit", fontSize: "13px",
-                      border: goalTargetBodyPart === key ? "1px solid #ff6a00" : "1px solid rgba(255,255,255,0.12)",
-                      background: goalTargetBodyPart === key ? "rgba(255,106,0,0.2)" : "rgba(255,255,255,0.04)",
-                      color: goalTargetBodyPart === key ? "#ff6a00" : "#888",
-                    }}>{label}</button>
-                  ))}
-                </div>
-              </div>
-            )}
-
-            {goalType === "bmi" && !latestBMI && (
-              <div style={{
-                marginBottom: "14px", padding: "10px 14px",
-                background: "rgba(255,165,0,0.08)", border: "1px solid rgba(255,165,0,0.35)",
-                borderRadius: "10px", fontSize: "13px", color: "#ffaa00", lineHeight: "1.5",
-              }}>
-                ⚠️ 請先在身材數據頁記錄體重和身高
-              </div>
-            )}
-
-            <div style={{ marginBottom: "14px" }}>
-              <label style={{ fontSize: "12px", color: "#888", letterSpacing: "0.06em", marginBottom: "6px", display: "block" }}>
-                {goalType === "bmi" ? "目標 BMI" : `目標數值（${goalType === "frequency" ? "天/週" : goalType === "body_measurement" ? "cm" : "kg"}）`}
-              </label>
-              <input
-                type="number"
-                style={{ width: "100%", background: "rgba(255,255,255,0.05)", border: "1px solid rgba(255,255,255,0.1)", borderRadius: "10px", padding: "10px 14px", color: "#e8e4dc", fontSize: "15px", outline: "none", boxSizing: "border-box", fontFamily: "inherit" }}
-                placeholder="輸入目標數值"
-                value={goalTargetValue}
-                onChange={e => setGoalTargetValue(e.target.value)}
-              />
-            </div>
-
-            <div style={{ marginBottom: "14px" }}>
-              <label style={{ fontSize: "12px", color: "#888", letterSpacing: "0.06em", marginBottom: "6px", display: "block" }}>截止日期</label>
-              <input
-                type="date"
-                style={{ width: "100%", background: "rgba(255,255,255,0.05)", border: "1px solid rgba(255,255,255,0.1)", borderRadius: "10px", padding: "10px 14px", color: "#e8e4dc", fontSize: "15px", outline: "none", boxSizing: "border-box", fontFamily: "inherit" }}
-                value={goalDeadline}
-                onChange={e => setGoalDeadline(e.target.value)}
-              />
-            </div>
-
-            <div style={{ marginBottom: "16px" }}>
-              <label style={{ fontSize: "12px", color: "#888", letterSpacing: "0.06em", marginBottom: "6px", display: "block" }}>備註（可選）</label>
-              <input
-                type="text"
-                style={{ width: "100%", background: "rgba(255,255,255,0.05)", border: "1px solid rgba(255,255,255,0.1)", borderRadius: "10px", padding: "10px 14px", color: "#e8e4dc", fontSize: "15px", outline: "none", boxSizing: "border-box", fontFamily: "inherit" }}
-                placeholder="備註..."
-                value={goalNote}
-                onChange={e => setGoalNote(e.target.value)}
-              />
-            </div>
-
-            <button
-              disabled={!canSaveGoal(goalTargetValue, goalDeadline, goalType, latestBMI)}
-              style={{ width: "100%", padding: "14px", border: "none", borderRadius: "12px", background: "linear-gradient(135deg, #ff6a00, #ff9500)", color: "#fff", fontSize: "16px", fontWeight: 800, cursor: canSaveGoal(goalTargetValue, goalDeadline, goalType, latestBMI) ? "pointer" : "not-allowed", opacity: canSaveGoal(goalTargetValue, goalDeadline, goalType, latestBMI) ? 1 : 0.5, letterSpacing: "0.06em", textTransform: "uppercase", fontFamily: "inherit" }}
-              onClick={saveGoal}
-            >
-              儲存目標
-            </button>
-          </div>
-        </div>
-      </div>,
-      document.body
-    )}
-
-    {/* Goal Celebration Animation */}
-    {goalCelebAnim && createPortal(
-      <div style={{
-        position: "fixed", inset: 0, zIndex: 10000,
-        background: "rgba(0,0,0,0.88)",
-        display: "flex", flexDirection: "column",
-        alignItems: "center", justifyContent: "center", gap: "16px",
-      }}>
-        <style>{`@keyframes gp { 0%{opacity:1;transform:translate(0,0) scale(1)} 100%{opacity:0;transform:translate(var(--tx),var(--ty)) scale(0)} }`}</style>
-        {[...Array(30)].map((_, i) => (
-          <div key={i} style={{
-            position: "absolute",
-            left: `${10 + (i * 37) % 80}%`,
-            top: `${10 + (i * 53) % 80}%`,
-            width: "10px", height: "10px", borderRadius: "50%",
-            background: i % 3 === 0 ? "#ffd700" : i % 3 === 1 ? "#ff6a00" : "#fff",
-            "--tx": `${(i % 2 === 0 ? 1 : -1) * (20 + i * 3)}px`,
-            "--ty": `${-(30 + i * 4)}px`,
-            animation: `gp ${0.8 + ((i * 17) % 10) * 0.1}s ease-out ${((i * 7) % 5) * 0.1}s forwards`,
-          }} />
-        ))}
-        <div style={{ fontSize: "72px", lineHeight: 1 }}>🎉</div>
-        <div style={{ fontSize: "34px", fontWeight: 900, background: "linear-gradient(135deg,#ffd700,#ff9500)", WebkitBackgroundClip: "text", WebkitTextFillColor: "transparent" }}>
-          目標達成！
-        </div>
-        <div style={{ fontSize: "15px", color: "#888" }}>繼續保持 💪</div>
-      </div>,
-      document.body
-    )}
-
     {confirmDialog && createPortal(
       <div
         style={{
