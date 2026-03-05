@@ -18,7 +18,7 @@ import {
   XAxis, YAxis, Tooltip, ReferenceLine,
 } from "recharts";
 
-const APP_VERSION = "1.4.0";
+const APP_VERSION = "1.4.1";
 
 const exerciseCategories = [
   { label: "胸", exercises: ["臥推", "上斜臥推", "雙槓撐體", "飛鳥", "胸推機", "蝴蝶機", "伏地挺身"] },
@@ -1474,7 +1474,7 @@ export default function FitForge({ user }) {
                         const newIsCardio = getCategoryForExercise(ex.name) === "有氧";
                         const curIsCardio = getCategoryForExercise(wExercise) === "有氧";
                         if (newIsCardio !== curIsCardio) {
-                          setWSets(newIsCardio ? [{ duration: "", speed: "", incline: "" }] : [{ reps: "", weight: "" }]);
+                          setWSets(newIsCardio ? [{ duration: "", distance: "", speed: "", incline: "" }] : [{ reps: "", weight: "" }]);
                         }
                         setWExercise(ex.name);
                         setExPickerExpanded(false);
@@ -1588,70 +1588,84 @@ export default function FitForge({ user }) {
 
               <div style={{ marginBottom: "12px" }}>
                 <div style={{ display: "flex", justifyContent: "space-between", alignItems: "center", marginBottom: "10px" }}>
-                  <label style={{ ...styles.label, marginBottom: 0 }}>訓練組數</label>
-                  <button style={styles.btnSecondary} onClick={addSet}>+ 新增一組</button>
+                  <label style={{ ...styles.label, marginBottom: 0 }}>{isCardio(wExercise) ? "有氧記錄" : "訓練組數"}</label>
+                  {!isCardio(wExercise) && (
+                    <button style={styles.btnSecondary} onClick={addSet}>+ 新增一組</button>
+                  )}
                 </div>
-                {wSets.map((s, i) => (
-                  <div key={i}>
-                    <div style={styles.setRow}>
-                      <div style={{ textAlign: "center", color: "#ff6a00", fontWeight: 900, fontSize: "18px", minWidth: "24px", flexShrink: 0 }}>
-                        {i + 1}
+
+                {/* 有氧模式：單次平面表單 */}
+                {isCardio(wExercise) ? (
+                  <div style={{ display: "flex", flexDirection: "column", gap: "8px" }}>
+                    <div>
+                      <input type="number" style={styles.setInput} placeholder="時間（分鐘）*" value={wSets[0]?.duration || ""} onChange={e => updateSet(0, "duration", e.target.value)} />
+                    </div>
+                    <div>
+                      <input type="number" style={styles.setInput} placeholder="距離（km）" value={wSets[0]?.distance || ""} onChange={e => updateSet(0, "distance", e.target.value)} />
+                    </div>
+                    <div>
+                      <input type="number" style={styles.setInput} placeholder="速度（km/h）" value={wSets[0]?.speed || ""} onChange={e => updateSet(0, "speed", e.target.value)} />
+                      {wSets[0]?.speed && <div style={{ fontSize: "10px", color: "#ff6a00", marginTop: "2px", paddingLeft: "2px" }}>→ {toMinPerKm(wSets[0].speed)}</div>}
+                    </div>
+                    {showIncline(wExercise) && (
+                      <div>
+                        <input type="number" style={styles.setInput} placeholder="坡度（%）" value={wSets[0]?.incline || ""} onChange={e => updateSet(0, "incline", e.target.value)} />
                       </div>
-                      <div style={{ flex: 1, display: "flex", flexDirection: "column", gap: "4px" }}>
-                        {isCardio(wExercise) ? (
-                          <>
-                            <input type="number" style={styles.setInput} placeholder="時間 (分鐘)" value={s.duration || ""} onChange={e => updateSet(i, "duration", e.target.value)} />
-                            <div>
-                              <input type="number" style={styles.setInput} placeholder="速度 (km/h)" value={s.speed || ""} onChange={e => updateSet(i, "speed", e.target.value)} />
-                              {s.speed && <div style={{ fontSize: "10px", color: "#ff6a00", marginTop: "2px", paddingLeft: "2px" }}>→ {toMinPerKm(s.speed)}</div>}
-                            </div>
-                            {showIncline(wExercise) && (
-                              <input type="number" style={styles.setInput} placeholder="坡度 (%)" value={s.incline || ""} onChange={e => updateSet(i, "incline", e.target.value)} />
-                            )}
-                          </>
-                        ) : (
-                          <>
+                    )}
+                  </div>
+                ) : (
+                  <>
+                    {/* 重訓模式：快速新增列 */}
+                    <div style={{ display: "flex", gap: "4px", alignItems: "center", marginBottom: "8px" }}>
+                      <input
+                        type="number"
+                        placeholder="次數"
+                        value={batchReps}
+                        onChange={e => setBatchReps(e.target.value)}
+                        style={{ ...styles.setInput, flex: 1 }}
+                      />
+                      <span style={{ color: "#666", fontSize: "11px", flexShrink: 0 }}>下 ×</span>
+                      <input
+                        type="number"
+                        placeholder="重量"
+                        value={batchWeight}
+                        onChange={e => setBatchWeight(e.target.value)}
+                        style={{ ...styles.setInput, flex: 1 }}
+                      />
+                      <span style={{ color: "#666", fontSize: "11px", flexShrink: 0 }}>kg ×</span>
+                      <input
+                        type="number" min={1} max={10}
+                        value={batchCount}
+                        onChange={e => setBatchCount(e.target.value)}
+                        style={{ ...styles.setInput, width: "40px", textAlign: "center", flex: "none" }}
+                      />
+                      <span style={{ color: "#666", fontSize: "11px", flexShrink: 0 }}>組</span>
+                      <button onClick={batchAddSets} style={styles.btnSecondary}>套用</button>
+                    </div>
+
+                    {/* 逐組列表 */}
+                    {wSets.map((s, i) => (
+                      <div key={i}>
+                        <div style={styles.setRow}>
+                          <div style={{ textAlign: "center", color: "#ff6a00", fontWeight: 900, fontSize: "18px", minWidth: "24px", flexShrink: 0 }}>
+                            {i + 1}
+                          </div>
+                          <div style={{ flex: 1, display: "flex", flexDirection: "column", gap: "4px" }}>
                             <div>
                               <input type="number" style={styles.setInput} placeholder="次數 (reps)" value={s.reps || ""} onChange={e => updateSet(i, "reps", e.target.value)} />
                             </div>
                             <div>
                               <input type="number" style={styles.setInput} placeholder="重量 (kg)" value={s.weight || ""} onChange={e => updateSet(i, "weight", e.target.value)} />
                             </div>
-                          </>
-                        )}
+                          </div>
+                          {wSets.length > 1 && (
+                            <button style={styles.deleteBtn} onClick={() => removeSet(i)}>✕</button>
+                          )}
+                        </div>
                       </div>
-                      {wSets.length > 1 && (
-                        <button style={styles.deleteBtn} onClick={() => removeSet(i)}>✕</button>
-                      )}
-                    </div>
-                  </div>
-                ))}
-
-                {/* Batch add row */}
-                <div style={{ display: "flex", gap: "6px", alignItems: "center", marginTop: "8px" }}>
-                  <input
-                    type="number"
-                    placeholder={isCardio(wExercise) ? "時間" : "次數"}
-                    value={batchReps}
-                    onChange={e => setBatchReps(e.target.value)}
-                    style={{ ...styles.setInput, flex: 1, textAlign: "left" }}
-                  />
-                  <input
-                    type="number"
-                    placeholder={isCardio(wExercise) ? "速度 km/h" : "重量 kg"}
-                    value={batchWeight}
-                    onChange={e => setBatchWeight(e.target.value)}
-                    style={{ ...styles.setInput, flex: 1, textAlign: "left" }}
-                  />
-                  <input
-                    type="number" min={1} max={10}
-                    value={batchCount}
-                    onChange={e => setBatchCount(e.target.value)}
-                    style={{ ...styles.setInput, width: "44px", textAlign: "center", flex: "none" }}
-                  />
-                  <span style={{ color: "#666", fontSize: "11px", flexShrink: 0 }}>組</span>
-                  <button onClick={batchAddSets} style={styles.btnSecondary}>批次</button>
-                </div>
+                    ))}
+                  </>
+                )}
               </div>
 
               <div style={{ marginBottom: "12px" }}>
@@ -1669,7 +1683,9 @@ export default function FitForge({ user }) {
               </div>
 
               {(() => {
-                const canSave = canSaveWorkout(wExercise, wSets);
+                const canSave = isCardio(wExercise)
+                  ? (wExercise.trim() !== "" && !!wSets[0]?.duration)
+                  : canSaveWorkout(wExercise, wSets);
                 return (
                   <button
                     style={{
@@ -1768,11 +1784,22 @@ export default function FitForge({ user }) {
                           </div>
                           <div style={{ fontSize: "17px", fontWeight: 700, marginBottom: "8px" }}>{w.exercise}</div>
                           <div style={{ display: "flex", gap: "6px", flexWrap: "wrap", marginBottom: w.note ? "8px" : 0 }}>
-                            {w.sets?.map((s, i) => (
-                              <span key={i} style={styles.tag}>
-                                第{i + 1}組 {s.reps ? `${s.reps}下` : ""}{s.weight ? ` × ${s.weight}kg` : ""}
-                              </span>
-                            ))}
+                            {w.sets?.map((s, i) => {
+                              if (s.duration !== undefined) {
+                                const parts = [
+                                  s.duration && `${s.duration}分鐘`,
+                                  s.distance && `${s.distance} km`,
+                                  s.speed && `${s.speed} km/h`,
+                                  s.incline && `坡度${s.incline}%`,
+                                ].filter(Boolean);
+                                return <span key={i} style={styles.tag}>{parts.join(" · ") || "—"}</span>;
+                              }
+                              return (
+                                <span key={i} style={styles.tag}>
+                                  第{i + 1}組 {s.reps ? `${s.reps}下` : ""}{s.weight ? ` × ${s.weight}kg` : ""}
+                                </span>
+                              );
+                            })}
                           </div>
                           {w.note && <div style={{ fontSize: "13px", color: "#888", fontStyle: "italic" }}>📝 {w.note}</div>}
                         </div>
@@ -2241,15 +2268,39 @@ export default function FitForge({ user }) {
               版本更新記錄
             </div>
 
-            {/* v1.4.0 */}
+            {/* v1.4.1 */}
             <div style={{ marginBottom: "24px" }}>
               <div style={{ display: "flex", alignItems: "center", gap: "10px", marginBottom: "10px" }}>
-                <span style={{ fontSize: "17px", fontWeight: 900, color: "#ffd700" }}>v1.4.0</span>
+                <span style={{ fontSize: "17px", fontWeight: 900, color: "#ffd700" }}>v1.4.1</span>
                 <span style={{
                   fontSize: "11px", fontWeight: 800, color: "#ff6a00",
                   background: "rgba(255,106,0,0.15)", border: "1px solid rgba(255,106,0,0.3)",
                   borderRadius: "6px", padding: "2px 7px", letterSpacing: "0.05em",
                 }}>最新</span>
+                <span style={{ fontSize: "12px", color: "#555", marginLeft: "auto" }}>2026-03-05</span>
+              </div>
+              <div style={{ display: "flex", flexDirection: "column", gap: "7px" }}>
+                <div style={{ fontSize: "14px", color: "#c8c4bc", display: "flex", gap: "8px" }}>
+                  <span style={{ color: "#ffd700", flexShrink: 0 }}>✨</span>
+                  <span>有氧記錄改為單次平面表單，新增距離欄位，移除組數概念</span>
+                </div>
+                <div style={{ fontSize: "14px", color: "#c8c4bc", display: "flex", gap: "8px" }}>
+                  <span style={{ color: "#ffd700", flexShrink: 0 }}>✨</span>
+                  <span>重訓快速新增列改為行內格式（次數 下 × 重量 kg × 組數 組）</span>
+                </div>
+                <div style={{ fontSize: "14px", color: "#c8c4bc", display: "flex", gap: "8px" }}>
+                  <span style={{ flexShrink: 0 }}>•</span>
+                  <span>修正版本記錄：僅最新版標題顯示金色，舊版改為灰色</span>
+                </div>
+              </div>
+            </div>
+
+            <div style={{ height: "1px", background: "rgba(255,255,255,0.07)", marginBottom: "20px" }} />
+
+            {/* v1.4.0 */}
+            <div style={{ marginBottom: "24px" }}>
+              <div style={{ display: "flex", alignItems: "center", gap: "10px", marginBottom: "10px" }}>
+                <span style={{ fontSize: "16px", fontWeight: 800, color: "#888" }}>v1.4.0</span>
                 <span style={{ fontSize: "12px", color: "#555", marginLeft: "auto" }}>2026-03-05</span>
               </div>
               <div style={{ display: "flex", flexDirection: "column", gap: "7px" }}>
@@ -2273,7 +2324,7 @@ export default function FitForge({ user }) {
             {/* v1.3.9 */}
             <div style={{ marginBottom: "24px" }}>
               <div style={{ display: "flex", alignItems: "center", gap: "10px", marginBottom: "10px" }}>
-                <span style={{ fontSize: "17px", fontWeight: 900, color: "#ffd700" }}>v1.3.9</span>
+                <span style={{ fontSize: "16px", fontWeight: 800, color: "#888" }}>v1.3.9</span>
                 <span style={{ fontSize: "12px", color: "#555", marginLeft: "auto" }}>2026-03-05</span>
               </div>
               <div style={{ display: "flex", flexDirection: "column", gap: "7px" }}>
@@ -2289,7 +2340,7 @@ export default function FitForge({ user }) {
             {/* v1.3.8 */}
             <div style={{ marginBottom: "24px" }}>
               <div style={{ display: "flex", alignItems: "center", gap: "10px", marginBottom: "10px" }}>
-                <span style={{ fontSize: "17px", fontWeight: 900, color: "#ffd700" }}>v1.3.8</span>
+                <span style={{ fontSize: "16px", fontWeight: 800, color: "#888" }}>v1.3.8</span>
                 <span style={{ fontSize: "12px", color: "#555", marginLeft: "auto" }}>2026-03-02</span>
               </div>
               <div style={{ display: "flex", flexDirection: "column", gap: "7px" }}>
@@ -2309,7 +2360,7 @@ export default function FitForge({ user }) {
             {/* v1.3.7 */}
             <div style={{ marginBottom: "24px" }}>
               <div style={{ display: "flex", alignItems: "center", gap: "10px", marginBottom: "10px" }}>
-                <span style={{ fontSize: "17px", fontWeight: 900, color: "#ffd700" }}>v1.3.7</span>
+                <span style={{ fontSize: "16px", fontWeight: 800, color: "#888" }}>v1.3.7</span>
                 <span style={{ fontSize: "12px", color: "#555", marginLeft: "auto" }}>2026-03-02</span>
               </div>
               <div style={{ display: "flex", flexDirection: "column", gap: "7px" }}>
@@ -2325,7 +2376,7 @@ export default function FitForge({ user }) {
             {/* v1.3.6 */}
             <div style={{ marginBottom: "24px" }}>
               <div style={{ display: "flex", alignItems: "center", gap: "10px", marginBottom: "10px" }}>
-                <span style={{ fontSize: "17px", fontWeight: 900, color: "#ffd700" }}>v1.3.6</span>
+                <span style={{ fontSize: "16px", fontWeight: 800, color: "#888" }}>v1.3.6</span>
                 <span style={{ fontSize: "12px", color: "#555", marginLeft: "auto" }}>2026-03-01</span>
               </div>
               <div style={{ display: "flex", flexDirection: "column", gap: "7px" }}>
@@ -2341,7 +2392,7 @@ export default function FitForge({ user }) {
             {/* v1.3.5 */}
             <div style={{ marginBottom: "24px" }}>
               <div style={{ display: "flex", alignItems: "center", gap: "10px", marginBottom: "10px" }}>
-                <span style={{ fontSize: "17px", fontWeight: 900, color: "#ffd700" }}>v1.3.5</span>
+                <span style={{ fontSize: "16px", fontWeight: 800, color: "#888" }}>v1.3.5</span>
                 <span style={{ fontSize: "12px", color: "#555", marginLeft: "auto" }}>2026-03-01</span>
               </div>
               <div style={{ display: "flex", flexDirection: "column", gap: "7px" }}>
@@ -2357,7 +2408,7 @@ export default function FitForge({ user }) {
             {/* v1.3.4 */}
             <div style={{ marginBottom: "24px" }}>
               <div style={{ display: "flex", alignItems: "center", gap: "10px", marginBottom: "10px" }}>
-                <span style={{ fontSize: "17px", fontWeight: 900, color: "#ffd700" }}>v1.3.4</span>
+                <span style={{ fontSize: "16px", fontWeight: 800, color: "#888" }}>v1.3.4</span>
                 <span style={{ fontSize: "12px", color: "#555", marginLeft: "auto" }}>2026-03-01</span>
               </div>
               <div style={{ display: "flex", flexDirection: "column", gap: "7px" }}>
