@@ -104,7 +104,9 @@ export function detectNewPR(exercise, sets, prMap) {
  * @param {Array}  sets     - array of { reps: string, weight: string }
  */
 export function canSaveWorkout(exercise, sets) {
-  return exercise.trim() !== "" && sets.some(s => s.reps !== "" || s.weight !== "");
+  return exercise.trim() !== "" && sets.some(s =>
+    s.reps || s.weight || s.duration || s.speed
+  );
 }
 
 /**

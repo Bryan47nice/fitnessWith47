@@ -18,7 +18,7 @@ import {
   XAxis, YAxis, Tooltip, ReferenceLine,
 } from "recharts";
 
-const APP_VERSION = "1.3.9";
+const APP_VERSION = "1.4.0";
 
 const exerciseCategories = [
   { label: "胸", exercises: ["臥推", "上斜臥推", "雙槓撐體", "飛鳥", "胸推機", "蝴蝶機", "伏地挺身"] },
@@ -29,6 +29,8 @@ const exerciseCategories = [
   { label: "核心", exercises: ["棒式", "捲腹", "俄羅斯轉體"] },
   { label: "有氧", exercises: ["跑步機", "慢跑", "室內健走", "橢圓機", "樓梯機", "騎車", "跳繩", "游泳"] },
 ];
+
+const INCLINE_EXERCISES = ["跑步機", "慢跑", "室內健走", "橢圓機"];
 
 const metricConfig = {
   weight: { label: "體重",   unit: "kg" },
@@ -71,6 +73,10 @@ export default function FitForge({ user }) {
   const [wExercise, setWExercise] = useState("");
   const [wSets, setWSets] = useState([{ reps: "", weight: "" }]);
   const [wNote, setWNote] = useState("");
+  const [wCalories, setWCalories] = useState("");
+  const [batchReps, setBatchReps] = useState("");
+  const [batchWeight, setBatchWeight] = useState("");
+  const [batchCount, setBatchCount] = useState(3);
   const [savedAnim, setSavedAnim] = useState(false);
   const [prAnim, setPrAnim] = useState(false);
 
@@ -99,6 +105,7 @@ export default function FitForge({ user }) {
   const [ewExercise, setEwExercise] = useState("");
   const [ewSets, setEwSets] = useState([{ reps: "", weight: "" }]);
   const [ewNote, setEwNote] = useState("");
+  const [ewCalories, setEwCalories] = useState("");
   const [editSavedAnim, setEditSavedAnim] = useState(false);
 
   // Confirmation dialog state: null | { message, onConfirm }
@@ -374,21 +381,38 @@ export default function FitForge({ user }) {
     setEditingExName("");
   }
 
-  function addSet() { setWSets([...wSets, { reps: "", weight: "" }]); }
+  function addSet() {
+    const empty = isCardio(wExercise)
+      ? { duration: "", speed: "", incline: "" }
+      : { reps: "", weight: "" };
+    setWSets([...wSets, empty]);
+  }
   function removeSet(i) { setWSets(wSets.filter((_, idx) => idx !== i)); }
   function updateSet(i, field, val) {
     const s = [...wSets]; s[i] = { ...s[i], [field]: val }; setWSets(s);
   }
 
+  function batchAddSets() {
+    const n = Math.min(Math.max(parseInt(batchCount) || 1, 1), 10);
+    const newSets = Array.from({ length: n }, () =>
+      isCardio(wExercise)
+        ? { duration: batchReps, speed: batchWeight, incline: "" }
+        : { reps: batchReps, weight: batchWeight }
+    );
+    setWSets([...wSets, ...newSets]);
+    setBatchReps(""); setBatchWeight(""); setBatchCount(3);
+  }
+
   async function saveWorkout() {
     const name = wExercise;
-    const isNewPR = detectNewPR(name, wSets, prMap);
-    await addDoc(collection(db, "users", user.uid, "workouts"), {
-      date: wDate, exercise: name, sets: wSets, note: wNote, createdAt: serverTimestamp(),
-    });
+    const isNewPR = !isCardio(name) && detectNewPR(name, wSets, prMap);
+    const docData = { date: wDate, exercise: name, sets: wSets, note: wNote, createdAt: serverTimestamp() };
+    if (wCalories !== "") docData.calories = parseFloat(wCalories);
+    await addDoc(collection(db, "users", user.uid, "workouts"), docData);
     setDoc(doc(db, "userPushTokens", user.uid), { lastWorkoutDate: wDate }, { merge: true }).catch(() => {});
-    setWSets([{ reps: "", weight: "" }]);
+    setWSets(isCardio(name) ? [{ duration: "", speed: "", incline: "" }] : [{ reps: "", weight: "" }]);
     setWNote("");
+    setWCalories("");
     setSavedAnim(true);
     setTimeout(() => setSavedAnim(false), 1500);
     if (isNewPR) {
@@ -410,7 +434,12 @@ export default function FitForge({ user }) {
   }
 
   // Edit workout set helpers
-  function ewAddSet() { setEwSets([...ewSets, { reps: "", weight: "" }]); }
+  function ewAddSet() {
+    const empty = isCardio(ewExercise)
+      ? { duration: "", speed: "", incline: "" }
+      : { reps: "", weight: "" };
+    setEwSets([...ewSets, empty]);
+  }
   function ewRemoveSet(i) { setEwSets(ewSets.filter((_, idx) => idx !== i)); }
   function ewUpdateSet(i, field, val) {
     const s = [...ewSets]; s[i] = { ...s[i], [field]: val }; setEwSets(s);
@@ -422,6 +451,7 @@ export default function FitForge({ user }) {
     setEwExercise(workout.exercise);
     setEwSets(workout.sets ? workout.sets.map(s => ({ ...s })) : [{ reps: "", weight: "" }]);
     setEwNote(workout.note || "");
+    setEwCalories(workout.calories != null ? String(workout.calories) : "");
     setShowEditWorkout(true);
   }
 
@@ -430,16 +460,18 @@ export default function FitForge({ user }) {
     setEditWorkoutId(null);
     setEwDate(""); setEwExercise("");
     setEwSets([{ reps: "", weight: "" }]);
-    setEwNote(""); setEditSavedAnim(false);
+    setEwNote(""); setEwCalories(""); setEditSavedAnim(false);
   }
 
   async function saveEditWorkout() {
     if (!editWorkoutId) return;
     const name = ewExercise;
-    const isNewPR = detectNewPR(name, ewSets, prMap);
+    const isNewPR = !isCardio(name) && detectNewPR(name, ewSets, prMap);
+    const updateData = { date: ewDate, exercise: ewExercise, sets: ewSets, note: ewNote };
+    if (ewCalories !== "") updateData.calories = parseFloat(ewCalories);
     await updateDoc(
       doc(db, "users", user.uid, "workouts", editWorkoutId),
-      { date: ewDate, exercise: ewExercise, sets: ewSets, note: ewNote }
+      updateData
     );
     setEditSavedAnim(true);
     setTimeout(() => { setEditSavedAnim(false); closeEditWorkout(); }, 1200);
@@ -673,6 +705,17 @@ export default function FitForge({ user }) {
     }
     if (customExercises.some(e => e.name === name)) return "自訂";
     return "";
+  }
+
+  const isCardio = (name) => getCategoryForExercise(name) === "有氧";
+  const showIncline = (name) => INCLINE_EXERCISES.includes(name);
+
+  function toMinPerKm(kmh) {
+    if (!kmh || isNaN(kmh)) return null;
+    const total = 60 / parseFloat(kmh);
+    const min = Math.floor(total);
+    const sec = Math.round((total - min) * 60);
+    return `${min}:${String(sec).padStart(2, "0")} /km`;
   }
 
   const sortedGoals = [...goals].sort((a, b) => {
@@ -1428,6 +1471,11 @@ export default function FitForge({ user }) {
 
                     {pickerDisplayList.map(ex => (
                       <button key={ex.name} onClick={() => {
+                        const newIsCardio = getCategoryForExercise(ex.name) === "有氧";
+                        const curIsCardio = getCategoryForExercise(wExercise) === "有氧";
+                        if (newIsCardio !== curIsCardio) {
+                          setWSets(newIsCardio ? [{ duration: "", speed: "", incline: "" }] : [{ reps: "", weight: "" }]);
+                        }
                         setWExercise(ex.name);
                         setExPickerExpanded(false);
                         setExSearchQuery("");
@@ -1550,12 +1598,27 @@ export default function FitForge({ user }) {
                         {i + 1}
                       </div>
                       <div style={{ flex: 1, display: "flex", flexDirection: "column", gap: "4px" }}>
-                        <div>
-                          <input type="number" style={styles.setInput} placeholder="次數 (reps)" value={s.reps} onChange={e => updateSet(i, "reps", e.target.value)} />
-                        </div>
-                        <div>
-                          <input type="number" style={styles.setInput} placeholder="重量 (kg)" value={s.weight} onChange={e => updateSet(i, "weight", e.target.value)} />
-                        </div>
+                        {isCardio(wExercise) ? (
+                          <>
+                            <input type="number" style={styles.setInput} placeholder="時間 (分鐘)" value={s.duration || ""} onChange={e => updateSet(i, "duration", e.target.value)} />
+                            <div>
+                              <input type="number" style={styles.setInput} placeholder="速度 (km/h)" value={s.speed || ""} onChange={e => updateSet(i, "speed", e.target.value)} />
+                              {s.speed && <div style={{ fontSize: "10px", color: "#ff6a00", marginTop: "2px", paddingLeft: "2px" }}>→ {toMinPerKm(s.speed)}</div>}
+                            </div>
+                            {showIncline(wExercise) && (
+                              <input type="number" style={styles.setInput} placeholder="坡度 (%)" value={s.incline || ""} onChange={e => updateSet(i, "incline", e.target.value)} />
+                            )}
+                          </>
+                        ) : (
+                          <>
+                            <div>
+                              <input type="number" style={styles.setInput} placeholder="次數 (reps)" value={s.reps || ""} onChange={e => updateSet(i, "reps", e.target.value)} />
+                            </div>
+                            <div>
+                              <input type="number" style={styles.setInput} placeholder="重量 (kg)" value={s.weight || ""} onChange={e => updateSet(i, "weight", e.target.value)} />
+                            </div>
+                          </>
+                        )}
                       </div>
                       {wSets.length > 1 && (
                         <button style={styles.deleteBtn} onClick={() => removeSet(i)}>✕</button>
@@ -1563,6 +1626,41 @@ export default function FitForge({ user }) {
                     </div>
                   </div>
                 ))}
+
+                {/* Batch add row */}
+                <div style={{ display: "flex", gap: "6px", alignItems: "center", marginTop: "8px" }}>
+                  <input
+                    type="number"
+                    placeholder={isCardio(wExercise) ? "時間" : "次數"}
+                    value={batchReps}
+                    onChange={e => setBatchReps(e.target.value)}
+                    style={{ ...styles.setInput, flex: 1, textAlign: "left" }}
+                  />
+                  <input
+                    type="number"
+                    placeholder={isCardio(wExercise) ? "速度 km/h" : "重量 kg"}
+                    value={batchWeight}
+                    onChange={e => setBatchWeight(e.target.value)}
+                    style={{ ...styles.setInput, flex: 1, textAlign: "left" }}
+                  />
+                  <input
+                    type="number" min={1} max={10}
+                    value={batchCount}
+                    onChange={e => setBatchCount(e.target.value)}
+                    style={{ ...styles.setInput, width: "44px", textAlign: "center", flex: "none" }}
+                  />
+                  <span style={{ color: "#666", fontSize: "11px", flexShrink: 0 }}>組</span>
+                  <button onClick={batchAddSets} style={styles.btnSecondary}>批次</button>
+                </div>
+              </div>
+
+              <div style={{ marginBottom: "12px" }}>
+                <label style={styles.label}>消耗卡路里（選填）</label>
+                <div style={{ position: "relative" }}>
+                  <input type="number" style={styles.input} placeholder="kcal"
+                    value={wCalories} onChange={e => setWCalories(e.target.value)} />
+                  <span style={{ position: "absolute", right: "12px", top: "50%", transform: "translateY(-50%)", color: "#666", fontSize: "12px" }}>kcal</span>
+                </div>
               </div>
 
               <div style={{ marginBottom: "12px" }}>
@@ -2143,15 +2241,39 @@ export default function FitForge({ user }) {
               版本更新記錄
             </div>
 
-            {/* v1.3.9 */}
+            {/* v1.4.0 */}
             <div style={{ marginBottom: "24px" }}>
               <div style={{ display: "flex", alignItems: "center", gap: "10px", marginBottom: "10px" }}>
-                <span style={{ fontSize: "17px", fontWeight: 900, color: "#ffd700" }}>v1.3.9</span>
+                <span style={{ fontSize: "17px", fontWeight: 900, color: "#ffd700" }}>v1.4.0</span>
                 <span style={{
                   fontSize: "11px", fontWeight: 800, color: "#ff6a00",
                   background: "rgba(255,106,0,0.15)", border: "1px solid rgba(255,106,0,0.3)",
                   borderRadius: "6px", padding: "2px 7px", letterSpacing: "0.05em",
                 }}>最新</span>
+                <span style={{ fontSize: "12px", color: "#555", marginLeft: "auto" }}>2026-03-05</span>
+              </div>
+              <div style={{ display: "flex", flexDirection: "column", gap: "7px" }}>
+                <div style={{ fontSize: "14px", color: "#c8c4bc", display: "flex", gap: "8px" }}>
+                  <span style={{ color: "#ffd700", flexShrink: 0 }}>✨</span>
+                  <span>有氧動作專屬欄位：時間、配速（即時換算分速）、坡度（跑步機等）</span>
+                </div>
+                <div style={{ fontSize: "14px", color: "#c8c4bc", display: "flex", gap: "8px" }}>
+                  <span style={{ color: "#ffd700", flexShrink: 0 }}>✨</span>
+                  <span>批次新增組數：一鍵加入 N 組相同參數，大幅提升記錄效率</span>
+                </div>
+                <div style={{ fontSize: "14px", color: "#c8c4bc", display: "flex", gap: "8px" }}>
+                  <span style={{ color: "#ffd700", flexShrink: 0 }}>✨</span>
+                  <span>新增卡路里欄位：可手動記錄本次訓練消耗熱量</span>
+                </div>
+              </div>
+            </div>
+
+            <div style={{ height: "1px", background: "rgba(255,255,255,0.07)", marginBottom: "20px" }} />
+
+            {/* v1.3.9 */}
+            <div style={{ marginBottom: "24px" }}>
+              <div style={{ display: "flex", alignItems: "center", gap: "10px", marginBottom: "10px" }}>
+                <span style={{ fontSize: "17px", fontWeight: 900, color: "#ffd700" }}>v1.3.9</span>
                 <span style={{ fontSize: "12px", color: "#555", marginLeft: "auto" }}>2026-03-05</span>
               </div>
               <div style={{ display: "flex", flexDirection: "column", gap: "7px" }}>
@@ -2600,40 +2722,50 @@ export default function FitForge({ user }) {
                 </button>
               </div>
               {ewSets.map((s, i) => (
-                <div key={i} style={{ display: "flex", gap: "8px", alignItems: "center", marginBottom: "8px" }}>
-                  <div style={{ textAlign: "center", color: "#ff6a00", fontWeight: 900, fontSize: "18px", minWidth: "24px" }}>
+                <div key={i} style={{ display: "flex", gap: "8px", alignItems: "flex-start", marginBottom: "8px" }}>
+                  <div style={{ textAlign: "center", color: "#ff6a00", fontWeight: 900, fontSize: "18px", minWidth: "24px", paddingTop: "8px" }}>
                     {i + 1}
                   </div>
-                  <div style={{ flex: 1 }}>
-                    <input type="number" placeholder="次數" value={s.reps}
-                      onChange={e => ewUpdateSet(i, "reps", e.target.value)}
-                      style={{
-                        width: "100%", background: "rgba(255,255,255,0.05)",
-                        border: "1px solid rgba(255,255,255,0.1)", borderRadius: "8px",
-                        padding: "8px 12px", color: "#e8e4dc", fontSize: "15px",
-                        outline: "none", textAlign: "center", fontFamily: "inherit", boxSizing: "border-box",
-                      }}
-                    />
-                    <div style={{ fontSize: "11px", color: "#666", textAlign: "center", marginTop: "2px" }}>次數 (reps)</div>
-                  </div>
-                  <div style={{ flex: 1 }}>
-                    <input type="number" placeholder="重量" value={s.weight}
-                      onChange={e => ewUpdateSet(i, "weight", e.target.value)}
-                      style={{
-                        width: "100%", background: "rgba(255,255,255,0.05)",
-                        border: "1px solid rgba(255,255,255,0.1)", borderRadius: "8px",
-                        padding: "8px 12px", color: "#e8e4dc", fontSize: "15px",
-                        outline: "none", textAlign: "center", fontFamily: "inherit", boxSizing: "border-box",
-                      }}
-                    />
-                    <div style={{ fontSize: "11px", color: "#666", textAlign: "center", marginTop: "2px" }}>重量 (kg)</div>
+                  <div style={{ flex: 1, display: "flex", flexDirection: "column", gap: "4px" }}>
+                    {isCardio(ewExercise) ? (
+                      <>
+                        <input type="number" placeholder="時間 (分鐘)" value={s.duration || ""}
+                          onChange={e => ewUpdateSet(i, "duration", e.target.value)}
+                          style={{ width: "100%", background: "rgba(255,255,255,0.05)", border: "1px solid rgba(255,255,255,0.1)", borderRadius: "8px", padding: "8px 12px", color: "#e8e4dc", fontSize: "15px", outline: "none", fontFamily: "inherit", boxSizing: "border-box" }}
+                        />
+                        <div>
+                          <input type="number" placeholder="速度 (km/h)" value={s.speed || ""}
+                            onChange={e => ewUpdateSet(i, "speed", e.target.value)}
+                            style={{ width: "100%", background: "rgba(255,255,255,0.05)", border: "1px solid rgba(255,255,255,0.1)", borderRadius: "8px", padding: "8px 12px", color: "#e8e4dc", fontSize: "15px", outline: "none", fontFamily: "inherit", boxSizing: "border-box" }}
+                          />
+                          {s.speed && <div style={{ fontSize: "10px", color: "#ff6a00", marginTop: "2px", paddingLeft: "2px" }}>→ {toMinPerKm(s.speed)}</div>}
+                        </div>
+                        {showIncline(ewExercise) && (
+                          <input type="number" placeholder="坡度 (%)" value={s.incline || ""}
+                            onChange={e => ewUpdateSet(i, "incline", e.target.value)}
+                            style={{ width: "100%", background: "rgba(255,255,255,0.05)", border: "1px solid rgba(255,255,255,0.1)", borderRadius: "8px", padding: "8px 12px", color: "#e8e4dc", fontSize: "15px", outline: "none", fontFamily: "inherit", boxSizing: "border-box" }}
+                          />
+                        )}
+                      </>
+                    ) : (
+                      <>
+                        <input type="number" placeholder="次數 (reps)" value={s.reps || ""}
+                          onChange={e => ewUpdateSet(i, "reps", e.target.value)}
+                          style={{ width: "100%", background: "rgba(255,255,255,0.05)", border: "1px solid rgba(255,255,255,0.1)", borderRadius: "8px", padding: "8px 12px", color: "#e8e4dc", fontSize: "15px", outline: "none", textAlign: "center", fontFamily: "inherit", boxSizing: "border-box" }}
+                        />
+                        <input type="number" placeholder="重量 (kg)" value={s.weight || ""}
+                          onChange={e => ewUpdateSet(i, "weight", e.target.value)}
+                          style={{ width: "100%", background: "rgba(255,255,255,0.05)", border: "1px solid rgba(255,255,255,0.1)", borderRadius: "8px", padding: "8px 12px", color: "#e8e4dc", fontSize: "15px", outline: "none", textAlign: "center", fontFamily: "inherit", boxSizing: "border-box" }}
+                        />
+                      </>
+                    )}
                   </div>
                   {ewSets.length > 1 && (
                     <button
                       style={{
                         background: "rgba(255,50,50,0.15)", border: "1px solid rgba(255,50,50,0.2)",
                         borderRadius: "8px", padding: "8px 10px", color: "#ff5555",
-                        cursor: "pointer", fontSize: "14px",
+                        cursor: "pointer", fontSize: "14px", flexShrink: 0, marginTop: "2px",
                       }}
                       onClick={() => ewRemoveSet(i)}
                     >
@@ -2642,6 +2774,18 @@ export default function FitForge({ user }) {
                   )}
                 </div>
               ))}
+            </div>
+
+            {/* Calories */}
+            <div style={{ marginBottom: "14px" }}>
+              <label style={{ fontSize: "12px", color: "#888", letterSpacing: "0.06em", marginBottom: "6px", display: "block" }}>消耗卡路里（選填）</label>
+              <div style={{ position: "relative" }}>
+                <input type="number" placeholder="kcal" value={ewCalories}
+                  onChange={e => setEwCalories(e.target.value)}
+                  style={{ width: "100%", background: "rgba(255,255,255,0.05)", border: "1px solid rgba(255,255,255,0.1)", borderRadius: "10px", padding: "10px 14px", color: "#e8e4dc", fontSize: "15px", outline: "none", boxSizing: "border-box", fontFamily: "inherit" }}
+                />
+                <span style={{ position: "absolute", right: "12px", top: "50%", transform: "translateY(-50%)", color: "#666", fontSize: "12px" }}>kcal</span>
+              </div>
             </div>
 
             {/* Note */}

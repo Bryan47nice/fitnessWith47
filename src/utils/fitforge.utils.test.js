@@ -231,6 +231,27 @@ describe("canSaveWorkout()", () => {
     // Then: enabled
     expect(result).toBe(true);
   });
+
+  test("TC-V3b 有氧 set 填入時間時啟用", () => {
+    // Given: cardio set with duration filled
+    const result = canSaveWorkout("慢跑", [{ duration: "30", speed: "", incline: "" }]);
+    // Then: enabled
+    expect(result).toBe(true);
+  });
+
+  test("TC-V3c 有氧 set 填入速度時啟用", () => {
+    // Given: cardio set with speed filled
+    const result = canSaveWorkout("跑步機", [{ duration: "", speed: "10", incline: "" }]);
+    // Then: enabled
+    expect(result).toBe(true);
+  });
+
+  test("TC-V3d 有氧 set 全空時禁用", () => {
+    // Given: cardio set with all fields empty
+    const result = canSaveWorkout("游泳", [{ duration: "", speed: "", incline: "" }]);
+    // Then: disabled
+    expect(result).toBe(false);
+  });
 });
 
 describe("canSaveGoal()", () => {
