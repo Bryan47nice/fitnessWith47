@@ -18,7 +18,7 @@ import {
   XAxis, YAxis, Tooltip, ReferenceLine,
 } from "recharts";
 
-const APP_VERSION = "1.3.8";
+const APP_VERSION = "1.3.9";
 
 const exerciseCategories = [
   { label: "胸", exercises: ["臥推", "上斜臥推", "雙槓撐體", "飛鳥", "胸推機", "蝴蝶機", "伏地挺身"] },
@@ -90,6 +90,7 @@ export default function FitForge({ user }) {
   );
   const [showAddCustomEx, setShowAddCustomEx] = useState(false);
   const [pickerTarget, setPickerTarget] = useState("editWorkout"); // "editWorkout" | "goal"
+  const [volumePeriod, setVolumePeriod] = useState("week"); // "day" | "week" | "month"
 
   // Edit workout sheet state
   const [showEditWorkout, setShowEditWorkout] = useState(false);
@@ -634,6 +635,35 @@ export default function FitForge({ user }) {
     return { label: ws.slice(5), sets: weeklyMap[ws] || 0 };
   });
 
+  // Daily volume: past 30 days
+  const dailyPoints = Array.from({ length: 30 }, (_, i) => {
+    const d = new Date();
+    d.setDate(d.getDate() - (29 - i));
+    const dateStr = d.toISOString().slice(0, 10);
+    const daySets = workouts
+      .filter(w => w.date === dateStr)
+      .reduce((a, w) => a + (w.sets?.length || 0), 0);
+    return { label: dateStr.slice(5), sets: daySets };
+  });
+
+  // Monthly volume: past 12 months
+  const monthlyMap = {};
+  workouts.forEach(w => {
+    const month = w.date.slice(0, 7);
+    monthlyMap[month] = (monthlyMap[month] || 0) + (w.sets?.length || 0);
+  });
+  const monthlyPoints = Array.from({ length: 12 }, (_, i) => {
+    const d = new Date();
+    d.setDate(1);
+    d.setMonth(d.getMonth() - (11 - i));
+    const month = d.toISOString().slice(0, 7);
+    return { label: month.slice(2), sets: monthlyMap[month] || 0 };
+  });
+
+  const volumePoints = volumePeriod === "day" ? dailyPoints
+    : volumePeriod === "month" ? monthlyPoints
+    : weeklyPoints;
+
   const getGoalProgress = (goal) =>
     _getGoalProgress(goal, { latestBody, latestBMI, workouts, prMap, today });
 
@@ -1159,30 +1189,49 @@ export default function FitForge({ user }) {
               </div>
             </div>
 
-            {/* 每週訓練量趨勢圖 */}
+            {/* 訓練量趨勢圖 */}
             <div style={styles.card}>
-              <div style={styles.sectionTitle}>每週訓練量</div>
+              <div style={{ display: "flex", justifyContent: "space-between", alignItems: "center", marginBottom: 12 }}>
+                <div style={styles.sectionTitle}>
+                  {volumePeriod === "day" ? "每日訓練量" : volumePeriod === "week" ? "每週訓練量" : "每月訓練量"}
+                </div>
+                <div style={{ display: "flex", gap: 4 }}>
+                  {[["D", "day"], ["W", "week"], ["M", "month"]].map(([btnLabel, key]) => (
+                    <button key={key} onClick={() => setVolumePeriod(key)}
+                      style={{
+                        padding: "3px 10px", borderRadius: 6, border: "none", cursor: "pointer",
+                        fontSize: 11, fontWeight: 700, letterSpacing: 0.5,
+                        fontFamily: "'Barlow Condensed', sans-serif",
+                        background: volumePeriod === key ? "#ff6a00" : "rgba(255,255,255,0.08)",
+                        color: volumePeriod === key ? "#fff" : "#888",
+                        transition: "all 0.15s",
+                      }}
+                    >{btnLabel}</button>
+                  ))}
+                </div>
+              </div>
               <ResponsiveContainer width="100%" height={160}>
-                <LineChart data={weeklyPoints} margin={{ top: 8, right: 8, bottom: 0, left: -16 }}>
+                <LineChart data={volumePoints} margin={{ top: 8, right: 8, bottom: 0, left: -8 }}>
                   <XAxis
                     dataKey="label"
                     tick={{ fill: "#666", fontSize: 10, fontFamily: "'Barlow Condensed','Noto Sans TC',sans-serif" }}
                     axisLine={{ stroke: "rgba(255,255,255,0.08)" }}
                     tickLine={false}
-                    interval={1}
+                    interval={volumePeriod === "day" ? 4 : 1}
                   />
                   <YAxis
                     allowDecimals={false}
                     tick={{ fill: "#666", fontSize: 10, fontFamily: "'Barlow Condensed','Noto Sans TC',sans-serif" }}
-                    axisLine={false} tickLine={false} width={28}
+                    axisLine={false} tickLine={false} width={36}
                   />
                   <Tooltip
                     content={({ active, payload }) => {
                       if (!active || !payload?.length) return null;
                       const { label, sets } = payload[0].payload;
+                      const sublabel = volumePeriod === "day" ? label : volumePeriod === "week" ? `${label} 週` : `${label} 月`;
                       return (
                         <div style={{ background: "rgba(18,18,28,0.96)", border: "1px solid rgba(255,106,0,0.4)", borderRadius: "10px", padding: "8px 14px", fontFamily: "'Barlow Condensed','Noto Sans TC',sans-serif", pointerEvents: "none" }}>
-                          <div style={{ fontSize: "11px", color: "#888", marginBottom: "2px" }}>{label} 週</div>
+                          <div style={{ fontSize: "11px", color: "#888", marginBottom: "2px" }}>{sublabel}</div>
                           <div style={{ fontSize: "20px", fontWeight: 900, color: "#ff6a00" }}>{sets}<span style={{ fontSize: "12px", fontWeight: 400, color: "#888", marginLeft: "4px" }}>組</span></div>
                         </div>
                       );
@@ -2094,15 +2143,35 @@ export default function FitForge({ user }) {
               版本更新記錄
             </div>
 
-            {/* v1.3.8 */}
+            {/* v1.3.9 */}
             <div style={{ marginBottom: "24px" }}>
               <div style={{ display: "flex", alignItems: "center", gap: "10px", marginBottom: "10px" }}>
-                <span style={{ fontSize: "17px", fontWeight: 900, color: "#ffd700" }}>v1.3.8</span>
+                <span style={{ fontSize: "17px", fontWeight: 900, color: "#ffd700" }}>v1.3.9</span>
                 <span style={{
                   fontSize: "11px", fontWeight: 800, color: "#ff6a00",
                   background: "rgba(255,106,0,0.15)", border: "1px solid rgba(255,106,0,0.3)",
                   borderRadius: "6px", padding: "2px 7px", letterSpacing: "0.05em",
                 }}>最新</span>
+                <span style={{ fontSize: "12px", color: "#555", marginLeft: "auto" }}>2026-03-05</span>
+              </div>
+              <div style={{ display: "flex", flexDirection: "column", gap: "7px" }}>
+                <div style={{ fontSize: "14px", color: "#c8c4bc", display: "flex", gap: "8px" }}>
+                  <span style={{ color: "#ffd700", flexShrink: 0 }}>✨</span>
+                  <span>儀表板訓練量圖表新增 D / W / M 切換（日 / 週 / 月三種維度）</span>
+                </div>
+                <div style={{ fontSize: "14px", color: "#c8c4bc", display: "flex", gap: "8px" }}>
+                  <span style={{ color: "#ffd700", flexShrink: 0 }}>✨</span>
+                  <span>修正 Y 軸數值顯示截斷問題</span>
+                </div>
+              </div>
+            </div>
+
+            <div style={{ height: "1px", background: "rgba(255,255,255,0.07)", marginBottom: "20px" }} />
+
+            {/* v1.3.8 */}
+            <div style={{ marginBottom: "24px" }}>
+              <div style={{ display: "flex", alignItems: "center", gap: "10px", marginBottom: "10px" }}>
+                <span style={{ fontSize: "17px", fontWeight: 900, color: "#ffd700" }}>v1.3.8</span>
                 <span style={{ fontSize: "12px", color: "#555", marginLeft: "auto" }}>2026-03-02</span>
               </div>
               <div style={{ display: "flex", flexDirection: "column", gap: "7px" }}>
