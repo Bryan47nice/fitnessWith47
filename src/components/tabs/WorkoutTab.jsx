@@ -54,9 +54,16 @@ export default function WorkoutTab({
   const todayStr = new Date().toISOString().slice(0, 10);
 
   // ── Calendar state ──
+  const [calView, setCalView] = useState("month"); // "month" | "week"
   const [calMonth, setCalMonth] = useState(() => {
     const now = new Date();
     return { year: now.getFullYear(), month: now.getMonth() };
+  });
+  const [calWeekStart, setCalWeekStart] = useState(() => {
+    const now = new Date(); now.setHours(0, 0, 0, 0);
+    const d = new Date(now);
+    d.setDate(now.getDate() - (now.getDay() + 6) % 7); // Monday
+    return d;
   });
   const [selectedCalDate, setSelectedCalDate] = useState(null);
 
@@ -85,6 +92,21 @@ export default function WorkoutTab({
   const nextMonth = () => setCalMonth(({ year, month }) =>
     month === 11 ? { year: year + 1, month: 0 } : { year, month: month + 1 }
   );
+  const prevWeek = () => setCalWeekStart(d => { const n = new Date(d); n.setDate(n.getDate() - 7); return n; });
+  const nextWeek = () => setCalWeekStart(d => { const n = new Date(d); n.setDate(n.getDate() + 7); return n; });
+
+  // Week view grid (7 days from calWeekStart)
+  const weekGrid = Array.from({ length: 7 }, (_, i) => {
+    const d = new Date(calWeekStart);
+    d.setDate(calWeekStart.getDate() + i);
+    const dateStr = d.toISOString().slice(0, 10);
+    return { day: d.getDate(), dateStr, hasWorkout: workoutDateSet.has(dateStr), isToday: dateStr === todayStr };
+  });
+  const weekLabel = (() => {
+    const fmt = d => `${String(d.getMonth()+1).padStart(2,'0')}/${String(d.getDate()).padStart(2,'0')}`;
+    const end = new Date(calWeekStart); end.setDate(calWeekStart.getDate() + 6);
+    return `${fmt(calWeekStart)} – ${fmt(end)}`;
+  })();
 
   const fetchAiComment = async () => {
     setAiLoading(true);
@@ -123,14 +145,27 @@ export default function WorkoutTab({
       {/* ── 訓練日曆（Google Calendar 風格）── */}
       <div style={styles.card}>
         <div style={{ display: "flex", justifyContent: "space-between", alignItems: "center", marginBottom: 16 }}>
-          <button onClick={prevMonth} style={{ background: "none", border: "none", color: "#888", fontSize: 18, cursor: "pointer", padding: "4px 10px", lineHeight: 1 }}>◀</button>
-          <div style={{ fontWeight: 800, fontSize: 16, color: "#e8e4dc", textAlign: "center" }}>
-            {year} 年 {MONTHS_ZH[month]}
-            {(streak?.count || 0) > 0 && (
-              <span style={{ marginLeft: 10, fontSize: 13, fontWeight: 700, color: "#ff6a00" }}>🔥 {streak.count} 天</span>
-            )}
+          <button onClick={calView === "month" ? prevMonth : prevWeek} style={{ background: "none", border: "none", color: "#888", fontSize: 18, cursor: "pointer", padding: "4px 10px", lineHeight: 1 }}>◀</button>
+          <div style={{ display: "flex", flexDirection: "column", alignItems: "center", gap: 6 }}>
+            <div style={{ fontWeight: 800, fontSize: 16, color: "#e8e4dc", textAlign: "center" }}>
+              {calView === "month" ? `${year} 年 ${MONTHS_ZH[month]}` : weekLabel}
+              {(streak?.count || 0) > 0 && (
+                <span style={{ marginLeft: 10, fontSize: 13, fontWeight: 700, color: "#ff6a00" }}>🔥 {streak.count} 天</span>
+              )}
+            </div>
+            <div style={{ display: "flex", gap: 4 }}>
+              {["month", "week"].map(v => (
+                <button key={v} onClick={() => setCalView(v)} style={{
+                  padding: "2px 10px", borderRadius: 20, cursor: "pointer", fontFamily: "inherit",
+                  fontSize: 11, fontWeight: calView === v ? 700 : 400,
+                  border: calView === v ? "1px solid #ff6a00" : "1px solid rgba(255,255,255,0.12)",
+                  background: calView === v ? "rgba(255,106,0,0.2)" : "rgba(255,255,255,0.04)",
+                  color: calView === v ? "#ff6a00" : "#888",
+                }}>{v === "month" ? "月" : "週"}</button>
+              ))}
+            </div>
           </div>
-          <button onClick={nextMonth} style={{ background: "none", border: "none", color: "#888", fontSize: 18, cursor: "pointer", padding: "4px 10px", lineHeight: 1 }}>▶</button>
+          <button onClick={calView === "month" ? nextMonth : nextWeek} style={{ background: "none", border: "none", color: "#888", fontSize: 18, cursor: "pointer", padding: "4px 10px", lineHeight: 1 }}>▶</button>
         </div>
 
         {/* 星期標題 */}
@@ -142,7 +177,7 @@ export default function WorkoutTab({
 
         {/* 日期格子 */}
         <div style={{ display: "grid", gridTemplateColumns: "repeat(7, 1fr)", gap: 2 }}>
-          {calGrid.map((cell, i) => {
+          {(calView === "month" ? calGrid : weekGrid).map((cell, i) => {
             if (!cell) return <div key={i} />;
             const { day, dateStr, hasWorkout, isToday } = cell;
             const isSelected = selectedCalDate === dateStr;
