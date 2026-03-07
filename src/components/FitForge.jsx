@@ -19,7 +19,7 @@ import WorkoutTab from "./tabs/WorkoutTab.jsx";
 import BodyTab from "./tabs/BodyTab.jsx";
 import GoalsTab from "./tabs/GoalsTab.jsx";
 
-const APP_VERSION = "1.4.4";
+const APP_VERSION = "1.4.5";
 
 const exerciseCategories = [
   { label: "胸", exercises: ["臥推", "上斜臥推", "雙槓撐體", "飛鳥", "胸推機", "蝴蝶機", "伏地挺身"] },
@@ -1189,10 +1189,10 @@ export default function FitForge({ user }) {
               版本更新記錄
             </div>
 
-            {/* v1.4.4 */}
+            {/* v1.4.5 */}
             <div style={{ marginBottom: "24px" }}>
               <div style={{ display: "flex", alignItems: "center", gap: "10px", marginBottom: "10px" }}>
-                <span style={{ fontSize: "17px", fontWeight: 900, color: "#ffd700" }}>v1.4.4</span>
+                <span style={{ fontSize: "17px", fontWeight: 900, color: "#ffd700" }}>v1.4.5</span>
                 <span style={{
                   fontSize: "11px", fontWeight: 800, color: "#ff6a00",
                   background: "rgba(255,106,0,0.15)", border: "1px solid rgba(255,106,0,0.3)",
@@ -1203,6 +1203,30 @@ export default function FitForge({ user }) {
               <div style={{ display: "flex", flexDirection: "column", gap: "7px" }}>
                 <div style={{ fontSize: "14px", color: "#c8c4bc", display: "flex", gap: "8px" }}>
                   <span style={{ color: "#ffd700", flexShrink: 0 }}>✨</span>
+                  <span>行事曆標題顯示「共 XX 天」累積訓練天數，格子同一天多筆時右上角顯示數字</span>
+                </div>
+                <div style={{ fontSize: "14px", color: "#c8c4bc", display: "flex", gap: "8px" }}>
+                  <span style={{ color: "#ffd700", flexShrink: 0 }}>✨</span>
+                  <span>歷史週/月群組標題顯示組數統計，新增「全展開/收起全部」一鍵按鈕</span>
+                </div>
+                <div style={{ fontSize: "14px", color: "#c8c4bc", display: "flex", gap: "8px" }}>
+                  <span style={{ color: "#ffd700", flexShrink: 0 }}>✨</span>
+                  <span>選擇動作後出現「複製上次」捷徑，一鍵帶入上次同動作的組數與重量</span>
+                </div>
+              </div>
+            </div>
+
+            <div style={{ height: "1px", background: "rgba(255,255,255,0.07)", marginBottom: "20px" }} />
+
+            {/* v1.4.4 */}
+            <div style={{ marginBottom: "24px" }}>
+              <div style={{ display: "flex", alignItems: "center", gap: "10px", marginBottom: "10px" }}>
+                <span style={{ fontSize: "17px", fontWeight: 900, color: "#e8e4dc" }}>v1.4.4</span>
+                <span style={{ fontSize: "12px", color: "#555", marginLeft: "auto" }}>2026-03-08</span>
+              </div>
+              <div style={{ display: "flex", flexDirection: "column", gap: "7px" }}>
+                <div style={{ fontSize: "14px", color: "#c8c4bc", display: "flex", gap: "8px" }}>
+                  <span style={{ color: "#888", flexShrink: 0 }}>•</span>
                   <span>訓練日曆支援週視圖——標題下切換月/週，週模式按週導航</span>
                 </div>
               </div>

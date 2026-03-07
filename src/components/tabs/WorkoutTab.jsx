@@ -76,6 +76,11 @@ export default function WorkoutTab({
   const firstDayOfWeek = (new Date(year, month, 1).getDay() + 6) % 7; // Mon=0
   const daysInMonth = new Date(year, month + 1, 0).getDate();
   const workoutDateSet = new Set(workouts.map(w => w.date));
+  const workoutDateCount = workouts.reduce((map, w) => {
+    map.set(w.date, (map.get(w.date) || 0) + 1);
+    return map;
+  }, new Map());
+  const totalDays = workoutDateSet.size;
   const calGrid = [];
   for (let i = 0; i < firstDayOfWeek; i++) calGrid.push(null);
   for (let d = 1; d <= daysInMonth; d++) {
@@ -149,8 +154,11 @@ export default function WorkoutTab({
           <div style={{ display: "flex", flexDirection: "column", alignItems: "center", gap: 6 }}>
             <div style={{ fontWeight: 800, fontSize: 16, color: "#e8e4dc", textAlign: "center" }}>
               {calView === "month" ? `${year} 年 ${MONTHS_ZH[month]}` : weekLabel}
+              {totalDays > 0 && (
+                <span style={{ marginLeft: 10, fontSize: 12, fontWeight: 600, color: "#666" }}>共 {totalDays} 天</span>
+              )}
               {(streak?.count || 0) > 0 && (
-                <span style={{ marginLeft: 10, fontSize: 13, fontWeight: 700, color: "#ff6a00" }}>🔥 {streak.count} 天</span>
+                <span style={{ marginLeft: 6, fontSize: 13, fontWeight: 700, color: "#ff6a00" }}>🔥 {streak.count} 天</span>
               )}
             </div>
             <div style={{ display: "flex", gap: 4 }}>
@@ -181,25 +189,38 @@ export default function WorkoutTab({
             if (!cell) return <div key={i} />;
             const { day, dateStr, hasWorkout, isToday } = cell;
             const isSelected = selectedCalDate === dateStr;
+            const dayCount = workoutDateCount.get(dateStr) || 0;
             return (
               <div
                 key={dateStr}
                 onClick={() => setSelectedCalDate(prev => prev === dateStr ? null : dateStr)}
                 style={{ display: "flex", justifyContent: "center", alignItems: "center", padding: "3px 0", cursor: "pointer" }}
               >
-                <div style={{
-                  width: 34, height: 34, borderRadius: "50%",
-                  display: "flex", alignItems: "center", justifyContent: "center",
-                  fontSize: 13, fontWeight: hasWorkout ? 800 : 400,
-                  background: hasWorkout
-                    ? "rgba(255,106,0,0.85)"
-                    : isSelected ? "rgba(255,255,255,0.12)" : "transparent",
-                  color: hasWorkout ? "#fff" : isToday ? "#ff6a00" : "#c8c4bc",
-                  border: isToday && !hasWorkout ? "1.5px solid #ff6a00" : "1.5px solid transparent",
-                  boxShadow: hasWorkout && isToday ? "0 0 10px rgba(255,106,0,0.5)" : "none",
-                  transition: "background 0.15s",
-                }}>
-                  {day}
+                <div style={{ position: "relative" }}>
+                  <div style={{
+                    width: 34, height: 34, borderRadius: "50%",
+                    display: "flex", alignItems: "center", justifyContent: "center",
+                    fontSize: 13, fontWeight: hasWorkout ? 800 : 400,
+                    background: hasWorkout
+                      ? "rgba(255,106,0,0.85)"
+                      : isSelected ? "rgba(255,255,255,0.12)" : "transparent",
+                    color: hasWorkout ? "#fff" : isToday ? "#ff6a00" : "#c8c4bc",
+                    border: isToday && !hasWorkout ? "1.5px solid #ff6a00" : "1.5px solid transparent",
+                    boxShadow: hasWorkout && isToday ? "0 0 10px rgba(255,106,0,0.5)" : "none",
+                    transition: "background 0.15s",
+                  }}>
+                    {day}
+                  </div>
+                  {dayCount >= 2 && (
+                    <div style={{
+                      position: "absolute", top: -3, right: -3,
+                      width: 14, height: 14, borderRadius: "50%",
+                      background: "#fff", color: "#ff6a00",
+                      fontSize: 9, fontWeight: 900,
+                      display: "flex", alignItems: "center", justifyContent: "center",
+                      lineHeight: 1,
+                    }}>{dayCount}</div>
+                  )}
                 </div>
               </div>
             );
@@ -272,6 +293,21 @@ export default function WorkoutTab({
               <span>{wExercise || "請選擇或搜尋動作"}</span>
               <span style={{ color: "#666", fontSize: "12px" }}>▼ {wExercise ? "更換" : "選擇"}</span>
             </button>
+            {(() => {
+              const last = wExercise ? workouts.find(w => w.exercise === wExercise) : null;
+              if (!last) return null;
+              return (
+                <button
+                  onClick={() => setWSets(JSON.parse(JSON.stringify(last.sets)))}
+                  style={{
+                    marginTop: 6, background: "none", border: "none", padding: "2px 0",
+                    color: "#888", fontSize: 12, cursor: "pointer", fontFamily: "inherit",
+                    textAlign: "left", display: "block",
+                  }}>
+                  ↩ 複製上次（{last.date}，{last.sets?.length || 0} 組）
+                </button>
+              );
+            })()}
           </div>
         ) : (
           <div style={{ marginBottom: "12px" }}>
@@ -610,8 +646,25 @@ export default function WorkoutTab({
             if (!groupMap.has(key)) groupMap.set(key, { key, label, items: [] });
             groupMap.get(key).items.push(w);
           });
-          const workoutGroups = Array.from(groupMap.values());
-          return workoutGroups.map((group, idx) => {
+          const workoutGroups = Array.from(groupMap.values()).map(g => ({
+            ...g,
+            totalSets: g.items.reduce((sum, w) => sum + (w.sets?.length || 0), 0),
+          }));
+          const allExpanded = workoutGroups.length > 0 && workoutGroups.every(g =>
+            expandedGroupKeys !== null && expandedGroupKeys.has(g.key)
+          );
+          const toggleAllExpanded = () => {
+            if (allExpanded) setExpandedGroupKeys(new Set());
+            else setExpandedGroupKeys(new Set(workoutGroups.map(g => g.key)));
+          };
+          return <>
+            <div style={{ display: "flex", justifyContent: "flex-end", marginBottom: 8 }}>
+              <button onClick={toggleAllExpanded} style={{
+                padding: "4px 10px", borderRadius: "20px", cursor: "pointer", fontFamily: "inherit", fontSize: "11px", fontWeight: 600,
+                border: "1px solid rgba(255,255,255,0.12)", background: "rgba(255,255,255,0.04)", color: "#888",
+              }}>{allExpanded ? "收起全部" : "全展開"}</button>
+            </div>
+            {workoutGroups.map((group, idx) => {
             const isOpen = expandedGroupKeys === null
               ? idx === 0
               : expandedGroupKeys.has(group.key);
@@ -632,7 +685,7 @@ export default function WorkoutTab({
                   marginBottom: isOpen ? "8px" : 0,
                 }}>
                   <span style={{ fontSize: "13px", color: "#aaa", fontWeight: 600 }}>
-                    {group.label}（{group.items.length} 筆）
+                    {group.label}（{group.items.length} 筆 · {group.totalSets} 組）
                   </span>
                   <span style={{ color: "#666", fontSize: "12px" }}>{isOpen ? "▲" : "▼"}</span>
                 </div>
@@ -669,7 +722,7 @@ export default function WorkoutTab({
                 ))}
               </div>
             );
-          });
+          })}</>
         })()}
       </div>
     </div>
