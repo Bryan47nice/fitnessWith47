@@ -12,7 +12,13 @@ const styles = {
     color: "#e8e4dc",
     fontFamily: "'Barlow Condensed', 'Noto Sans TC', sans-serif",
     position: "relative",
-    overflow: "hidden",
+    overflowX: "clip",
+  },
+  stickyHeader: {
+    position: "sticky",
+    top: 0,
+    zIndex: 100,
+    background: "#0a0a0f",
   },
   bg: {
     position: "fixed", inset: 0, pointerEvents: "none", zIndex: 0,

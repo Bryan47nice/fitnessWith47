@@ -19,7 +19,7 @@ import WorkoutTab from "./tabs/WorkoutTab.jsx";
 import BodyTab from "./tabs/BodyTab.jsx";
 import GoalsTab from "./tabs/GoalsTab.jsx";
 
-const APP_VERSION = "1.4.1";
+const APP_VERSION = "1.4.2";
 
 const exerciseCategories = [
   { label: "胸", exercises: ["臥推", "上斜臥推", "雙槓撐體", "飛鳥", "胸推機", "蝴蝶機", "伏地挺身"] },
@@ -784,6 +784,7 @@ export default function FitForge({ user }) {
     <div style={styles.app}>
       <div style={styles.bg} />
 
+      <div style={styles.stickyHeader}>
       <div style={styles.header}>
         <div style={{
           fontSize: "24px", fontWeight: 900, letterSpacing: "0.08em",
@@ -871,6 +872,7 @@ export default function FitForge({ user }) {
           </div>
         );
       })()}
+      </div>{/* /stickyHeader */}
 
       <div style={styles.content}>
 
@@ -881,6 +883,7 @@ export default function FitForge({ user }) {
             prMap={prMap}
             volumePeriod={volumePeriod}
             setVolumePeriod={setVolumePeriod}
+            streak={streak}
           />
         )}
 
@@ -1185,15 +1188,43 @@ export default function FitForge({ user }) {
               版本更新記錄
             </div>
 
-            {/* v1.4.1 */}
+            {/* v1.4.2 */}
             <div style={{ marginBottom: "24px" }}>
               <div style={{ display: "flex", alignItems: "center", gap: "10px", marginBottom: "10px" }}>
-                <span style={{ fontSize: "17px", fontWeight: 900, color: "#ffd700" }}>v1.4.1</span>
+                <span style={{ fontSize: "17px", fontWeight: 900, color: "#ffd700" }}>v1.4.2</span>
                 <span style={{
                   fontSize: "11px", fontWeight: 800, color: "#ff6a00",
                   background: "rgba(255,106,0,0.15)", border: "1px solid rgba(255,106,0,0.3)",
                   borderRadius: "6px", padding: "2px 7px", letterSpacing: "0.05em",
                 }}>最新</span>
+                <span style={{ fontSize: "12px", color: "#555", marginLeft: "auto" }}>2026-03-07</span>
+              </div>
+              <div style={{ display: "flex", flexDirection: "column", gap: "7px" }}>
+                <div style={{ fontSize: "14px", color: "#c8c4bc", display: "flex", gap: "8px" }}>
+                  <span style={{ color: "#ffd700", flexShrink: 0 }}>✨</span>
+                  <span>儀表板新增訓練一致性行事曆（4 週格狀，訓練日橘色高亮）</span>
+                </div>
+                <div style={{ fontSize: "14px", color: "#c8c4bc", display: "flex", gap: "8px" }}>
+                  <span style={{ color: "#ffd700", flexShrink: 0 }}>✨</span>
+                  <span>儀表板新增 🔥 連續訓練天數顯示</span>
+                </div>
+                <div style={{ fontSize: "14px", color: "#c8c4bc", display: "flex", gap: "8px" }}>
+                  <span style={{ flexShrink: 0 }}>•</span>
+                  <span>統計卡「總組數」改為「本週訓練」次數、PR 區塊可折疊</span>
+                </div>
+                <div style={{ fontSize: "14px", color: "#c8c4bc", display: "flex", gap: "8px" }}>
+                  <span style={{ flexShrink: 0 }}>•</span>
+                  <span>頂部 Header 固定於畫面頂端（sticky）</span>
+                </div>
+              </div>
+            </div>
+
+            <div style={{ height: "1px", background: "rgba(255,255,255,0.07)", marginBottom: "20px" }} />
+
+            {/* v1.4.1 */}
+            <div style={{ marginBottom: "24px" }}>
+              <div style={{ display: "flex", alignItems: "center", gap: "10px", marginBottom: "10px" }}>
+                <span style={{ fontSize: "16px", fontWeight: 800, color: "#888" }}>v1.4.1</span>
                 <span style={{ fontSize: "12px", color: "#555", marginLeft: "auto" }}>2026-03-05</span>
               </div>
               <div style={{ display: "flex", flexDirection: "column", gap: "7px" }}>

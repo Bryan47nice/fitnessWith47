@@ -1,3 +1,4 @@
+import { useState } from "react";
 import { ResponsiveContainer, LineChart, Line, XAxis, YAxis, Tooltip } from "recharts";
 import { getWeekStart } from "../../utils/fitforge.utils.js";
 import styles from "../../styles/fitforge.styles.js";
@@ -20,10 +21,34 @@ function getBmiLabel(b) {
   return "肥胖";
 }
 
-export default function DashboardTab({ workouts, bodyData, prMap, volumePeriod, setVolumePeriod }) {
-  const workoutDays  = new Set(workouts.map(w => w.date)).size;
-  const totalSets    = workouts.reduce((a, w) => a + (w.sets?.length || 0), 0);
-  const latestBody   = bodyData[0];
+export default function DashboardTab({ workouts, bodyData, prMap, volumePeriod, setVolumePeriod, streak }) {
+  const [prExpanded, setPrExpanded] = useState(true);
+
+  const workoutDays = new Set(workouts.map(w => w.date)).size;
+  const latestBody  = bodyData[0];
+
+  // This week's training days (Mon–Sun)
+  const todayDate = new Date();
+  todayDate.setHours(0, 0, 0, 0);
+  const todayStr   = todayDate.toISOString().slice(0, 10);
+  const dayOfWeek  = (todayDate.getDay() + 6) % 7; // Mon=0, Sun=6
+  const weekStart  = new Date(todayDate);
+  weekStart.setDate(todayDate.getDate() - dayOfWeek);
+  const thisWeekCount = new Set(
+    workouts.filter(w => new Date(w.date + "T00:00:00") >= weekStart).map(w => w.date)
+  ).size;
+
+  // Calendar: 4 weeks starting from Monday 4 weeks ago
+  const calStart = new Date(todayDate);
+  calStart.setDate(todayDate.getDate() - dayOfWeek - 21);
+  const workoutDateSet = new Set(workouts.map(w => w.date));
+  const calDays = Array.from({ length: 28 }, (_, i) => {
+    const d = new Date(calStart);
+    d.setDate(calStart.getDate() + i);
+    const dateStr = d.toISOString().slice(0, 10);
+    return { dateStr, day: d.getDate(), hasWorkout: workoutDateSet.has(dateStr), isToday: dateStr === todayStr };
+  });
+
   const recentWorkouts = workouts.slice(0, 5);
   const topPRs = Object.entries(prMap)
     .sort(([, a], [, b]) => b.weight - a.weight)
@@ -85,12 +110,45 @@ export default function DashboardTab({ workouts, bodyData, prMap, volumePeriod, 
           <div style={styles.statLabel}>訓練天數</div>
         </div>
         <div style={styles.stat}>
-          <div style={styles.statNum}>{totalSets}</div>
-          <div style={styles.statLabel}>總組數</div>
+          <div style={styles.statNum}>{thisWeekCount}</div>
+          <div style={styles.statLabel}>本週訓練</div>
+          <div style={{ fontSize: "11px", color: "#555", marginTop: "1px" }}>/ 7 天</div>
         </div>
         <div style={styles.stat}>
           <div style={{ ...styles.statNum, color: bmi ? getBmiColor(bmi) : "#ff6a00" }}>{bmi || "—"}</div>
           <div style={styles.statLabel}>BMI</div>
+        </div>
+      </div>
+
+      {/* 訓練一致性行事曆 */}
+      <div style={styles.card}>
+        <div style={{ display: "flex", justifyContent: "space-between", alignItems: "center", marginBottom: 12 }}>
+          <div style={styles.sectionTitle}>訓練一致性</div>
+          <div style={{
+            background: (streak?.count || 0) > 0 ? "linear-gradient(135deg, #ff6a00, #ff2d00)" : "#1a1a22",
+            padding: "4px 10px", borderRadius: 20, fontSize: 13, fontWeight: 700,
+            border: "1px solid rgba(255,106,0,0.3)",
+          }}>
+            🔥 {streak?.count || 0} 天
+          </div>
+        </div>
+        <div style={{ display: "grid", gridTemplateColumns: "repeat(7, 1fr)", gap: 4 }}>
+          {["一", "二", "三", "四", "五", "六", "日"].map(d => (
+            <div key={d} style={{ textAlign: "center", fontSize: 11, color: "#555", paddingBottom: 4 }}>{d}</div>
+          ))}
+          {calDays.map(({ dateStr, day, hasWorkout, isToday }) => (
+            <div key={dateStr} style={{
+              aspectRatio: "1", borderRadius: 6,
+              display: "flex", alignItems: "center", justifyContent: "center",
+              fontSize: 11, fontWeight: 700,
+              background: hasWorkout ? "rgba(255,106,0,0.75)" : "rgba(255,255,255,0.04)",
+              color: hasWorkout ? "#fff" : "#444",
+              border: isToday ? "2px solid #ff6a00" : "2px solid transparent",
+              boxShadow: hasWorkout ? "0 0 8px rgba(255,106,0,0.35)" : "none",
+            }}>
+              {day}
+            </div>
+          ))}
         </div>
       </div>
 
@@ -203,8 +261,16 @@ export default function DashboardTab({ workouts, bodyData, prMap, volumePeriod, 
       {/* 個人最佳 PR */}
       {topPRs.length > 0 && (
         <div style={styles.card}>
-          <div style={styles.sectionTitle}>個人最佳 PR</div>
-          {topPRs.map(([exercise, { weight, date }]) => (
+          <div style={{ display: "flex", justifyContent: "space-between", alignItems: "center", marginBottom: prExpanded ? 8 : 0 }}>
+            <div style={styles.sectionTitle}>個人最佳 PR</div>
+            <button
+              onClick={() => setPrExpanded(v => !v)}
+              style={{ background: "none", border: "none", color: "#666", cursor: "pointer", fontSize: 12, padding: "2px 6px" }}
+            >
+              {prExpanded ? "▲" : "▼"}
+            </button>
+          </div>
+          {prExpanded && topPRs.map(([exercise, { weight, date }]) => (
             <div key={exercise} style={{ ...styles.workoutItem, display: "flex", justifyContent: "space-between", alignItems: "center" }}>
               <div style={{ fontWeight: 700, fontSize: "15px" }}>{exercise}</div>
               <div style={{ textAlign: "right" }}>
