@@ -1,4 +1,6 @@
 const { onSchedule } = require('firebase-functions/v2/scheduler');
+const { onCall } = require('firebase-functions/v2/https');
+const Anthropic = require('@anthropic-ai/sdk');
 const { initializeApp } = require('firebase-admin/app');
 const { getFirestore, Timestamp } = require('firebase-admin/firestore');
 const { getMessaging } = require('firebase-admin/messaging');
@@ -14,6 +16,29 @@ const MESSAGES = [
   { title: '⚡ FitForge 提醒你',       body: '3天了，該回到訓練了。每一組都是投資未來的自己。' },
   { title: '🏋️ 訓練計畫在等你',       body: '持續才是力量的來源，今天記錄你的訓練吧！' },
 ];
+
+exports.generateFitnessComment = onCall(
+  { region: 'asia-east1', memory: '256MiB' },
+  async (request) => {
+    const { streak, lastDate, recentCount, todayStr } = request.data;
+    const client = new Anthropic({ apiKey: process.env.ANTHROPIC_API_KEY });
+    const message = await client.messages.create({
+      model: 'claude-haiku-4-5-20251001',
+      max_tokens: 150,
+      messages: [{
+        role: 'user',
+        content: `你是一個健身 App 的評語生成器，用繁體中文回覆。
+根據以下數據生成一句評語（30-60字），口吻隨機在「熱情稱讚」或「嚴格教練告誡」之間切換：
+- 連續訓練天數：${streak} 天
+- 最近訓練日期：${lastDate || '無'}
+- 近 30 天訓練天數：${recentCount} 天
+- 今天：${todayStr}
+只輸出評語本身，不要多餘說明。`,
+      }],
+    });
+    return { comment: message.content[0].text };
+  }
+);
 
 exports.sendWorkoutReminders = onSchedule(
   { schedule: '0 12 * * *', timeZone: 'UTC', region: 'asia-east1', memory: '256MiB' },

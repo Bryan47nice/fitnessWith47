@@ -1,3 +1,6 @@
+import { useState, useEffect } from "react";
+import { getApp } from "firebase/app";
+import { getFunctions, httpsCallable } from "firebase/functions";
 import { getWeekStart, canSaveWorkout } from "../../utils/fitforge.utils.js";
 import { exerciseCategories, INCLINE_EXERCISES } from "../../constants/fitforge.constants.js";
 import styles from "../../styles/fitforge.styles.js";
@@ -44,11 +47,178 @@ export default function WorkoutTab({
   saveWorkout, addSet, updateSet, removeSet, batchAddSets,
   deleteWorkout, openEditWorkout,
   addCustomExercise, deleteCustomExercise, setConfirmDialog,
+  // Streak
+  streak,
 }) {
+  const MONTHS_ZH = ["一月","二月","三月","四月","五月","六月","七月","八月","九月","十月","十一月","十二月"];
+  const todayStr = new Date().toISOString().slice(0, 10);
+
+  // ── Calendar state ──
+  const [calMonth, setCalMonth] = useState(() => {
+    const now = new Date();
+    return { year: now.getFullYear(), month: now.getMonth() };
+  });
+  const [selectedCalDate, setSelectedCalDate] = useState(null);
+
+  // ── AI comment state ──
+  const [aiComment, setAiComment] = useState(null);
+  const [aiLoading, setAiLoading] = useState(false);
+
+  // Calendar computation
+  const { year, month } = calMonth;
+  const firstDayOfWeek = (new Date(year, month, 1).getDay() + 6) % 7; // Mon=0
+  const daysInMonth = new Date(year, month + 1, 0).getDate();
+  const workoutDateSet = new Set(workouts.map(w => w.date));
+  const calGrid = [];
+  for (let i = 0; i < firstDayOfWeek; i++) calGrid.push(null);
+  for (let d = 1; d <= daysInMonth; d++) {
+    const dateStr = `${year}-${String(month + 1).padStart(2, "0")}-${String(d).padStart(2, "0")}`;
+    calGrid.push({ day: d, dateStr, hasWorkout: workoutDateSet.has(dateStr), isToday: dateStr === todayStr });
+  }
+  while (calGrid.length % 7 !== 0) calGrid.push(null);
+
+  const selectedDayWorkouts = selectedCalDate ? workouts.filter(w => w.date === selectedCalDate) : [];
+
+  const prevMonth = () => setCalMonth(({ year, month }) =>
+    month === 0 ? { year: year - 1, month: 11 } : { year, month: month - 1 }
+  );
+  const nextMonth = () => setCalMonth(({ year, month }) =>
+    month === 11 ? { year: year + 1, month: 0 } : { year, month: month + 1 }
+  );
+
+  const fetchAiComment = async () => {
+    setAiLoading(true);
+    setAiComment(null);
+    try {
+      const fns = getFunctions(getApp(), "asia-east1");
+      const genComment = httpsCallable(fns, "generateFitnessComment");
+      const thirtyDaysAgo = new Date(Date.now() - 30 * 86400000).toISOString().slice(0, 10);
+      const recentCount = new Set(workouts.filter(w => w.date >= thirtyDaysAgo).map(w => w.date)).size;
+      const result = await genComment({
+        streak: streak?.count || 0,
+        lastDate: streak?.lastDate || null,
+        recentCount,
+        todayStr,
+      });
+      const comment = result.data.comment;
+      localStorage.setItem(`ai_fitness_comment_${todayStr}`, comment);
+      setAiComment(comment);
+    } catch {
+      setAiComment("今天 AI 教練暫時離線，但你的訓練精神永不缺席！");
+    }
+    setAiLoading(false);
+  };
+
+  useEffect(() => {
+    const cached = localStorage.getItem(`ai_fitness_comment_${todayStr}`);
+    if (cached) { setAiComment(cached); return; }
+    fetchAiComment();
+  // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, []);
+
   const cardio = (name) => isCardio(name, customExercises);
 
   return (
     <div>
+      {/* ── 訓練日曆（Google Calendar 風格）── */}
+      <div style={styles.card}>
+        <div style={{ display: "flex", justifyContent: "space-between", alignItems: "center", marginBottom: 16 }}>
+          <button onClick={prevMonth} style={{ background: "none", border: "none", color: "#888", fontSize: 18, cursor: "pointer", padding: "4px 10px", lineHeight: 1 }}>◀</button>
+          <div style={{ fontWeight: 800, fontSize: 16, color: "#e8e4dc", textAlign: "center" }}>
+            {year} 年 {MONTHS_ZH[month]}
+            {(streak?.count || 0) > 0 && (
+              <span style={{ marginLeft: 10, fontSize: 13, fontWeight: 700, color: "#ff6a00" }}>🔥 {streak.count} 天</span>
+            )}
+          </div>
+          <button onClick={nextMonth} style={{ background: "none", border: "none", color: "#888", fontSize: 18, cursor: "pointer", padding: "4px 10px", lineHeight: 1 }}>▶</button>
+        </div>
+
+        {/* 星期標題 */}
+        <div style={{ display: "grid", gridTemplateColumns: "repeat(7, 1fr)", marginBottom: 4 }}>
+          {["一", "二", "三", "四", "五", "六", "日"].map(d => (
+            <div key={d} style={{ textAlign: "center", fontSize: 11, color: "#555", paddingBottom: 6, fontWeight: 600 }}>{d}</div>
+          ))}
+        </div>
+
+        {/* 日期格子 */}
+        <div style={{ display: "grid", gridTemplateColumns: "repeat(7, 1fr)", gap: 2 }}>
+          {calGrid.map((cell, i) => {
+            if (!cell) return <div key={i} />;
+            const { day, dateStr, hasWorkout, isToday } = cell;
+            const isSelected = selectedCalDate === dateStr;
+            return (
+              <div
+                key={dateStr}
+                onClick={() => setSelectedCalDate(prev => prev === dateStr ? null : dateStr)}
+                style={{ display: "flex", justifyContent: "center", alignItems: "center", padding: "3px 0", cursor: "pointer" }}
+              >
+                <div style={{
+                  width: 34, height: 34, borderRadius: "50%",
+                  display: "flex", alignItems: "center", justifyContent: "center",
+                  fontSize: 13, fontWeight: hasWorkout ? 800 : 400,
+                  background: hasWorkout
+                    ? "rgba(255,106,0,0.85)"
+                    : isSelected ? "rgba(255,255,255,0.12)" : "transparent",
+                  color: hasWorkout ? "#fff" : isToday ? "#ff6a00" : "#c8c4bc",
+                  border: isToday && !hasWorkout ? "1.5px solid #ff6a00" : "1.5px solid transparent",
+                  boxShadow: hasWorkout && isToday ? "0 0 10px rgba(255,106,0,0.5)" : "none",
+                  transition: "background 0.15s",
+                }}>
+                  {day}
+                </div>
+              </div>
+            );
+          })}
+        </div>
+      </div>
+
+      {/* ── 當日訓練紀錄 ── */}
+      {selectedCalDate && (
+        <div style={styles.card}>
+          <div style={{ ...styles.sectionTitle, marginBottom: 12 }}>{selectedCalDate} 的訓練</div>
+          {selectedDayWorkouts.length === 0 ? (
+            <div style={{ color: "#555", fontSize: 14, textAlign: "center", padding: "12px 0" }}>這天沒有訓練紀錄</div>
+          ) : selectedDayWorkouts.map(w => (
+            <div key={w.id} style={{ ...styles.workoutItem, marginBottom: 10 }}>
+              <div style={{ fontSize: 17, fontWeight: 700, marginBottom: 8 }}>{w.exercise}</div>
+              <div style={{ display: "flex", gap: 6, flexWrap: "wrap" }}>
+                {w.sets?.map((s, idx) => {
+                  if (s.duration !== undefined) {
+                    const parts = [
+                      s.duration && `${s.duration}分鐘`,
+                      s.distance && `${s.distance} km`,
+                      s.speed && `${s.speed} km/h`,
+                      s.incline && `坡度${s.incline}%`,
+                    ].filter(Boolean);
+                    return <span key={idx} style={styles.tag}>{parts.join(" · ") || "—"}</span>;
+                  }
+                  return <span key={idx} style={styles.tag}>第{idx + 1}組 {s.reps ? `${s.reps}下` : ""}{s.weight ? ` × ${s.weight}kg` : ""}</span>;
+                })}
+              </div>
+              {w.note && <div style={{ fontSize: 13, color: "#888", fontStyle: "italic", marginTop: 6 }}>📝 {w.note}</div>}
+            </div>
+          ))}
+        </div>
+      )}
+
+      {/* ── AI 教練評語 ── */}
+      <div style={styles.card}>
+        <div style={{ display: "flex", justifyContent: "space-between", alignItems: "center", marginBottom: 10 }}>
+          <div style={{ fontSize: 13, fontWeight: 700, color: "#888", letterSpacing: "0.05em" }}>AI 教練評語</div>
+          <button
+            onClick={() => { localStorage.removeItem(`ai_fitness_comment_${todayStr}`); fetchAiComment(); }}
+            disabled={aiLoading}
+            style={{ background: "none", border: "none", color: "#555", fontSize: 12, cursor: aiLoading ? "default" : "pointer", padding: "2px 4px" }}
+          >↻ 重新生成</button>
+        </div>
+        {aiLoading ? (
+          <div style={{ fontSize: 14, color: "#555", fontStyle: "italic" }}>🤖 AI 教練正在分析你的訓練數據...</div>
+        ) : (
+          <div style={{ fontSize: 15, color: "#c8c4bc", lineHeight: 1.6 }}>🤖 {aiComment || "—"}</div>
+        )}
+      </div>
+
+      {/* ── 新增訓練 ── */}
       <div style={styles.card}>
         <div style={styles.sectionTitle}>新增訓練</div>
 
