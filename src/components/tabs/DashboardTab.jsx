@@ -28,9 +28,11 @@ export default function DashboardTab({ workouts, bodyData, prMap, volumePeriod, 
   const latestBody  = bodyData[0];
 
   // This week's training days (Mon–Sun)
+  const toLocalDateStr = (d = new Date()) =>
+    `${d.getFullYear()}-${String(d.getMonth() + 1).padStart(2, "0")}-${String(d.getDate()).padStart(2, "0")}`;
   const todayDate = new Date();
   todayDate.setHours(0, 0, 0, 0);
-  const todayStr   = todayDate.toISOString().slice(0, 10);
+  const todayStr   = toLocalDateStr(todayDate);
   const dayOfWeek  = (todayDate.getDay() + 6) % 7; // Mon=0, Sun=6
   const weekStart  = new Date(todayDate);
   weekStart.setDate(todayDate.getDate() - dayOfWeek);

@@ -20,6 +20,8 @@ import BodyTab from "./tabs/BodyTab.jsx";
 import GoalsTab from "./tabs/GoalsTab.jsx";
 
 const APP_VERSION = "1.4.6";
+const toLocalDateStr = (d = new Date()) =>
+  `${d.getFullYear()}-${String(d.getMonth() + 1).padStart(2, "0")}-${String(d.getDate()).padStart(2, "0")}`;
 
 const exerciseCategories = [
   { label: "胸", exercises: ["臥推", "上斜臥推", "雙槓撐體", "飛鳥", "胸推機", "蝴蝶機", "伏地挺身"] },
@@ -59,7 +61,7 @@ export default function FitForge({ user }) {
   const [marqueeSheet, setMarqueeSheet] = useState(false);
 
   // Workout form state
-  const [wDate, setWDate] = useState(new Date().toISOString().slice(0, 10));
+  const [wDate, setWDate] = useState(toLocalDateStr());
   const [wExercise, setWExercise] = useState("");
   const [wSets, setWSets] = useState([{ reps: "", weight: "" }]);
   const [wNote, setWNote] = useState("");
@@ -105,7 +107,7 @@ export default function FitForge({ user }) {
   const [showNotifBanner, setShowNotifBanner] = useState(false);
 
   // Body form state
-  const [bDate, setBDate] = useState(new Date().toISOString().slice(0, 10));
+  const [bDate, setBDate] = useState(toLocalDateStr());
   const [bWeight, setBWeight] = useState("");
   const [bHeight, setBHeight] = useState("");
   const [bChest, setBChest] = useState("");
@@ -131,7 +133,7 @@ export default function FitForge({ user }) {
   );
   const [expandedGroupKeys, setExpandedGroupKeys] = useState(null);
 
-  const today = new Date().toISOString().slice(0, 10);
+  const today = toLocalDateStr();
   const todayWorked = workouts.some(w => w.date === today);
 
   // Subscribe to workouts
@@ -297,7 +299,7 @@ export default function FitForge({ user }) {
     if (loading) return;
     const todayWorked = workouts.some(w => w.date === today);
     if (todayWorked && streak.lastDate !== today) {
-      const yesterday = new Date(Date.now() - 86400000).toISOString().slice(0, 10);
+      const yesterday = toLocalDateStr(new Date(Date.now() - 86400000));
       const newCount = streak.lastDate === yesterday ? streak.count + 1 : 1;
       setDoc(doc(db, "users", user.uid, "meta", "streak"), { count: newCount, lastDate: today });
     }

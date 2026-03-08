@@ -51,7 +51,9 @@ export default function WorkoutTab({
   streak,
 }) {
   const MONTHS_ZH = ["一月","二月","三月","四月","五月","六月","七月","八月","九月","十月","十一月","十二月"];
-  const todayStr = new Date().toISOString().slice(0, 10);
+  const toLocalDateStr = (d = new Date()) =>
+    `${d.getFullYear()}-${String(d.getMonth() + 1).padStart(2, "0")}-${String(d.getDate()).padStart(2, "0")}`;
+  const todayStr = toLocalDateStr();
 
   // ── Calendar state ──
   const [calView, setCalView] = useState("month"); // "month" | "week"
@@ -82,9 +84,9 @@ export default function WorkoutTab({
   }, new Map());
   const monthPrefix = `${year}-${String(month + 1).padStart(2, "0")}`;
   const monthDays = [...workoutDateSet].filter(d => d.startsWith(monthPrefix)).length;
-  const weekStartStr = calWeekStart.toISOString().slice(0, 10);
+  const weekStartStr = toLocalDateStr(calWeekStart);
   const weekEndDate = new Date(calWeekStart); weekEndDate.setDate(calWeekStart.getDate() + 6);
-  const weekEndStr = weekEndDate.toISOString().slice(0, 10);
+  const weekEndStr = toLocalDateStr(weekEndDate);
   const weekDays = [...workoutDateSet].filter(d => d >= weekStartStr && d <= weekEndStr).length;
   const totalDays = calView === "month" ? monthDays : weekDays;
   const calGrid = [];
@@ -110,7 +112,7 @@ export default function WorkoutTab({
   const weekGrid = Array.from({ length: 7 }, (_, i) => {
     const d = new Date(calWeekStart);
     d.setDate(calWeekStart.getDate() + i);
-    const dateStr = d.toISOString().slice(0, 10);
+    const dateStr = toLocalDateStr(d);
     return { day: d.getDate(), dateStr, hasWorkout: workoutDateSet.has(dateStr), isToday: dateStr === todayStr };
   });
   const weekLabel = (() => {
@@ -125,7 +127,7 @@ export default function WorkoutTab({
     try {
       const fns = getFunctions(getApp(), "asia-east1");
       const genComment = httpsCallable(fns, "generateFitnessComment");
-      const thirtyDaysAgo = new Date(Date.now() - 30 * 86400000).toISOString().slice(0, 10);
+      const thirtyDaysAgo = toLocalDateStr(new Date(Date.now() - 30 * 86400000));
       const recentCount = new Set(workouts.filter(w => w.date >= thirtyDaysAgo).map(w => w.date)).size;
       const result = await genComment({
         streak: streak?.count || 0,
