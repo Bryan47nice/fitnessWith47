@@ -80,7 +80,13 @@ export default function WorkoutTab({
     map.set(w.date, (map.get(w.date) || 0) + 1);
     return map;
   }, new Map());
-  const totalDays = workoutDateSet.size;
+  const monthPrefix = `${year}-${String(month + 1).padStart(2, "0")}`;
+  const monthDays = [...workoutDateSet].filter(d => d.startsWith(monthPrefix)).length;
+  const weekStartStr = calWeekStart.toISOString().slice(0, 10);
+  const weekEndDate = new Date(calWeekStart); weekEndDate.setDate(calWeekStart.getDate() + 6);
+  const weekEndStr = weekEndDate.toISOString().slice(0, 10);
+  const weekDays = [...workoutDateSet].filter(d => d >= weekStartStr && d <= weekEndStr).length;
+  const totalDays = calView === "month" ? monthDays : weekDays;
   const calGrid = [];
   for (let i = 0; i < firstDayOfWeek; i++) calGrid.push(null);
   for (let d = 1; d <= daysInMonth; d++) {
@@ -300,9 +306,11 @@ export default function WorkoutTab({
                 <button
                   onClick={() => setWSets(JSON.parse(JSON.stringify(last.sets)))}
                   style={{
-                    marginTop: 6, background: "none", border: "none", padding: "2px 0",
-                    color: "#888", fontSize: 12, cursor: "pointer", fontFamily: "inherit",
-                    textAlign: "left", display: "block",
+                    marginTop: 6, padding: "4px 10px", borderRadius: 20,
+                    background: "rgba(255,106,0,0.08)",
+                    border: "1px solid rgba(255,106,0,0.25)",
+                    color: "#cc5500", fontSize: 12, cursor: "pointer",
+                    fontFamily: "inherit", display: "inline-block",
                   }}>
                   ↩ 複製上次（{last.date}，{last.sets?.length || 0} 組）
                 </button>
