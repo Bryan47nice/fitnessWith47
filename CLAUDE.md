@@ -25,6 +25,24 @@
 
 ---
 
+## 功能完成後固定輸出（強制，不可省略）
+
+每次功能實作完成、版本 bump、commit + push 之後，**必須**輸出以下三組各兩個選項讓用戶選擇：
+
+1. **Changelog 條目**（App 內版本記錄文案，兩個選項）
+2. **Remote Config 彈窗文案**（標題 / 內文 / 按鈕文字，兩個選項）
+3. **FCM 推播文案**（標題 / 內文，兩個選項）
+
+等用戶三項都選完後，依序執行：
+1. `npm run build`
+2. `firebase deploy --only hosting`
+3. Remote Config REST API 更新（trigger_type=1, trigger_count=1）
+4. `node scripts/push-notify.cjs "<標題>" "<內文>"`
+
+> **不得**在用戶選擇前自行 build / deploy / 推播。
+
+---
+
 ## 關鍵檔案地圖
 
 | 檔案 | 用途 |
