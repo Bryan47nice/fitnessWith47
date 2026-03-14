@@ -9,7 +9,8 @@ function getCategoryForExercise(name, customExercises) {
   for (const cat of exerciseCategories) {
     if (cat.exercises.includes(name)) return cat.label;
   }
-  if (customExercises.some(e => e.name === name)) return "自訂";
+  const custom = customExercises.find(e => e.name === name);
+  if (custom) return custom.category || "自訂";
   return "";
 }
 
@@ -41,6 +42,9 @@ export default function WorkoutTab({
   exPickerExpanded, setExPickerExpanded, exSearchQuery, setExSearchQuery,
   exActiveTag, setExActiveTag, showAddCustomEx, setShowAddCustomEx,
   newExName, setNewExName,
+  newExCategory, setNewExCategory,
+  newExCustomCategoryInput, setNewExCustomCategoryInput,
+  userCustomCategories,
   // History state
   historyGroupMode, setHistoryGroupMode, expandedGroupKeys, setExpandedGroupKeys,
   // Handlers
@@ -347,7 +351,7 @@ export default function WorkoutTab({
               WebkitOverflowScrolling: "touch", scrollbarWidth: "none",
               paddingBottom: "4px", marginBottom: "10px",
             }}>
-              {["胸", "背", "肩", "腿", "手臂", "核心", "有氧", "自訂"].map(tag => (
+              {["胸", "背", "肩", "腿", "手臂", "核心", "有氧", ...userCustomCategories, "自訂"].map(tag => (
                 <button key={tag} onClick={() => {
                   const next = exActiveTag === tag ? null : tag;
                   setExActiveTag(next);
@@ -411,7 +415,7 @@ export default function WorkoutTab({
                     }}>{ex.category}</span>
                   )}
                   {ex.name}
-                  {ex.category === "自訂" && (
+                  {ex.id && (
                     <button
                       onClick={e => {
                         e.stopPropagation();
@@ -435,43 +439,78 @@ export default function WorkoutTab({
                 </button>
               ))}
 
-              {/* 自訂 Tag：底部新增按鈕 */}
-              {exActiveTag === "自訂" && (
+              {/* 所有 Tag：底部新增動作按鈕 */}
+              {exActiveTag && !exSearchQuery && (
                 <div style={{ padding: "8px 14px 12px", borderTop: pickerDisplayList.length > 0 ? "1px solid rgba(255,255,255,0.06)" : "none" }}>
                   {showAddCustomEx ? (
-                    <div style={{ display: "flex", gap: "8px" }}>
+                    <div style={{ display: "flex", flexDirection: "column", gap: "8px" }}>
                       <input
                         autoFocus
-                        style={{ ...styles.input, flex: 1, padding: "8px 12px", fontSize: "14px" }}
+                        style={{ ...styles.input, padding: "8px 12px", fontSize: "14px" }}
                         placeholder="動作名稱..."
                         value={newExName}
                         onChange={e => setNewExName(e.target.value)}
                         onKeyDown={e => {
                           if (e.key === "Enter") { addCustomExercise(); setShowAddCustomEx(false); }
-                          if (e.key === "Escape") { setShowAddCustomEx(false); setNewExName(""); }
+                          if (e.key === "Escape") { setShowAddCustomEx(false); setNewExName(""); setNewExCategory("自訂"); setNewExCustomCategoryInput(""); }
                         }}
                       />
-                      <button
-                        style={{
-                          padding: "8px 12px", border: "none", borderRadius: "8px",
-                          background: "linear-gradient(135deg,#ff6a00,#ff9500)",
-                          color: "#fff", fontSize: "13px", fontWeight: 800,
-                          cursor: "pointer", fontFamily: "inherit", whiteSpace: "nowrap",
-                        }}
-                        onClick={() => { addCustomExercise(); setShowAddCustomEx(false); }}
-                      >新增</button>
-                      <button
-                        style={{
-                          padding: "8px 10px", border: "1px solid rgba(255,255,255,0.12)",
-                          borderRadius: "8px", background: "transparent",
-                          color: "#888", fontSize: "13px", cursor: "pointer", fontFamily: "inherit",
-                        }}
-                        onClick={() => { setShowAddCustomEx(false); setNewExName(""); }}
-                      >取消</button>
+                      {/* 分類選擇列 */}
+                      <div style={{ display: "flex", flexWrap: "wrap", gap: "6px", alignItems: "center" }}>
+                        <span style={{ fontSize: "12px", color: "#666", flexShrink: 0 }}>分類：</span>
+                        {["胸", "背", "肩", "腿", "手臂", "核心", "有氧", ...userCustomCategories, "自訂"].map(cat => (
+                          <button key={cat}
+                            onClick={() => { setNewExCategory(cat); setNewExCustomCategoryInput(""); }}
+                            style={{
+                              padding: "3px 10px", borderRadius: "14px", fontSize: "12px",
+                              border: newExCategory === cat ? "1px solid #ff6a00" : "1px solid rgba(255,255,255,0.12)",
+                              background: newExCategory === cat ? "rgba(255,106,0,0.2)" : "rgba(255,255,255,0.04)",
+                              color: newExCategory === cat ? "#ff6a00" : "#888",
+                              cursor: "pointer", fontFamily: "inherit",
+                            }}>{cat}</button>
+                        ))}
+                        <button
+                          onClick={() => setNewExCategory("__new__")}
+                          style={{
+                            padding: "3px 10px", borderRadius: "14px", fontSize: "12px",
+                            border: newExCategory === "__new__" ? "1px solid #ff6a00" : "1px dashed rgba(255,255,255,0.2)",
+                            background: newExCategory === "__new__" ? "rgba(255,106,0,0.1)" : "transparent",
+                            color: newExCategory === "__new__" ? "#ff6a00" : "#666",
+                            cursor: "pointer", fontFamily: "inherit",
+                          }}>＋ 新分類</button>
+                      </div>
+                      {newExCategory === "__new__" && (
+                        <input
+                          autoFocus
+                          style={{ ...styles.input, padding: "6px 10px", fontSize: "13px" }}
+                          placeholder="輸入新分類名稱..."
+                          value={newExCustomCategoryInput}
+                          onChange={e => setNewExCustomCategoryInput(e.target.value)}
+                        />
+                      )}
+                      <div style={{ display: "flex", gap: "8px" }}>
+                        <button
+                          style={{
+                            flex: 1, padding: "8px 12px", border: "none", borderRadius: "8px",
+                            background: "linear-gradient(135deg,#ff6a00,#ff9500)",
+                            color: "#fff", fontSize: "13px", fontWeight: 800,
+                            cursor: "pointer", fontFamily: "inherit",
+                          }}
+                          onClick={() => { addCustomExercise(); setShowAddCustomEx(false); }}
+                        >新增</button>
+                        <button
+                          style={{
+                            padding: "8px 10px", border: "1px solid rgba(255,255,255,0.12)",
+                            borderRadius: "8px", background: "transparent",
+                            color: "#888", fontSize: "13px", cursor: "pointer", fontFamily: "inherit",
+                          }}
+                          onClick={() => { setShowAddCustomEx(false); setNewExName(""); setNewExCategory("自訂"); setNewExCustomCategoryInput(""); }}
+                        >取消</button>
+                      </div>
                     </div>
                   ) : (
                     <button
-                      onClick={() => setShowAddCustomEx(true)}
+                      onClick={() => { setNewExCategory(exActiveTag || "自訂"); setShowAddCustomEx(true); }}
                       style={{
                         width: "100%", padding: "8px", background: "rgba(255,106,0,0.08)",
                         border: "1px dashed rgba(255,106,0,0.3)", borderRadius: "8px",
@@ -656,10 +695,17 @@ export default function WorkoutTab({
             if (!groupMap.has(key)) groupMap.set(key, { key, label, items: [] });
             groupMap.get(key).items.push(w);
           });
-          const workoutGroups = Array.from(groupMap.values()).map(g => ({
-            ...g,
-            totalSets: g.items.reduce((sum, w) => sum + (w.sets?.length || 0), 0),
-          }));
+          const workoutGroups = Array.from(groupMap.values())
+            .sort((a, b) => b.key.localeCompare(a.key))
+            .map(g => ({
+              ...g,
+              items: [...g.items].sort((a, b) =>
+                b.date !== a.date
+                  ? b.date.localeCompare(a.date)
+                  : (b.createdAt?.seconds || 0) - (a.createdAt?.seconds || 0)
+              ),
+              totalSets: g.items.reduce((sum, w) => sum + (w.sets?.length || 0), 0),
+            }));
           const allExpanded = workoutGroups.length > 0 && workoutGroups.every(g =>
             expandedGroupKeys !== null && expandedGroupKeys.has(g.key)
           );

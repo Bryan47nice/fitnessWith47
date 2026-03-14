@@ -19,7 +19,7 @@ import WorkoutTab from "./tabs/WorkoutTab.jsx";
 import BodyTab from "./tabs/BodyTab.jsx";
 import GoalsTab from "./tabs/GoalsTab.jsx";
 
-const APP_VERSION = "1.4.6";
+const APP_VERSION = "1.5.0";
 const toLocalDateStr = (d = new Date()) =>
   `${d.getFullYear()}-${String(d.getMonth() + 1).padStart(2, "0")}-${String(d.getDate()).padStart(2, "0")}`;
 
@@ -87,6 +87,8 @@ export default function FitForge({ user }) {
     () => localStorage.getItem("ex_active_tag") || null
   );
   const [showAddCustomEx, setShowAddCustomEx] = useState(false);
+  const [newExCategory, setNewExCategory] = useState("自訂");
+  const [newExCustomCategoryInput, setNewExCustomCategoryInput] = useState("");
   const [pickerTarget, setPickerTarget] = useState("editWorkout"); // "editWorkout" | "goal"
   const [volumePeriod, setVolumePeriod] = useState("week"); // "day" | "week" | "month"
 
@@ -355,10 +357,16 @@ export default function FitForge({ user }) {
   async function addCustomExercise() {
     const name = newExName.trim();
     if (!name) return;
+    const resolvedCategory =
+      newExCategory === "__new__"
+        ? (newExCustomCategoryInput.trim() || "自訂")
+        : (newExCategory.trim() || "自訂");
     await addDoc(collection(db, "users", user.uid, "customExercises"), {
-      name, createdAt: serverTimestamp(),
+      name, category: resolvedCategory, createdAt: serverTimestamp(),
     });
     setNewExName("");
+    setNewExCategory("自訂");
+    setNewExCustomCategoryInput("");
   }
 
   async function deleteCustomExercise(id) {
@@ -596,7 +604,8 @@ export default function FitForge({ user }) {
     for (const cat of exerciseCategories) {
       if (cat.exercises.includes(name)) return cat.label;
     }
-    if (customExercises.some(e => e.name === name)) return "自訂";
+    const custom = customExercises.find(e => e.name === name);
+    if (custom) return custom.category || "自訂";
     return "";
   }
 
@@ -627,7 +636,16 @@ export default function FitForge({ user }) {
   const allPresetFlat = exerciseCategories.flatMap(cat =>
     cat.exercises.map(e => ({ name: e, category: cat.label }))
   );
-  const allCustomFlat = customExercises.map(e => ({ name: e.name, category: "自訂", id: e.id }));
+  const allCustomFlat = customExercises.map(e => ({ name: e.name, category: e.category || "自訂", id: e.id }));
+
+  const builtInLabels = new Set(exerciseCategories.map(c => c.label));
+  const userCustomCategories = [
+    ...new Set(
+      customExercises
+        .map(e => e.category || "自訂")
+        .filter(cat => cat !== "自訂" && !builtInLabels.has(cat))
+    )
+  ];
 
   let pickerDisplayList;
   if (exSearchQuery.trim()) {
@@ -638,8 +656,12 @@ export default function FitForge({ user }) {
   } else if (exActiveTag === "自訂") {
     pickerDisplayList = allCustomFlat;
   } else if (exActiveTag) {
-    const cat = exerciseCategories.find(c => c.label === exActiveTag);
-    pickerDisplayList = cat ? cat.exercises.map(e => ({ name: e, category: exActiveTag })) : [];
+    const builtInCat = exerciseCategories.find(c => c.label === exActiveTag);
+    const builtInItems = builtInCat
+      ? builtInCat.exercises.map(e => ({ name: e, category: exActiveTag }))
+      : [];
+    const customInCat = allCustomFlat.filter(e => e.category === exActiveTag);
+    pickerDisplayList = [...builtInItems, ...customInCat];
   } else {
     pickerDisplayList = recentExercises.map(name => ({ name, category: getCategoryForExercise(name) }));
   }
@@ -909,6 +931,9 @@ export default function FitForge({ user }) {
             exActiveTag={exActiveTag} setExActiveTag={setExActiveTag}
             showAddCustomEx={showAddCustomEx} setShowAddCustomEx={setShowAddCustomEx}
             newExName={newExName} setNewExName={setNewExName}
+            newExCategory={newExCategory} setNewExCategory={setNewExCategory}
+            newExCustomCategoryInput={newExCustomCategoryInput} setNewExCustomCategoryInput={setNewExCustomCategoryInput}
+            userCustomCategories={userCustomCategories}
             historyGroupMode={historyGroupMode} setHistoryGroupMode={setHistoryGroupMode}
             expandedGroupKeys={expandedGroupKeys} setExpandedGroupKeys={setExpandedGroupKeys}
             saveWorkout={saveWorkout}
@@ -1191,15 +1216,51 @@ export default function FitForge({ user }) {
               版本更新記錄
             </div>
 
-            {/* v1.4.6 */}
+            {/* v1.5.0 */}
             <div style={{ marginBottom: "24px" }}>
               <div style={{ display: "flex", alignItems: "center", gap: "10px", marginBottom: "10px" }}>
-                <span style={{ fontSize: "17px", fontWeight: 900, color: "#ffd700" }}>v1.4.6</span>
+                <span style={{ fontSize: "17px", fontWeight: 900, color: "#ffd700" }}>v1.5.0</span>
                 <span style={{
                   fontSize: "11px", fontWeight: 800, color: "#ff6a00",
                   background: "rgba(255,106,0,0.15)", border: "1px solid rgba(255,106,0,0.3)",
                   borderRadius: "6px", padding: "2px 7px", letterSpacing: "0.05em",
                 }}>最新</span>
+                <span style={{ fontSize: "12px", color: "#555", marginLeft: "auto" }}>2026-03-14</span>
+              </div>
+              <div style={{ display: "flex", flexDirection: "column", gap: "7px" }}>
+                <div style={{ fontSize: "14px", color: "#c8c4bc", display: "flex", gap: "8px" }}>
+                  <span style={{ color: "#ffd700", flexShrink: 0 }}>✨</span>
+                  <span>自訂動作支援分類指定：新增動作時可選擇既有部位分類或自創新分類，動作將直接出現在對應 tab</span>
+                </div>
+                <div style={{ fontSize: "14px", color: "#c8c4bc", display: "flex", gap: "8px" }}>
+                  <span style={{ flexShrink: 0 }}>•</span>
+                  <span>「＋ 新增動作」按鈕開放至所有部位 tab，預設分類為當前選擇的部位</span>
+                </div>
+                <div style={{ fontSize: "14px", color: "#c8c4bc", display: "flex", gap: "8px" }}>
+                  <span style={{ flexShrink: 0 }}>•</span>
+                  <span>「自訂」tab 仍顯示所有自訂動作，方便集中管理與刪除</span>
+                </div>
+              </div>
+            </div>
+
+            {/* v1.4.7 */}
+            <div style={{ marginBottom: "24px" }}>
+              <div style={{ display: "flex", alignItems: "center", gap: "10px", marginBottom: "10px" }}>
+                <span style={{ fontSize: "17px", fontWeight: 900, color: "#e8e4dc" }}>v1.4.7</span>
+                <span style={{ fontSize: "12px", color: "#555", marginLeft: "auto" }}>2026-03-13</span>
+              </div>
+              <div style={{ display: "flex", flexDirection: "column", gap: "7px" }}>
+                <div style={{ fontSize: "14px", color: "#c8c4bc", display: "flex", gap: "8px" }}>
+                  <span style={{ color: "#ffd700", flexShrink: 0 }}>✨</span>
+                  <span>修正訓練紀錄排序邏輯：歷史紀錄與近期訓練一律依訓練日期新→舊排列，補登舊日期不再影響排序</span>
+                </div>
+              </div>
+            </div>
+
+            {/* v1.4.6 */}
+            <div style={{ marginBottom: "24px" }}>
+              <div style={{ display: "flex", alignItems: "center", gap: "10px", marginBottom: "10px" }}>
+                <span style={{ fontSize: "17px", fontWeight: 900, color: "#e8e4dc" }}>v1.4.6</span>
                 <span style={{ fontSize: "12px", color: "#555", marginLeft: "auto" }}>2026-03-08</span>
               </div>
               <div style={{ display: "flex", flexDirection: "column", gap: "7px" }}>
