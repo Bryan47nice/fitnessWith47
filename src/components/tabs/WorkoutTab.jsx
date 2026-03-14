@@ -399,7 +399,7 @@ export default function WorkoutTab({
                   const newIsCardio = getCategoryForExercise(ex.name, customExercises) === "有氧";
                   const curIsCardio = getCategoryForExercise(wExercise, customExercises) === "有氧";
                   if (newIsCardio !== curIsCardio) {
-                    setWSets(newIsCardio ? [{ duration: "", distance: "", speed: "", incline: "" }] : [{ reps: "", weight: "" }]);
+                    setWSets(newIsCardio ? [{ duration: "", distance: "", speed: "", incline: "" }] : []);
                   }
                   setWExercise(ex.name);
                   setExPickerExpanded(false);
@@ -686,16 +686,16 @@ export default function WorkoutTab({
                       {i + 1}
                     </div>
                     <div style={{ flex: 1, display: "flex", flexDirection: "column", gap: "4px" }}>
-                      <div>
-                        <input type="number" style={styles.setInput} placeholder="次數 (reps)" value={s.reps || ""} onChange={e => updateSet(i, "reps", e.target.value)} />
+                      <div style={{ display: "flex", alignItems: "center", gap: "6px" }}>
+                        <input type="number" style={styles.setInput} placeholder="次數" value={s.reps || ""} onChange={e => updateSet(i, "reps", e.target.value)} />
+                        <span style={{ color: "#555", fontSize: "12px", flexShrink: 0 }}>下</span>
                       </div>
-                      <div>
-                        <input type="number" style={styles.setInput} placeholder="重量 (kg)" value={s.weight || ""} onChange={e => updateSet(i, "weight", e.target.value)} />
+                      <div style={{ display: "flex", alignItems: "center", gap: "6px" }}>
+                        <input type="number" style={styles.setInput} placeholder="重量" value={s.weight || ""} onChange={e => updateSet(i, "weight", e.target.value)} />
+                        <span style={{ color: "#555", fontSize: "12px", flexShrink: 0 }}>kg</span>
                       </div>
                     </div>
-                    {wSets.length > 1 && (
-                      <button style={styles.deleteBtn} onClick={() => removeSet(i)}>✕</button>
-                    )}
+                    <button style={styles.deleteBtn} onClick={() => removeSet(i)}>✕</button>
                   </div>
                 </div>
               ))}

@@ -19,7 +19,7 @@ import WorkoutTab from "./tabs/WorkoutTab.jsx";
 import BodyTab from "./tabs/BodyTab.jsx";
 import GoalsTab from "./tabs/GoalsTab.jsx";
 
-const APP_VERSION = "1.6.0";
+const APP_VERSION = "1.6.1";
 const toLocalDateStr = (d = new Date()) =>
   `${d.getFullYear()}-${String(d.getMonth() + 1).padStart(2, "0")}-${String(d.getDate()).padStart(2, "0")}`;
 
@@ -65,7 +65,7 @@ export default function FitForge({ user }) {
   // Workout form state
   const [wDate, setWDate] = useState(toLocalDateStr());
   const [wExercise, setWExercise] = useState("");
-  const [wSets, setWSets] = useState([{ reps: "", weight: "" }]);
+  const [wSets, setWSets] = useState([]);
   const [wNote, setWNote] = useState("");
   const [wCalories, setWCalories] = useState("");
   const [batchReps, setBatchReps] = useState("");
@@ -421,7 +421,7 @@ export default function FitForge({ user }) {
     if (wCalories !== "") docData.calories = parseFloat(wCalories);
     await addDoc(collection(db, "users", user.uid, "workouts"), docData);
     setDoc(doc(db, "userPushTokens", user.uid), { lastWorkoutDate: wDate }, { merge: true }).catch(() => {});
-    setWSets(isCardio(name) ? [{ duration: "", speed: "", incline: "" }] : [{ reps: "", weight: "" }]);
+    setWSets(isCardio(name) ? [{ duration: "", distance: "", speed: "", incline: "" }] : []);
     setWNote("");
     setWCalories("");
     setSavedAnim(true);
@@ -1233,15 +1233,29 @@ export default function FitForge({ user }) {
               版本更新記錄
             </div>
 
-            {/* v1.6.0 */}
+            {/* v1.6.1 */}
             <div style={{ marginBottom: "24px" }}>
               <div style={{ display: "flex", alignItems: "center", gap: "10px", marginBottom: "10px" }}>
-                <span style={{ fontSize: "17px", fontWeight: 900, color: "#ffd700" }}>v1.6.0</span>
+                <span style={{ fontSize: "17px", fontWeight: 900, color: "#ffd700" }}>v1.6.1</span>
                 <span style={{
                   fontSize: "11px", fontWeight: 800, color: "#ff6a00",
                   background: "rgba(255,106,0,0.15)", border: "1px solid rgba(255,106,0,0.3)",
                   borderRadius: "6px", padding: "2px 7px", letterSpacing: "0.05em",
                 }}>最新</span>
+                <span style={{ fontSize: "12px", color: "#555", marginLeft: "auto" }}>2026-03-14</span>
+              </div>
+              <div style={{ display: "flex", flexDirection: "column", gap: "7px" }}>
+                <div style={{ fontSize: "14px", color: "#c8c4bc", display: "flex", gap: "8px" }}>
+                  <span style={{ color: "#ffd700", flexShrink: 0 }}>✨</span>
+                  <span>訓練組數 UX 兩項調整：新增重訓預設空組數（不顯示預設一組）、組數輸入框加常駐單位標籤（下/kg）</span>
+                </div>
+              </div>
+            </div>
+
+            {/* v1.6.0 */}
+            <div style={{ marginBottom: "24px" }}>
+              <div style={{ display: "flex", alignItems: "center", gap: "10px", marginBottom: "10px" }}>
+                <span style={{ fontSize: "17px", fontWeight: 900, color: "#e8e4dc" }}>v1.6.0</span>
                 <span style={{ fontSize: "12px", color: "#555", marginLeft: "auto" }}>2026-03-14</span>
               </div>
               <div style={{ display: "flex", flexDirection: "column", gap: "7px" }}>
@@ -1933,14 +1947,20 @@ export default function FitForge({ user }) {
                       </>
                     ) : (
                       <>
-                        <input type="number" placeholder="次數 (reps)" value={s.reps || ""}
-                          onChange={e => ewUpdateSet(i, "reps", e.target.value)}
-                          style={{ width: "100%", background: "rgba(255,255,255,0.05)", border: "1px solid rgba(255,255,255,0.1)", borderRadius: "8px", padding: "8px 12px", color: "#e8e4dc", fontSize: "15px", outline: "none", textAlign: "center", fontFamily: "inherit", boxSizing: "border-box" }}
-                        />
-                        <input type="number" placeholder="重量 (kg)" value={s.weight || ""}
-                          onChange={e => ewUpdateSet(i, "weight", e.target.value)}
-                          style={{ width: "100%", background: "rgba(255,255,255,0.05)", border: "1px solid rgba(255,255,255,0.1)", borderRadius: "8px", padding: "8px 12px", color: "#e8e4dc", fontSize: "15px", outline: "none", textAlign: "center", fontFamily: "inherit", boxSizing: "border-box" }}
-                        />
+                        <div style={{ display: "flex", alignItems: "center", gap: "6px" }}>
+                          <input type="number" placeholder="次數" value={s.reps || ""}
+                            onChange={e => ewUpdateSet(i, "reps", e.target.value)}
+                            style={{ flex: 1, background: "rgba(255,255,255,0.05)", border: "1px solid rgba(255,255,255,0.1)", borderRadius: "8px", padding: "8px 12px", color: "#e8e4dc", fontSize: "15px", outline: "none", textAlign: "center", fontFamily: "inherit", boxSizing: "border-box" }}
+                          />
+                          <span style={{ color: "#aaa", fontSize: "12px", flexShrink: 0 }}>下</span>
+                        </div>
+                        <div style={{ display: "flex", alignItems: "center", gap: "6px" }}>
+                          <input type="number" placeholder="重量" value={s.weight || ""}
+                            onChange={e => ewUpdateSet(i, "weight", e.target.value)}
+                            style={{ flex: 1, background: "rgba(255,255,255,0.05)", border: "1px solid rgba(255,255,255,0.1)", borderRadius: "8px", padding: "8px 12px", color: "#e8e4dc", fontSize: "15px", outline: "none", textAlign: "center", fontFamily: "inherit", boxSizing: "border-box" }}
+                          />
+                          <span style={{ color: "#aaa", fontSize: "12px", flexShrink: 0 }}>kg</span>
+                        </div>
                       </>
                     )}
                   </div>
