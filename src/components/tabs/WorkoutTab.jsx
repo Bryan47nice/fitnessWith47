@@ -58,6 +58,7 @@ export default function WorkoutTab({
   editingExCustomCategoryInput, setEditingExCustomCategoryInput,
   // History filter
   historyExFilter, setHistoryExFilter,
+  historyActiveCategory, setHistoryActiveCategory,
   // Streak
   streak,
 }) {
@@ -83,6 +84,10 @@ export default function WorkoutTab({
   // ── AI comment state ──
   const [aiComment, setAiComment] = useState(null);
   const [aiLoading, setAiLoading] = useState(false);
+
+  // ── Exercise AI comment state ──
+  const [exAiComment, setExAiComment] = useState(null);
+  const [exAiLoading, setExAiLoading] = useState(false);
 
   // Calendar computation
   const { year, month } = calMonth;
@@ -161,6 +166,34 @@ export default function WorkoutTab({
     fetchAiComment();
   // eslint-disable-next-line react-hooks/exhaustive-deps
   }, []);
+
+  const fetchExAiComment = async (exerciseName) => {
+    setExAiLoading(true);
+    setExAiComment(null);
+    try {
+      const fns = getFunctions(getApp(), "asia-east1");
+      const genComment = httpsCallable(fns, "generateFitnessComment");
+      const exHistory = workouts
+        .filter(w => w.exercise === exerciseName)
+        .slice(0, 10)
+        .map(w => ({ date: w.date, sets: w.sets }));
+      const result = await genComment({ exercise: exerciseName, exerciseHistory: exHistory, todayStr });
+      localStorage.setItem(`ai_ex_comment_${exerciseName}_${todayStr}`, result.data.comment);
+      setExAiComment(result.data.comment);
+    } catch {
+      setExAiComment("AI 教練暫時離線，繼續加油！");
+    }
+    setExAiLoading(false);
+  };
+
+  useEffect(() => {
+    if (!historyExFilter) { setExAiComment(null); return; }
+    const cacheKey = `ai_ex_comment_${historyExFilter}_${todayStr}`;
+    const cached = localStorage.getItem(cacheKey);
+    if (cached) { setExAiComment(cached); return; }
+    fetchExAiComment(historyExFilter);
+  // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [historyExFilter]);
 
   const cardio = (name) => isCardio(name, customExercises);
 
@@ -763,34 +796,59 @@ export default function WorkoutTab({
             ))}
           </div>
         </div>
-        {/* ── 動作篩選列 ── */}
+        {/* ── 動作篩選列（兩層）── */}
         {workouts.length > 0 && (() => {
-          const uniqueExercises = [...new Set(workouts.map(w => w.exercise))];
+          const usedCategories = [...new Set(
+            workouts.map(w => getCategoryForExercise(w.exercise, customExercises) || "自訂")
+          )];
+          const allCats = [...exerciseCategories.map(c => c.label), "自訂", ...userCustomCategories];
+          const availableCategories = allCats.filter(c => usedCategories.includes(c));
+          const exercisesInCategory = historyActiveCategory
+            ? [...new Set(
+                workouts
+                  .filter(w => (getCategoryForExercise(w.exercise, customExercises) || "自訂") === historyActiveCategory)
+                  .map(w => w.exercise)
+              )]
+            : [];
+          const tagBtn = (label, active, onClick) => (
+            <button key={label} onClick={onClick} style={{
+              padding: "4px 12px", borderRadius: "14px", fontSize: "12px", fontFamily: "inherit",
+              border: active ? "1px solid #ff6a00" : "1px solid rgba(255,255,255,0.12)",
+              background: active ? "rgba(255,106,0,0.2)" : "rgba(255,255,255,0.04)",
+              color: active ? "#ff6a00" : "#888",
+              cursor: "pointer", whiteSpace: "nowrap",
+            }}>{label}</button>
+          );
           return (
-            <div style={{ overflowX: "auto", marginBottom: "12px", paddingBottom: "4px" }}>
-              <div style={{ display: "flex", gap: "6px", minWidth: "max-content" }}>
-                <button
-                  onClick={() => setHistoryExFilter(null)}
-                  style={{
-                    padding: "4px 12px", borderRadius: "14px", fontSize: "12px", fontFamily: "inherit",
-                    border: !historyExFilter ? "1px solid #ff6a00" : "1px solid rgba(255,255,255,0.12)",
-                    background: !historyExFilter ? "rgba(255,106,0,0.2)" : "rgba(255,255,255,0.04)",
-                    color: !historyExFilter ? "#ff6a00" : "#888",
-                    cursor: "pointer", whiteSpace: "nowrap",
-                  }}>全部</button>
-                {uniqueExercises.map(ex => (
-                  <button key={ex}
-                    onClick={() => setHistoryExFilter(historyExFilter === ex ? null : ex)}
-                    style={{
-                      padding: "4px 12px", borderRadius: "14px", fontSize: "12px", fontFamily: "inherit",
-                      border: historyExFilter === ex ? "1px solid #ff6a00" : "1px solid rgba(255,255,255,0.12)",
-                      background: historyExFilter === ex ? "rgba(255,106,0,0.2)" : "rgba(255,255,255,0.04)",
-                      color: historyExFilter === ex ? "#ff6a00" : "#888",
-                      cursor: "pointer", whiteSpace: "nowrap",
-                    }}>{ex}</button>
-                ))}
+            <>
+              {/* 第一層：部位分類 */}
+              <div style={{ overflowX: "auto", marginBottom: "8px", paddingBottom: "2px" }}>
+                <div style={{ display: "flex", gap: "6px", minWidth: "max-content" }}>
+                  {tagBtn("全部", !historyActiveCategory, () => {
+                    setHistoryActiveCategory(null);
+                    setHistoryExFilter(null);
+                  })}
+                  {availableCategories.map(cat =>
+                    tagBtn(cat, historyActiveCategory === cat, () => {
+                      setHistoryActiveCategory(historyActiveCategory === cat ? null : cat);
+                      setHistoryExFilter(null);
+                    })
+                  )}
+                </div>
               </div>
-            </div>
+              {/* 第二層：該分類下的動作 */}
+              {historyActiveCategory && exercisesInCategory.length > 0 && (
+                <div style={{ overflowX: "auto", marginBottom: "12px", paddingBottom: "2px" }}>
+                  <div style={{ display: "flex", gap: "6px", minWidth: "max-content" }}>
+                    {exercisesInCategory.map(ex =>
+                      tagBtn(ex, historyExFilter === ex, () =>
+                        setHistoryExFilter(historyExFilter === ex ? null : ex)
+                      )
+                    )}
+                  </div>
+                </div>
+              )}
+            </>
           );
         })()}
 
@@ -830,15 +888,35 @@ export default function WorkoutTab({
           );
         })()}
 
+        {/* ── 動作專屬 AI 教練 ── */}
+        {historyExFilter && (
+          <div style={{ background: "rgba(255,255,255,0.03)", border: "1px solid rgba(255,255,255,0.08)", borderRadius: "12px", padding: "14px 16px", marginBottom: "12px" }}>
+            <div style={{ display: "flex", justifyContent: "space-between", alignItems: "center", marginBottom: 8 }}>
+              <div style={{ fontSize: 13, fontWeight: 700, color: "#888" }}>🤖 AI 教練 · {historyExFilter}</div>
+              <button
+                onClick={() => { localStorage.removeItem(`ai_ex_comment_${historyExFilter}_${todayStr}`); fetchExAiComment(historyExFilter); }}
+                disabled={exAiLoading}
+                style={{ background: "none", border: "none", color: "#555", fontSize: 12, cursor: exAiLoading ? "default" : "pointer", padding: "2px 4px", fontFamily: "inherit" }}
+              >↻ 重新生成</button>
+            </div>
+            {exAiLoading
+              ? <div style={{ fontSize: 14, color: "#555", fontStyle: "italic" }}>🤖 分析訓練數據中...</div>
+              : <div style={{ fontSize: 14, color: "#c8c4bc", lineHeight: 1.6 }}>{exAiComment || "—"}</div>
+            }
+          </div>
+        )}
+
         {workouts.length === 0 && (
           <div style={{ color: "#555", fontSize: "14px", textAlign: "center", padding: "20px 0" }}>
             還沒有訓練紀錄
           </div>
         )}
         {workouts.length > 0 && (() => {
-          const filteredWorkouts = historyExFilter
-            ? workouts.filter(w => w.exercise === historyExFilter)
-            : workouts;
+          const filteredWorkouts = workouts.filter(w => {
+            if (historyExFilter) return w.exercise === historyExFilter;
+            if (historyActiveCategory) return (getCategoryForExercise(w.exercise, customExercises) || "自訂") === historyActiveCategory;
+            return true;
+          });
           const groupMap = new Map();
           filteredWorkouts.forEach(w => {
             let key, label;

@@ -20,21 +20,27 @@ const MESSAGES = [
 exports.generateFitnessComment = onCall(
   { region: 'asia-east1', memory: '256MiB' },
   async (request) => {
-    const { streak, lastDate, recentCount, todayStr } = request.data;
+    const { streak, lastDate, recentCount, todayStr, exercise, exerciseHistory } = request.data;
     const client = new Anthropic({ apiKey: process.env.ANTHROPIC_API_KEY });
-    const message = await client.messages.create({
-      model: 'claude-haiku-4-5-20251001',
-      max_tokens: 150,
-      messages: [{
-        role: 'user',
-        content: `你是一個健身 App 的評語生成器，用繁體中文回覆。
+    let content;
+    if (exercise) {
+      const histStr = (exerciseHistory || [])
+        .map(r => `${r.date}: ${JSON.stringify(r.sets)}`)
+        .join('\n');
+      content = `你是健身 AI 教練，用繁體中文回覆，2到3句話，針對用戶的「${exercise}」訓練紀錄給出具體評價或建議。\n歷史紀錄（最近）：\n${histStr || '尚無紀錄'}\n只輸出評語本身，不要多餘說明。`;
+    } else {
+      content = `你是一個健身 App 的評語生成器，用繁體中文回覆。
 根據以下數據生成一句評語（30-60字），口吻隨機在「熱情稱讚」或「嚴格教練告誡」之間切換：
 - 連續訓練天數：${streak} 天
 - 最近訓練日期：${lastDate || '無'}
 - 近 30 天訓練天數：${recentCount} 天
 - 今天：${todayStr}
-只輸出評語本身，不要多餘說明。`,
-      }],
+只輸出評語本身，不要多餘說明。`;
+    }
+    const message = await client.messages.create({
+      model: 'claude-haiku-4-5-20251001',
+      max_tokens: 200,
+      messages: [{ role: 'user', content }],
     });
     return { comment: message.content[0].text };
   }

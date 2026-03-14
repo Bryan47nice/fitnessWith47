@@ -19,7 +19,7 @@ import WorkoutTab from "./tabs/WorkoutTab.jsx";
 import BodyTab from "./tabs/BodyTab.jsx";
 import GoalsTab from "./tabs/GoalsTab.jsx";
 
-const APP_VERSION = "1.6.1";
+const APP_VERSION = "1.6.2";
 const toLocalDateStr = (d = new Date()) =>
   `${d.getFullYear()}-${String(d.getMonth() + 1).padStart(2, "0")}-${String(d.getDate()).padStart(2, "0")}`;
 
@@ -137,6 +137,7 @@ export default function FitForge({ user }) {
   );
   const [expandedGroupKeys, setExpandedGroupKeys] = useState(null);
   const [historyExFilter, setHistoryExFilter] = useState(null);
+  const [historyActiveCategory, setHistoryActiveCategory] = useState(null);
 
   const today = toLocalDateStr();
   const todayWorked = workouts.some(w => w.date === today);
@@ -959,6 +960,7 @@ export default function FitForge({ user }) {
             editingExCategory={editingExCategory} setEditingExCategory={setEditingExCategory}
             editingExCustomCategoryInput={editingExCustomCategoryInput} setEditingExCustomCategoryInput={setEditingExCustomCategoryInput}
             historyExFilter={historyExFilter} setHistoryExFilter={setHistoryExFilter}
+            historyActiveCategory={historyActiveCategory} setHistoryActiveCategory={setHistoryActiveCategory}
             addCustomExercise={addCustomExercise}
             deleteCustomExercise={deleteCustomExercise}
             updateCustomExercise={updateCustomExercise}
@@ -1233,15 +1235,29 @@ export default function FitForge({ user }) {
               版本更新記錄
             </div>
 
-            {/* v1.6.1 */}
+            {/* v1.6.2 */}
             <div style={{ marginBottom: "24px" }}>
               <div style={{ display: "flex", alignItems: "center", gap: "10px", marginBottom: "10px" }}>
-                <span style={{ fontSize: "17px", fontWeight: 900, color: "#ffd700" }}>v1.6.1</span>
+                <span style={{ fontSize: "17px", fontWeight: 900, color: "#ffd700" }}>v1.6.2</span>
                 <span style={{
                   fontSize: "11px", fontWeight: 800, color: "#ff6a00",
                   background: "rgba(255,106,0,0.15)", border: "1px solid rgba(255,106,0,0.3)",
                   borderRadius: "6px", padding: "2px 7px", letterSpacing: "0.05em",
                 }}>最新</span>
+                <span style={{ fontSize: "12px", color: "#555", marginLeft: "auto" }}>2026-03-14</span>
+              </div>
+              <div style={{ display: "flex", flexDirection: "column", gap: "7px" }}>
+                <div style={{ fontSize: "14px", color: "#c8c4bc", display: "flex", gap: "8px" }}>
+                  <span style={{ color: "#ffd700", flexShrink: 0 }}>✨</span>
+                  <span>訓練日誌篩選重設計：部位分類兩層篩選（分類→動作）、選取動作後顯示 AI 教練針對該動作的專屬評語</span>
+                </div>
+              </div>
+            </div>
+
+            {/* v1.6.1 */}
+            <div style={{ marginBottom: "24px" }}>
+              <div style={{ display: "flex", alignItems: "center", gap: "10px", marginBottom: "10px" }}>
+                <span style={{ fontSize: "17px", fontWeight: 900, color: "#e8e4dc" }}>v1.6.1</span>
                 <span style={{ fontSize: "12px", color: "#555", marginLeft: "auto" }}>2026-03-14</span>
               </div>
               <div style={{ display: "flex", flexDirection: "column", gap: "7px" }}>
