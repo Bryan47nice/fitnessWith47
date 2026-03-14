@@ -19,7 +19,7 @@ import WorkoutTab from "./tabs/WorkoutTab.jsx";
 import BodyTab from "./tabs/BodyTab.jsx";
 import GoalsTab from "./tabs/GoalsTab.jsx";
 
-const APP_VERSION = "1.5.0";
+const APP_VERSION = "1.6.0";
 const toLocalDateStr = (d = new Date()) =>
   `${d.getFullYear()}-${String(d.getMonth() + 1).padStart(2, "0")}-${String(d.getDate()).padStart(2, "0")}`;
 
@@ -48,6 +48,8 @@ export default function FitForge({ user }) {
   const [showExPicker, setShowExPicker] = useState(false);
   const [editingExId, setEditingExId] = useState(null);
   const [editingExName, setEditingExName] = useState("");
+  const [editingExCategory, setEditingExCategory] = useState("自訂");
+  const [editingExCustomCategoryInput, setEditingExCustomCategoryInput] = useState("");
 
   // Activity popup state (null = hidden, object = show)
   const [popup, setPopup] = useState(null);
@@ -134,6 +136,7 @@ export default function FitForge({ user }) {
     () => localStorage.getItem("history_group_mode") || "week"
   );
   const [expandedGroupKeys, setExpandedGroupKeys] = useState(null);
+  const [historyExFilter, setHistoryExFilter] = useState(null);
 
   const today = toLocalDateStr();
   const todayWorked = workouts.some(w => w.date === today);
@@ -373,12 +376,20 @@ export default function FitForge({ user }) {
     await deleteDoc(doc(db, "users", user.uid, "customExercises", id));
   }
 
-  async function renameCustomExercise() {
+  async function updateCustomExercise() {
     const name = editingExName.trim();
     if (!name || !editingExId) return;
-    await updateDoc(doc(db, "users", user.uid, "customExercises", editingExId), { name });
+    const resolvedCategory =
+      editingExCategory === "__new__"
+        ? (editingExCustomCategoryInput.trim() || "自訂")
+        : (editingExCategory.trim() || "自訂");
+    await updateDoc(doc(db, "users", user.uid, "customExercises", editingExId), {
+      name, category: resolvedCategory,
+    });
     setEditingExId(null);
     setEditingExName("");
+    setEditingExCategory("自訂");
+    setEditingExCustomCategoryInput("");
   }
 
   function addSet() {
@@ -943,8 +954,14 @@ export default function FitForge({ user }) {
             batchAddSets={batchAddSets}
             deleteWorkout={deleteWorkout}
             openEditWorkout={openEditWorkout}
+            editingExId={editingExId} setEditingExId={setEditingExId}
+            editingExName={editingExName} setEditingExName={setEditingExName}
+            editingExCategory={editingExCategory} setEditingExCategory={setEditingExCategory}
+            editingExCustomCategoryInput={editingExCustomCategoryInput} setEditingExCustomCategoryInput={setEditingExCustomCategoryInput}
+            historyExFilter={historyExFilter} setHistoryExFilter={setHistoryExFilter}
             addCustomExercise={addCustomExercise}
             deleteCustomExercise={deleteCustomExercise}
+            updateCustomExercise={updateCustomExercise}
             setConfirmDialog={setConfirmDialog}
             streak={streak}
           />
@@ -1216,15 +1233,37 @@ export default function FitForge({ user }) {
               版本更新記錄
             </div>
 
-            {/* v1.5.0 */}
+            {/* v1.6.0 */}
             <div style={{ marginBottom: "24px" }}>
               <div style={{ display: "flex", alignItems: "center", gap: "10px", marginBottom: "10px" }}>
-                <span style={{ fontSize: "17px", fontWeight: 900, color: "#ffd700" }}>v1.5.0</span>
+                <span style={{ fontSize: "17px", fontWeight: 900, color: "#ffd700" }}>v1.6.0</span>
                 <span style={{
                   fontSize: "11px", fontWeight: 800, color: "#ff6a00",
                   background: "rgba(255,106,0,0.15)", border: "1px solid rgba(255,106,0,0.3)",
                   borderRadius: "6px", padding: "2px 7px", letterSpacing: "0.05em",
                 }}>最新</span>
+                <span style={{ fontSize: "12px", color: "#555", marginLeft: "auto" }}>2026-03-14</span>
+              </div>
+              <div style={{ display: "flex", flexDirection: "column", gap: "7px" }}>
+                <div style={{ fontSize: "14px", color: "#c8c4bc", display: "flex", gap: "8px" }}>
+                  <span style={{ color: "#ffd700", flexShrink: 0 }}>✨</span>
+                  <span>自訂動作支援編輯分類與名稱：動作旁新增編輯按鈕，可修改名稱與所屬分類</span>
+                </div>
+                <div style={{ fontSize: "14px", color: "#c8c4bc", display: "flex", gap: "8px" }}>
+                  <span style={{ color: "#ffd700", flexShrink: 0 }}>✨</span>
+                  <span>備註欄升級為多行記錄欄位，儲存與顯示皆支援換行</span>
+                </div>
+                <div style={{ fontSize: "14px", color: "#c8c4bc", display: "flex", gap: "8px" }}>
+                  <span style={{ color: "#ffd700", flexShrink: 0 }}>✨</span>
+                  <span>歷史紀錄新增動作篩選列，選取動作後顯示最大重量（或有氧時間）趨勢圖</span>
+                </div>
+              </div>
+            </div>
+
+            {/* v1.5.0 */}
+            <div style={{ marginBottom: "24px" }}>
+              <div style={{ display: "flex", alignItems: "center", gap: "10px", marginBottom: "10px" }}>
+                <span style={{ fontSize: "17px", fontWeight: 900, color: "#e8e4dc" }}>v1.5.0</span>
                 <span style={{ fontSize: "12px", color: "#555", marginLeft: "auto" }}>2026-03-14</span>
               </div>
               <div style={{ display: "flex", flexDirection: "column", gap: "7px" }}>
@@ -1935,14 +1974,15 @@ export default function FitForge({ user }) {
 
             {/* Note */}
             <div style={{ marginBottom: "14px" }}>
-              <label style={{ fontSize: "12px", color: "#888", letterSpacing: "0.06em", marginBottom: "6px", display: "block" }}>備註（可選）</label>
-              <input type="text" placeholder="訓練備註..." value={ewNote}
+              <label style={{ fontSize: "12px", color: "#888", letterSpacing: "0.06em", marginBottom: "6px", display: "block" }}>記錄（可選）</label>
+              <textarea placeholder="訓練記錄..." value={ewNote}
                 onChange={e => setEwNote(e.target.value)}
                 style={{
                   width: "100%", background: "rgba(255,255,255,0.05)",
                   border: "1px solid rgba(255,255,255,0.1)", borderRadius: "10px",
                   padding: "10px 14px", color: "#e8e4dc", fontSize: "15px",
                   outline: "none", boxSizing: "border-box", fontFamily: "inherit",
+                  resize: "none", minHeight: "72px",
                 }}
               />
             </div>

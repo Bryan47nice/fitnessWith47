@@ -1,4 +1,5 @@
 import { useState, useEffect } from "react";
+import { LineChart, Line, XAxis, YAxis, Tooltip, ResponsiveContainer } from "recharts";
 import { getApp } from "firebase/app";
 import { getFunctions, httpsCallable } from "firebase/functions";
 import { getWeekStart, canSaveWorkout } from "../../utils/fitforge.utils.js";
@@ -50,7 +51,13 @@ export default function WorkoutTab({
   // Handlers
   saveWorkout, addSet, updateSet, removeSet, batchAddSets,
   deleteWorkout, openEditWorkout,
-  addCustomExercise, deleteCustomExercise, setConfirmDialog,
+  addCustomExercise, deleteCustomExercise, updateCustomExercise, setConfirmDialog,
+  // Editing custom exercise
+  editingExId, setEditingExId, editingExName, setEditingExName,
+  editingExCategory, setEditingExCategory,
+  editingExCustomCategoryInput, setEditingExCustomCategoryInput,
+  // History filter
+  historyExFilter, setHistoryExFilter,
   // Streak
   streak,
 }) {
@@ -263,7 +270,7 @@ export default function WorkoutTab({
                   return <span key={idx} style={styles.tag}>第{idx + 1}組 {s.reps ? `${s.reps}下` : ""}{s.weight ? ` × ${s.weight}kg` : ""}</span>;
                 })}
               </div>
-              {w.note && <div style={{ fontSize: 13, color: "#888", fontStyle: "italic", marginTop: 6 }}>📝 {w.note}</div>}
+              {w.note && <div style={{ fontSize: 13, color: "#888", fontStyle: "italic", marginTop: 6, whiteSpace: "pre-wrap" }}>📝 {w.note}</div>}
             </div>
           ))}
         </div>
@@ -414,27 +421,107 @@ export default function WorkoutTab({
                       padding: "2px 6px", flexShrink: 0, letterSpacing: "0.04em",
                     }}>{ex.category}</span>
                   )}
-                  {ex.name}
-                  {ex.id && (
-                    <button
-                      onClick={e => {
-                        e.stopPropagation();
-                        setConfirmDialog({
-                          message: `確認刪除自訂動作「${ex.name}」？`,
-                          onConfirm: async () => {
-                            await deleteCustomExercise(ex.id);
-                            setConfirmDialog(null);
-                          },
-                        });
-                      }}
-                      style={{
-                        marginLeft: "auto", background: "rgba(255,50,50,0.12)",
-                        border: "1px solid rgba(255,50,50,0.2)", borderRadius: "6px",
-                        color: "#ff5555", fontSize: "11px", padding: "2px 8px",
-                        cursor: "pointer", fontFamily: "inherit", flexShrink: 0,
-                      }}>
-                      刪除
-                    </button>
+                  {editingExId === ex.id ? null : ex.name}
+                  {ex.id && editingExId === ex.id && (
+                    <div
+                      onClick={e => e.stopPropagation()}
+                      style={{ display: "flex", flexDirection: "column", gap: "6px", width: "100%", paddingTop: "2px" }}
+                    >
+                      <input
+                        autoFocus
+                        style={{ ...styles.input, padding: "6px 10px", fontSize: "13px" }}
+                        placeholder="動作名稱..."
+                        value={editingExName}
+                        onChange={e => setEditingExName(e.target.value)}
+                      />
+                      <div style={{ display: "flex", flexWrap: "wrap", gap: "4px", alignItems: "center" }}>
+                        <span style={{ fontSize: "11px", color: "#666", flexShrink: 0 }}>分類：</span>
+                        {["胸", "背", "肩", "腿", "手臂", "核心", "有氧", ...userCustomCategories, "自訂"].map(cat => (
+                          <button key={cat}
+                            onClick={() => { setEditingExCategory(cat); setEditingExCustomCategoryInput(""); }}
+                            style={{
+                              padding: "2px 8px", borderRadius: "12px", fontSize: "11px",
+                              border: editingExCategory === cat ? "1px solid #ff6a00" : "1px solid rgba(255,255,255,0.12)",
+                              background: editingExCategory === cat ? "rgba(255,106,0,0.2)" : "rgba(255,255,255,0.04)",
+                              color: editingExCategory === cat ? "#ff6a00" : "#888",
+                              cursor: "pointer", fontFamily: "inherit",
+                            }}>{cat}</button>
+                        ))}
+                        <button
+                          onClick={() => setEditingExCategory("__new__")}
+                          style={{
+                            padding: "2px 8px", borderRadius: "12px", fontSize: "11px",
+                            border: editingExCategory === "__new__" ? "1px solid #ff6a00" : "1px dashed rgba(255,255,255,0.2)",
+                            background: editingExCategory === "__new__" ? "rgba(255,106,0,0.1)" : "transparent",
+                            color: editingExCategory === "__new__" ? "#ff6a00" : "#666",
+                            cursor: "pointer", fontFamily: "inherit",
+                          }}>＋ 新分類</button>
+                      </div>
+                      {editingExCategory === "__new__" && (
+                        <input
+                          style={{ ...styles.input, padding: "5px 10px", fontSize: "12px" }}
+                          placeholder="輸入新分類名稱..."
+                          value={editingExCustomCategoryInput}
+                          onChange={e => setEditingExCustomCategoryInput(e.target.value)}
+                        />
+                      )}
+                      <div style={{ display: "flex", gap: "6px" }}>
+                        <button
+                          onClick={() => updateCustomExercise()}
+                          style={{
+                            flex: 1, padding: "6px", border: "none", borderRadius: "6px",
+                            background: "linear-gradient(135deg,#ff6a00,#ff9500)",
+                            color: "#fff", fontSize: "12px", fontWeight: 800,
+                            cursor: "pointer", fontFamily: "inherit",
+                          }}>儲存</button>
+                        <button
+                          onClick={() => { setEditingExId(null); setEditingExName(""); setEditingExCategory("自訂"); setEditingExCustomCategoryInput(""); }}
+                          style={{
+                            padding: "6px 10px", border: "1px solid rgba(255,255,255,0.12)",
+                            borderRadius: "6px", background: "transparent",
+                            color: "#888", fontSize: "12px", cursor: "pointer", fontFamily: "inherit",
+                          }}>取消</button>
+                      </div>
+                    </div>
+                  )}
+                  {ex.id && !editingExId && (
+                    <div style={{ marginLeft: "auto", display: "flex", gap: "4px", flexShrink: 0 }}>
+                      <button
+                        onClick={e => {
+                          e.stopPropagation();
+                          setEditingExId(ex.id);
+                          setEditingExName(ex.name);
+                          setEditingExCategory(ex.category || "自訂");
+                          setEditingExCustomCategoryInput("");
+                        }}
+                        style={{
+                          background: "rgba(255,255,255,0.06)",
+                          border: "1px solid rgba(255,255,255,0.14)", borderRadius: "6px",
+                          color: "#aaa", fontSize: "11px", padding: "2px 8px",
+                          cursor: "pointer", fontFamily: "inherit",
+                        }}>
+                        編輯
+                      </button>
+                      <button
+                        onClick={e => {
+                          e.stopPropagation();
+                          setConfirmDialog({
+                            message: `確認刪除自訂動作「${ex.name}」？`,
+                            onConfirm: async () => {
+                              await deleteCustomExercise(ex.id);
+                              setConfirmDialog(null);
+                            },
+                          });
+                        }}
+                        style={{
+                          background: "rgba(255,50,50,0.12)",
+                          border: "1px solid rgba(255,50,50,0.2)", borderRadius: "6px",
+                          color: "#ff5555", fontSize: "11px", padding: "2px 8px",
+                          cursor: "pointer", fontFamily: "inherit",
+                        }}>
+                        刪除
+                      </button>
+                    </div>
                   )}
                 </button>
               ))}
@@ -626,8 +713,13 @@ export default function WorkoutTab({
         </div>
 
         <div style={{ marginBottom: "12px" }}>
-          <label style={styles.label}>備註（可選）</label>
-          <input style={styles.input} placeholder="例：感覺很好、需要加重..." value={wNote} onChange={e => setWNote(e.target.value)} />
+          <label style={styles.label}>記錄（可選）</label>
+          <textarea
+            style={{ ...styles.input, resize: "none", minHeight: "72px" }}
+            placeholder="例：感覺很好、需要加重..."
+            value={wNote}
+            onChange={e => setWNote(e.target.value)}
+          />
         </div>
 
         {(() => {
@@ -671,14 +763,84 @@ export default function WorkoutTab({
             ))}
           </div>
         </div>
+        {/* ── 動作篩選列 ── */}
+        {workouts.length > 0 && (() => {
+          const uniqueExercises = [...new Set(workouts.map(w => w.exercise))];
+          return (
+            <div style={{ overflowX: "auto", marginBottom: "12px", paddingBottom: "4px" }}>
+              <div style={{ display: "flex", gap: "6px", minWidth: "max-content" }}>
+                <button
+                  onClick={() => setHistoryExFilter(null)}
+                  style={{
+                    padding: "4px 12px", borderRadius: "14px", fontSize: "12px", fontFamily: "inherit",
+                    border: !historyExFilter ? "1px solid #ff6a00" : "1px solid rgba(255,255,255,0.12)",
+                    background: !historyExFilter ? "rgba(255,106,0,0.2)" : "rgba(255,255,255,0.04)",
+                    color: !historyExFilter ? "#ff6a00" : "#888",
+                    cursor: "pointer", whiteSpace: "nowrap",
+                  }}>全部</button>
+                {uniqueExercises.map(ex => (
+                  <button key={ex}
+                    onClick={() => setHistoryExFilter(historyExFilter === ex ? null : ex)}
+                    style={{
+                      padding: "4px 12px", borderRadius: "14px", fontSize: "12px", fontFamily: "inherit",
+                      border: historyExFilter === ex ? "1px solid #ff6a00" : "1px solid rgba(255,255,255,0.12)",
+                      background: historyExFilter === ex ? "rgba(255,106,0,0.2)" : "rgba(255,255,255,0.04)",
+                      color: historyExFilter === ex ? "#ff6a00" : "#888",
+                      cursor: "pointer", whiteSpace: "nowrap",
+                    }}>{ex}</button>
+                ))}
+              </div>
+            </div>
+          );
+        })()}
+
+        {/* ── 進度圖表（動作篩選時顯示）── */}
+        {historyExFilter && (() => {
+          const isCardioEx = getCategoryForExercise(historyExFilter, customExercises) === "有氧";
+          const exProgressData = workouts
+            .filter(w => w.exercise === historyExFilter)
+            .sort((a, b) => a.date.localeCompare(b.date))
+            .map(w => ({
+              date: w.date.slice(5),
+              value: isCardioEx
+                ? Math.max(...(w.sets?.map(s => parseFloat(s.duration) || 0) || [0]))
+                : Math.max(...(w.sets?.map(s => parseFloat(s.weight) || 0) || [0])),
+            }))
+            .filter(d => d.value > 0);
+          if (exProgressData.length < 2) return null;
+          return (
+            <div style={{ background: "rgba(255,255,255,0.03)", borderRadius: "12px", padding: "12px 8px 8px", marginBottom: "14px" }}>
+              <div style={{ fontSize: "12px", color: "#666", marginBottom: "8px", paddingLeft: "4px" }}>
+                {historyExFilter} · {isCardioEx ? "最長時間趨勢" : "最大重量趨勢"}
+              </div>
+              <ResponsiveContainer width="100%" height={140}>
+                <LineChart data={exProgressData} margin={{ top: 4, right: 8, left: -20, bottom: 0 }}>
+                  <XAxis dataKey="date" tick={{ fill: "#555", fontSize: 10 }} axisLine={false} tickLine={false} />
+                  <YAxis tick={{ fill: "#555", fontSize: 10 }} axisLine={false} tickLine={false} />
+                  <Tooltip
+                    contentStyle={{ background: "#1a1a24", border: "1px solid rgba(255,255,255,0.1)", borderRadius: "8px", fontSize: "12px" }}
+                    labelStyle={{ color: "#888" }}
+                    itemStyle={{ color: "#ff9500" }}
+                    formatter={v => [`${v} ${isCardioEx ? "min" : "kg"}`]}
+                  />
+                  <Line type="monotone" dataKey="value" stroke="#ff6a00" strokeWidth={2} dot={{ fill: "#ff6a00", r: 3 }} activeDot={{ r: 5 }} />
+                </LineChart>
+              </ResponsiveContainer>
+            </div>
+          );
+        })()}
+
         {workouts.length === 0 && (
           <div style={{ color: "#555", fontSize: "14px", textAlign: "center", padding: "20px 0" }}>
             還沒有訓練紀錄
           </div>
         )}
         {workouts.length > 0 && (() => {
+          const filteredWorkouts = historyExFilter
+            ? workouts.filter(w => w.exercise === historyExFilter)
+            : workouts;
           const groupMap = new Map();
-          workouts.forEach(w => {
+          filteredWorkouts.forEach(w => {
             let key, label;
             if (historyGroupMode === "week") {
               key = getWeekStart(w.date);
@@ -773,7 +935,7 @@ export default function WorkoutTab({
                         );
                       })}
                     </div>
-                    {w.note && <div style={{ fontSize: "13px", color: "#888", fontStyle: "italic" }}>📝 {w.note}</div>}
+                    {w.note && <div style={{ fontSize: "13px", color: "#888", fontStyle: "italic", whiteSpace: "pre-wrap", marginTop: 2 }}>📝 {w.note}</div>}
                   </div>
                 ))}
               </div>

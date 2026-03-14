@@ -40,7 +40,13 @@ export default function DashboardTab({ workouts, bodyData, prMap, volumePeriod, 
     workouts.filter(w => new Date(w.date + "T00:00:00") >= weekStart).map(w => w.date)
   ).size;
 
-  const recentWorkouts = workouts.slice(0, 5);
+  const recentWorkouts = [...workouts]
+    .sort((a, b) =>
+      b.date !== a.date
+        ? b.date.localeCompare(a.date)
+        : (b.createdAt?.seconds || 0) - (a.createdAt?.seconds || 0)
+    )
+    .slice(0, 5);
   const topPRs = Object.entries(prMap)
     .sort(([, a], [, b]) => b.weight - a.weight)
     .slice(0, 5);
