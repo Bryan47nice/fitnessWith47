@@ -122,3 +122,33 @@ export function canSaveGoal(targetValue, deadline, goalType, latestBMI) {
   if (goalType === "bmi" && !latestBMI) return false;
   return true;
 }
+
+/**
+ * Filters Google Calendar API event objects, keeping only those whose
+ * summary (title) contains the given keyword (case-insensitive).
+ *
+ * @param {Array}  events  - array of Google Calendar event objects
+ * @param {string} keyword - keyword to match against event.summary
+ * @returns {Array} filtered events
+ */
+export function filterCalendarEvents(events, keyword) {
+  if (!Array.isArray(events) || !keyword) return [];
+  const lower = keyword.toLowerCase();
+  return events.filter(e => (e.summary || "").toLowerCase().includes(lower));
+}
+
+/**
+ * Returns the nearest upcoming class from an array of class objects,
+ * or null if the array is empty.
+ *
+ * @param {Array} upcomingClasses - array of { title, startDateTime (ms or Date), rawDate }
+ * @returns {Object|null} the class with the earliest startDateTime, or null
+ */
+export function getNextClass(upcomingClasses) {
+  if (!Array.isArray(upcomingClasses) || upcomingClasses.length === 0) return null;
+  return upcomingClasses.reduce((earliest, cur) => {
+    const t = (cur.startDateTime instanceof Date ? cur.startDateTime : new Date(cur.startDateTime)).getTime();
+    const et = (earliest.startDateTime instanceof Date ? earliest.startDateTime : new Date(earliest.startDateTime)).getTime();
+    return t < et ? cur : earliest;
+  });
+}

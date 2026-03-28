@@ -23,6 +23,8 @@
 | `detectNewPR(exercise, sets, prMap)` | 偵測是否有新 PR | 無 |
 | `canSaveWorkout(exercise, sets)` | 儲存訓練按鈕是否可用 | 無 |
 | `canSaveGoal(targetValue, deadline, goalType, latestBMI)` | 儲存目標按鈕是否可用 | 無 |
+| `filterCalendarEvents(events, keyword)` | 依關鍵字篩選 Google Calendar 事件 | 無 |
+| `getNextClass(upcomingClasses)` | 回傳最近一筆即將到來的課程，無則回傳 null | 無 |
 
 > 所有函式從 `FitForge.jsx` 抽取後，`FitForge.jsx` 改為 import 使用，行為不變。
 
@@ -86,6 +88,21 @@
 - When：呼叫 `getGoalProgress(goal, context)`
 - Then：回傳 `100`
 
+**TC-G8 訓練頻率目標：本週已訓練天數計算進度**
+- Given：`{ type: "frequency", startValue: 0, targetValue: 4 }`，`today = "2026-03-04"`，workouts 含 2 個不同日期（同週）
+- When：呼叫 `getGoalProgress(goal, context)`
+- Then：回傳 `50`（2/4 天 = 50%）
+
+**TC-G9 動作 PR 目標：prMap 有紀錄時計算進度**
+- Given：`{ type: "exercise_pr", targetExercise: "深蹲", startValue: 80, targetValue: 100 }`，`prMap["深蹲"].weight = 90`
+- When：呼叫 `getGoalProgress(goal, context)`
+- Then：回傳 `50`（(90-80)/(100-80)*100）
+
+**TC-G10 身材圍度目標：使用 latestBody 對應部位計算進度**
+- Given：`{ type: "body_measurement", targetBodyPart: "waist", startValue: 90, targetValue: 80, goalDirection: "decrease" }`，`latestBody.waist = "85"`
+- When：呼叫 `getGoalProgress(goal, context)`
+- Then：回傳 `50`（(90-85)/(90-80)*100）
+
 ---
 
 ### 三、`getGoalTitle(goal)` — 目標標題文字
@@ -104,6 +121,21 @@
 - Given：`{ type: "body_measurement", targetBodyPart: "waist", targetValue: 75 }`
 - When：呼叫 `getGoalTitle(goal)`
 - Then：回傳 `"腰圍 目標：75 cm"`
+
+**TC-T4 訓練頻率目標**
+- Given：`{ type: "frequency", targetValue: 4 }`
+- When：呼叫 `getGoalTitle(goal)`
+- Then：回傳 `"訓練頻率目標：4 天/週"`
+
+**TC-T5 動作 PR 目標**
+- Given：`{ type: "exercise_pr", targetExercise: "深蹲", targetValue: 120 }`
+- When：呼叫 `getGoalTitle(goal)`
+- Then：回傳 `"深蹲 目標：120 kg"`
+
+**TC-T6 未知目標類型，回傳預設文字**
+- Given：`{ type: "unknown_type", targetValue: 99 }`
+- When：呼叫 `getGoalTitle(goal)`
+- Then：回傳 `"目標"`（fallback）
 
 ---
 
@@ -141,6 +173,11 @@
 **TC-B2 缺少身高，不計算**
 - Given：`weight = 70, height = null`
 - When：呼叫 `calcBMI(70, null)`
+- Then：回傳 `null`
+
+**TC-B3 缺少體重，不計算**
+- Given：`weight = null, height = 175`
+- When：呼叫 `calcBMI(null, 175)`
 - Then：回傳 `null`
 
 ---
@@ -195,6 +232,69 @@
 - Given：目前模式為 `"week"`
 - When：`localStorage.setItem("history_group_mode", "month")`
 - Then：`localStorage.getItem("history_group_mode") === "month"`
+
+---
+
+### 八、`filterCalendarEvents(events, keyword)` — Google Calendar 事件篩選
+
+**TC-FC1 關鍵字完全符合 summary 時回傳對應事件**
+- Given：events 含兩筆不同 summary，keyword 符合其中一筆
+- When：呼叫 `filterCalendarEvents(events, "瑜珈")`
+- Then：回傳長度 1，且 summary 為 `"瑜珈課"`
+
+**TC-FC2 大小寫不敏感匹配**
+- Given：event.summary = `"Yoga Class"`，keyword = `"yoga"`
+- When：呼叫 `filterCalendarEvents(events, "yoga")`
+- Then：回傳長度 1（大小寫忽略）
+
+**TC-FC3 無符合項目時回傳空陣列**
+- Given：events 不含符合 keyword 的項目
+- When：呼叫 `filterCalendarEvents(events, "瑜珈")`
+- Then：回傳 `[]`
+
+**TC-FC4 events 非陣列時回傳空陣列**
+- Given：`events = null`，keyword = `"課"`
+- When：呼叫 `filterCalendarEvents(null, "課")`
+- Then：回傳 `[]`
+
+**TC-FC5 keyword 為空字串時回傳空陣列**
+- Given：valid events array，`keyword = ""`
+- When：呼叫 `filterCalendarEvents(events, "")`
+- Then：回傳 `[]`
+
+**TC-FC6 event 沒有 summary 欄位時不崩潰**
+- Given：第一筆 event 無 summary，第二筆有 summary = `"有氧訓練"`，keyword = `"有氧"`
+- When：呼叫 `filterCalendarEvents(events, "有氧")`
+- Then：回傳長度 1，summary 為 `"有氧訓練"`
+
+---
+
+### 九、`getNextClass(upcomingClasses)` — 最近課程查詢
+
+**TC-NC1 空陣列時回傳 null**
+- Given：`upcomingClasses = []`
+- When：呼叫 `getNextClass([])`
+- Then：回傳 `null`
+
+**TC-NC2 非陣列輸入時回傳 null**
+- Given：`upcomingClasses = null`
+- When：呼叫 `getNextClass(null)`
+- Then：回傳 `null`
+
+**TC-NC3 單一課程時直接回傳該課程**
+- Given：`upcomingClasses` 僅含一筆課程物件
+- When：呼叫 `getNextClass(upcomingClasses)`
+- Then：回傳該唯一課程物件
+
+**TC-NC4 多課程時回傳最近的那個**
+- Given：三筆課程，startDateTime 分別為 4/7、4/5、4/10
+- When：呼叫 `getNextClass(upcomingClasses)`
+- Then：回傳 4/5 的課程（最早）
+
+**TC-NC5 startDateTime 為毫秒數字時仍正確比較**
+- Given：兩筆課程，startDateTime 為毫秒 timestamp，分別對應 4/10 和 4/8
+- When：呼叫 `getNextClass(upcomingClasses)`
+- Then：回傳 4/8 的課程（timestamp 較小）
 
 ---
 

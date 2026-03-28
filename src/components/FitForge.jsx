@@ -2,7 +2,7 @@ import { useState, useEffect } from "react";
 import { createPortal } from "react-dom";
 import {
   collection, addDoc, onSnapshot, query, orderBy,
-  doc, setDoc, serverTimestamp, deleteDoc, updateDoc, writeBatch,
+  doc, setDoc, serverTimestamp, deleteDoc, updateDoc, writeBatch, getDocs,
 } from "firebase/firestore";
 import { signOut } from "firebase/auth";
 import { fetchAndActivate, getBoolean, getString, getNumber } from "firebase/remote-config";
@@ -12,6 +12,7 @@ import {
   getWeekStart, calcBMI,
   getGoalProgress as _getGoalProgress,
   detectNewPR,
+  filterCalendarEvents, getNextClass,
 } from "../utils/fitforge.utils.js";
 import styles from "../styles/fitforge.styles.js";
 import DashboardTab from "./tabs/DashboardTab.jsx";
@@ -19,7 +20,7 @@ import WorkoutTab from "./tabs/WorkoutTab.jsx";
 import BodyTab from "./tabs/BodyTab.jsx";
 import GoalsTab from "./tabs/GoalsTab.jsx";
 
-const APP_VERSION = "1.6.2";
+const APP_VERSION = "1.7.0";
 const toLocalDateStr = (d = new Date()) =>
   `${d.getFullYear()}-${String(d.getMonth() + 1).padStart(2, "0")}-${String(d.getDate()).padStart(2, "0")}`;
 
@@ -73,6 +74,7 @@ export default function FitForge({ user }) {
   const [batchCount, setBatchCount] = useState(3);
   const [savedAnim, setSavedAnim] = useState(false);
   const [prAnim, setPrAnim] = useState(false);
+  const [aiRefreshKey, setAiRefreshKey] = useState(0);
 
   // More Panel state
   const [showMorePanel, setShowMorePanel] = useState(false);
@@ -138,6 +140,12 @@ export default function FitForge({ user }) {
   const [expandedGroupKeys, setExpandedGroupKeys] = useState(null);
   const [historyExFilter, setHistoryExFilter] = useState(null);
   const [historyActiveCategory, setHistoryActiveCategory] = useState(null);
+
+  // Google Calendar integration
+  const [calendarConnected, setCalendarConnected] = useState(false);
+  const [nextClass, setNextClass] = useState(null);
+  const [calendarSyncing, setCalendarSyncing] = useState(false);
+  const calendarKeyword = "健身";
 
   const today = toLocalDateStr();
   const todayWorked = workouts.some(w => w.date === today);
@@ -286,6 +294,98 @@ export default function FitForge({ user }) {
     return unsub;
   }, [user.uid]);
 
+  // Subscribe to calendarSync meta
+  useEffect(() => {
+    const unsub = onSnapshot(doc(db, "users", user.uid, "meta", "calendarSync"), (snap) => {
+      if (snap.exists()) setCalendarConnected(snap.data().connected || false);
+    });
+    return unsub;
+  }, [user.uid]);
+
+  // Subscribe to upcomingClasses
+  useEffect(() => {
+    const unsub = onSnapshot(collection(db, "users", user.uid, "upcomingClasses"), (snap) => {
+      const now = new Date();
+      const classes = snap.docs
+        .map(d => ({ id: d.id, ...d.data(), startDateTime: d.data().startDateTime?.toDate?.() || new Date(d.data().startDateTime) }))
+        .filter(c => c.startDateTime > now);
+      setNextClass(getNextClass(classes));
+    });
+    return unsub;
+  }, [user.uid]);
+
+  // ── Google Calendar helpers ──────────────────────────────────────────────
+
+  function loadGIS() {
+    return new Promise((resolve) => {
+      if (window.google?.accounts?.oauth2) { resolve(); return; }
+      const script = document.createElement("script");
+      script.src = "https://accounts.google.com/gsi/client";
+      script.onload = resolve;
+      document.head.appendChild(script);
+    });
+  }
+
+  async function syncCalendar(token) {
+    setCalendarSyncing(true);
+    try {
+      const now = new Date();
+      const timeMax = new Date(now.getTime() + 30 * 24 * 60 * 60 * 1000);
+      const url = `https://www.googleapis.com/calendar/v3/calendars/primary/events?timeMin=${encodeURIComponent(now.toISOString())}&timeMax=${encodeURIComponent(timeMax.toISOString())}&singleEvents=true&orderBy=startTime&maxResults=50`;
+      const res = await fetch(url, { headers: { Authorization: `Bearer ${token}` } });
+      const data = await res.json();
+      const filtered = filterCalendarEvents(data.items || [], calendarKeyword);
+
+      const batch = writeBatch(db);
+      const existing = await getDocs(collection(db, "users", user.uid, "upcomingClasses"));
+      existing.forEach(d => batch.delete(d.ref));
+      filtered.forEach(event => {
+        const startRaw = event.start.dateTime || event.start.date;
+        const endRaw = event.end.dateTime || event.end.date;
+        batch.set(doc(db, "users", user.uid, "upcomingClasses", event.id), {
+          title: event.summary || "健身課",
+          startDateTime: new Date(startRaw),
+          endDateTime: new Date(endRaw),
+          rawDate: startRaw.slice(0, 10),
+        });
+      });
+      batch.set(doc(db, "users", user.uid, "meta", "calendarSync"), {
+        connected: true,
+        keyword: calendarKeyword,
+        lastSynced: serverTimestamp(),
+      }, { merge: true });
+      await batch.commit();
+    } catch (err) {
+      console.error("Calendar sync error:", err);
+    } finally {
+      setCalendarSyncing(false);
+    }
+  }
+
+  async function connectGoogleCalendar() {
+    const clientId = import.meta.env.VITE_GOOGLE_CALENDAR_CLIENT_ID;
+    if (!clientId) { alert("尚未設定 Google Calendar Client ID"); return; }
+    await loadGIS();
+    const tokenClient = window.google.accounts.oauth2.initTokenClient({
+      client_id: clientId,
+      scope: "https://www.googleapis.com/auth/calendar.readonly",
+      callback: async (response) => {
+        if (response.access_token) await syncCalendar(response.access_token);
+      },
+    });
+    tokenClient.requestAccessToken();
+  }
+
+  async function disconnectCalendar() {
+    const snap = await getDocs(collection(db, "users", user.uid, "upcomingClasses"));
+    const batch = writeBatch(db);
+    snap.forEach(d => batch.delete(d.ref));
+    batch.set(doc(db, "users", user.uid, "meta", "calendarSync"), { connected: false }, { merge: true });
+    await batch.commit();
+    setCalendarConnected(false);
+    setNextClass(null);
+  }
+
   // Achievement detection
   useEffect(() => {
     goals.forEach(goal => {
@@ -422,6 +522,10 @@ export default function FitForge({ user }) {
     if (wCalories !== "") docData.calories = parseFloat(wCalories);
     await addDoc(collection(db, "users", user.uid, "workouts"), docData);
     setDoc(doc(db, "userPushTokens", user.uid), { lastWorkoutDate: wDate }, { merge: true }).catch(() => {});
+    if (wDate === toLocalDateStr()) {
+      localStorage.removeItem(`ai_fitness_comment_${toLocalDateStr()}`);
+      setAiRefreshKey(k => k + 1);
+    }
     setWSets(isCardio(name) ? [{ duration: "", distance: "", speed: "", incline: "" }] : []);
     setWNote("");
     setWCalories("");
@@ -494,10 +598,15 @@ export default function FitForge({ user }) {
   }
 
   function deleteWorkout(id) {
+    const workout = workouts.find(w => w.id === id);
     setConfirmDialog({
       message: "確認刪除此訓練紀錄？",
       onConfirm: async () => {
         await deleteDoc(doc(db, "users", user.uid, "workouts", id));
+        if (workout?.date === toLocalDateStr()) {
+          localStorage.removeItem(`ai_fitness_comment_${toLocalDateStr()}`);
+          setAiRefreshKey(k => k + 1);
+        }
         setConfirmDialog(null);
       },
     });
@@ -920,6 +1029,11 @@ export default function FitForge({ user }) {
             volumePeriod={volumePeriod}
             setVolumePeriod={setVolumePeriod}
             streak={streak}
+            nextClass={nextClass}
+            calendarConnected={calendarConnected}
+            onConnectCalendar={connectGoogleCalendar}
+            onSyncCalendar={connectGoogleCalendar}
+            onDisconnectCalendar={disconnectCalendar}
           />
         )}
 
@@ -966,6 +1080,7 @@ export default function FitForge({ user }) {
             updateCustomExercise={updateCustomExercise}
             setConfirmDialog={setConfirmDialog}
             streak={streak}
+            aiRefreshKey={aiRefreshKey}
           />
         )}
 
@@ -1235,15 +1350,43 @@ export default function FitForge({ user }) {
               版本更新記錄
             </div>
 
-            {/* v1.6.2 */}
+            {/* v1.7.0 */}
             <div style={{ marginBottom: "24px" }}>
               <div style={{ display: "flex", alignItems: "center", gap: "10px", marginBottom: "10px" }}>
-                <span style={{ fontSize: "17px", fontWeight: 900, color: "#ffd700" }}>v1.6.2</span>
+                <span style={{ fontSize: "17px", fontWeight: 900, color: "#ffd700" }}>v1.7.0</span>
                 <span style={{
                   fontSize: "11px", fontWeight: 800, color: "#ff6a00",
                   background: "rgba(255,106,0,0.15)", border: "1px solid rgba(255,106,0,0.3)",
                   borderRadius: "6px", padding: "2px 7px", letterSpacing: "0.05em",
                 }}>最新</span>
+                <span style={{ fontSize: "12px", color: "#555", marginLeft: "auto" }}>2026-03-28</span>
+              </div>
+              <div style={{ display: "flex", flexDirection: "column", gap: "7px" }}>
+                <div style={{ fontSize: "14px", color: "#c8c4bc", display: "flex", gap: "8px" }}>
+                  <span style={{ color: "#ffd700", flexShrink: 0 }}>✨</span>
+                  <span>Google Calendar 課程同步，Dashboard 顯示下次上課時間，前一天晚上推播提醒</span>
+                </div>
+              </div>
+            </div>
+
+            {/* v1.6.3 */}
+            <div style={{ marginBottom: "24px" }}>
+              <div style={{ display: "flex", alignItems: "center", gap: "10px", marginBottom: "10px" }}>
+                <span style={{ fontSize: "17px", fontWeight: 900, color: "#e8e4dc" }}>v1.6.3</span>
+                <span style={{ fontSize: "12px", color: "#555", marginLeft: "auto" }}>2026-03-14</span>
+              </div>
+              <div style={{ display: "flex", flexDirection: "column", gap: "7px" }}>
+                <div style={{ fontSize: "14px", color: "#c8c4bc", display: "flex", gap: "8px" }}>
+                  <span style={{ color: "#ffd700", flexShrink: 0 }}>✨</span>
+                  <span>AI 教練 Token 效率優化：壓縮動作歷史格式、今日訓練新增後自動刷新 AI 評語</span>
+                </div>
+              </div>
+            </div>
+
+            {/* v1.6.2 */}
+            <div style={{ marginBottom: "24px" }}>
+              <div style={{ display: "flex", alignItems: "center", gap: "10px", marginBottom: "10px" }}>
+                <span style={{ fontSize: "17px", fontWeight: 900, color: "#e8e4dc" }}>v1.6.2</span>
                 <span style={{ fontSize: "12px", color: "#555", marginLeft: "auto" }}>2026-03-14</span>
               </div>
               <div style={{ display: "flex", flexDirection: "column", gap: "7px" }}>

@@ -25,6 +25,68 @@
 
 ---
 
+## 開發流程（三層 Agent）
+
+### 三層 Agent 職責
+
+| Agent | 角色 | 說明 |
+|-------|------|------|
+| Plan Agent | 規劃 | Plan Mode + Explore subagent，輸出計畫後等用戶核准 |
+| Dev Agent | 實作 | 主對話執行功能開發 |
+| QA Agent | 測試 | 功能完成後由主對話啟動，跑測試 + 補 GWT |
+
+### 完整開發流程（七步驟）
+
+```
+1. Plan Mode（Plan + Explore agents）→ 用戶核准計畫
+2. Dev（主對話）→ 實作功能
+3. QA Agent（subagent）→ 跑測試 + 補 GWT
+4. Version bump（/version-bump skill）
+5. Commit + push
+6. 輸出三組文案選項（Changelog / RC / FCM）
+7. 用戶選完 → Build + deploy + RC 更新 + FCM 推播
+```
+
+### QA Agent 啟動時機（強制）
+
+**每次功能實作完成後（步驟 2 → 步驟 3），主對話必須以 `Agent tool, subagent_type: general-purpose` 啟動 QA Agent。**
+
+QA Agent 固定任務（依序執行）：
+1. 執行 `npm test`，確認現有測試全數通過
+2. 讀取 `src/utils/fitforge.utils.js`（全部匯出函式）與 `src/utils/fitforge.utils.test.js`（現有測試）
+3. 找出**沒有對應測試的純函式**
+4. 若有未覆蓋函式：在 `fitforge.utils.test.js` 補寫 GWT 測試，同步更新 `docs/testing.md`
+5. 補完後再跑一次 `npm test` 確認通過
+6. 回報：「✅ QA 完成：共 X 個測試，新增 Y 個案例」或「⚠️ 測試失敗：[錯誤描述]」
+
+QA Agent 測試規範：
+- Test ID 格式：`TC-{字母}{數字}`（W=getWeekStart, G=getGoalProgress, T=getGoalTitle, P=detectNewPR, B=calcBMI, V=canSave*）
+- 每個 test 必須有 `// Given:` / `// When:` / `// Then:` 三段註解
+- 只測純函式；UI 互動與 Firestore 不在範圍
+- `docs/testing.md` 格式：`**TC-XN**` 標題 + 中文 Given/When/Then 條列
+
+### QA Agent Prompt 範本
+
+啟動 QA Agent 時使用以下 prompt（貼入 Agent tool 的 prompt 欄位）：
+
+```
+你是 FitForge 專案的 QA Agent。請依序完成以下任務：
+
+1. 執行 `npm test`，確認所有測試通過。
+2. 讀取 `src/utils/fitforge.utils.js`（全部匯出函式）與 `src/utils/fitforge.utils.test.js`（現有測試）。
+3. 找出有哪些匯出的純函式尚未有對應的測試 describe block。
+4. 若有未覆蓋的函式，依照現有 GWT 格式補寫測試：
+   - Test ID 接續現有最大編號
+   - 每個 test 含 // Given: / // When: / // Then: 註解
+   - 同步更新 docs/testing.md 的對應 GWT 表格
+5. 補完後再執行一次 `npm test`，確認全數通過。
+6. 最後輸出：「✅ QA 完成：共 X 個測試，新增 Y 個案例」或「⚠️ 測試失敗：[錯誤描述]」
+```
+
+> **不得**在 QA Agent 回報通過前進行 version bump。
+
+---
+
 ## 功能完成後固定輸出（強制，不可省略）
 
 每次功能實作完成、版本 bump、commit + push 之後，**必須**輸出以下三組各兩個選項讓用戶選擇：

@@ -15,6 +15,8 @@ import {
   detectNewPR,
   canSaveWorkout,
   canSaveGoal,
+  filterCalendarEvents,
+  getNextClass,
 } from "./fitforge.utils.js";
 
 // ─── 一、getWeekStart ──────────────────────────────────────────────────────
@@ -117,6 +119,44 @@ describe("getGoalProgress()", () => {
     // Then
     expect(result).toBe(100);
   });
+
+  test("TC-G8 訓練頻率目標：本週已訓練天數計算進度", () => {
+    // Given: frequency goal target 4 days/week, today is Wednesday 2026-03-04
+    const goal = { type: "frequency", startValue: 0, targetValue: 4, goalDirection: "increase" };
+    // workouts: 2 distinct dates within the week of 2026-03-02
+    const context = {
+      today: "2026-03-04",
+      workouts: [
+        { date: "2026-03-02", exercise: "深蹲" },
+        { date: "2026-03-02", exercise: "臥推" }, // same date, counts as 1
+        { date: "2026-03-03", exercise: "硬舉" },
+      ],
+    };
+    // When: 2 distinct training days / 4 target = 50%
+    const result = getGoalProgress(goal, context);
+    // Then
+    expect(result).toBe(50);
+  });
+
+  test("TC-G9 動作 PR 目標：prMap 有紀錄時計算進度", () => {
+    // Given: exercise_pr goal for 深蹲, start 80 kg → target 100 kg, current PR 90 kg
+    const goal = { type: "exercise_pr", targetExercise: "深蹲", startValue: 80, targetValue: 100, goalDirection: "increase" };
+    const context = { prMap: { 深蹲: { weight: 90, date: "2026-03-01" } } };
+    // When: (90 - 80) / (100 - 80) * 100 = 50%
+    const result = getGoalProgress(goal, context);
+    // Then
+    expect(result).toBe(50);
+  });
+
+  test("TC-G10 身材圍度目標：使用 latestBody 對應部位計算進度", () => {
+    // Given: waist goal decrease from 90 cm to 80 cm, current 85 cm
+    const goal = { type: "body_measurement", targetBodyPart: "waist", startValue: 90, targetValue: 80, goalDirection: "decrease" };
+    const context = { latestBody: { waist: "85" } };
+    // When: (90 - 85) / (90 - 80) * 100 = 50%
+    const result = getGoalProgress(goal, context);
+    // Then
+    expect(result).toBe(50);
+  });
 });
 
 // ─── 三、getGoalTitle ─────────────────────────────────────────────────────
@@ -141,6 +181,33 @@ describe("getGoalTitle()", () => {
     const goal = { type: "body_measurement", targetBodyPart: "waist", targetValue: 75 };
     // When / Then
     expect(getGoalTitle(goal)).toBe("腰圍 目標：75 cm");
+  });
+
+  test("TC-T4 訓練頻率目標標題", () => {
+    // Given: frequency goal with targetValue 4 days/week
+    const goal = { type: "frequency", targetValue: 4 };
+    // When
+    const result = getGoalTitle(goal);
+    // Then
+    expect(result).toBe("訓練頻率目標：4 天/週");
+  });
+
+  test("TC-T5 動作 PR 目標標題", () => {
+    // Given: exercise PR goal for 深蹲 targeting 120 kg
+    const goal = { type: "exercise_pr", targetExercise: "深蹲", targetValue: 120 };
+    // When
+    const result = getGoalTitle(goal);
+    // Then
+    expect(result).toBe("深蹲 目標：120 kg");
+  });
+
+  test("TC-T6 未知目標類型回傳預設文字", () => {
+    // Given: goal with an unrecognized type
+    const goal = { type: "unknown_type", targetValue: 99 };
+    // When
+    const result = getGoalTitle(goal);
+    // Then: fallback default string
+    expect(result).toBe("目標");
   });
 });
 
@@ -204,6 +271,14 @@ describe("calcBMI()", () => {
     // When
     const result = calcBMI(70, null);
     // Then
+    expect(result).toBeNull();
+  });
+
+  test("TC-B3 缺少體重，回傳 null", () => {
+    // Given: weight is null, height is provided
+    // When
+    const result = calcBMI(null, 175);
+    // Then: falsy weight guard returns null
     expect(result).toBeNull();
   });
 });
@@ -328,5 +403,132 @@ describe("localStorage 行為", () => {
     localStorage.setItem("history_group_mode", "month");
     // Then
     expect(localStorage.getItem("history_group_mode")).toBe("month");
+  });
+});
+
+// ─── 八、filterCalendarEvents ─────────────────────────────────────────────
+
+describe("filterCalendarEvents()", () => {
+  test("TC-FC1 關鍵字完全符合 summary 時回傳對應事件", () => {
+    // Given: events array with two distinct summaries, keyword matches one
+    const events = [
+      { summary: "瑜珈課", start: { dateTime: "2026-04-01T10:00:00" } },
+      { summary: "有氧訓練", start: { dateTime: "2026-04-02T10:00:00" } },
+    ];
+    const keyword = "瑜珈";
+    // When
+    const result = filterCalendarEvents(events, keyword);
+    // Then: only the matching event is returned
+    expect(result).toHaveLength(1);
+    expect(result[0].summary).toBe("瑜珈課");
+  });
+
+  test("TC-FC2 大小寫不敏感匹配", () => {
+    // Given: event summary in uppercase, keyword in lowercase
+    const events = [{ summary: "Yoga Class" }];
+    const keyword = "yoga";
+    // When
+    const result = filterCalendarEvents(events, keyword);
+    // Then: case-insensitive match returns the event
+    expect(result).toHaveLength(1);
+  });
+
+  test("TC-FC3 無符合項目時回傳空陣列", () => {
+    // Given: events that don't match the keyword
+    const events = [
+      { summary: "游泳課" },
+      { summary: "重訓課" },
+    ];
+    const keyword = "瑜珈";
+    // When
+    const result = filterCalendarEvents(events, keyword);
+    // Then: empty array
+    expect(result).toHaveLength(0);
+  });
+
+  test("TC-FC4 events 非陣列時回傳空陣列", () => {
+    // Given: events is not an array
+    const events = null;
+    const keyword = "課";
+    // When
+    const result = filterCalendarEvents(events, keyword);
+    // Then: guard returns empty array
+    expect(result).toEqual([]);
+  });
+
+  test("TC-FC5 keyword 為空字串時回傳空陣列", () => {
+    // Given: valid events array but no keyword provided
+    const events = [{ summary: "瑜珈課" }];
+    const keyword = "";
+    // When
+    const result = filterCalendarEvents(events, keyword);
+    // Then: empty keyword guard returns empty array
+    expect(result).toEqual([]);
+  });
+
+  test("TC-FC6 event 沒有 summary 欄位時不崩潰", () => {
+    // Given: an event object missing the summary field
+    const events = [{ id: "abc" }, { summary: "有氧訓練" }];
+    const keyword = "有氧";
+    // When
+    const result = filterCalendarEvents(events, keyword);
+    // Then: event without summary is skipped, matching event returned
+    expect(result).toHaveLength(1);
+    expect(result[0].summary).toBe("有氧訓練");
+  });
+});
+
+// ─── 九、getNextClass ─────────────────────────────────────────────────────
+
+describe("getNextClass()", () => {
+  test("TC-NC1 空陣列時回傳 null", () => {
+    // Given: no upcoming classes
+    const upcomingClasses = [];
+    // When
+    const result = getNextClass(upcomingClasses);
+    // Then
+    expect(result).toBeNull();
+  });
+
+  test("TC-NC2 非陣列輸入時回傳 null", () => {
+    // Given: input is not an array
+    const upcomingClasses = null;
+    // When
+    const result = getNextClass(upcomingClasses);
+    // Then
+    expect(result).toBeNull();
+  });
+
+  test("TC-NC3 單一課程時直接回傳該課程", () => {
+    // Given: only one upcoming class
+    const cls = { title: "瑜珈課", startDateTime: new Date("2026-04-05T10:00:00"), rawDate: "2026-04-05" };
+    const upcomingClasses = [cls];
+    // When
+    const result = getNextClass(upcomingClasses);
+    // Then: the only class is returned
+    expect(result).toBe(cls);
+  });
+
+  test("TC-NC4 多課程時回傳最近的那個", () => {
+    // Given: three classes at different times
+    const cls1 = { title: "瑜珈課", startDateTime: new Date("2026-04-07T10:00:00"), rawDate: "2026-04-07" };
+    const cls2 = { title: "有氧課", startDateTime: new Date("2026-04-05T09:00:00"), rawDate: "2026-04-05" };
+    const cls3 = { title: "重訓課", startDateTime: new Date("2026-04-10T08:00:00"), rawDate: "2026-04-10" };
+    const upcomingClasses = [cls1, cls2, cls3];
+    // When
+    const result = getNextClass(upcomingClasses);
+    // Then: earliest startDateTime is cls2
+    expect(result).toBe(cls2);
+  });
+
+  test("TC-NC5 startDateTime 為毫秒數字時仍正確比較", () => {
+    // Given: startDateTime stored as millisecond timestamps
+    const cls1 = { title: "課A", startDateTime: new Date("2026-04-10T08:00:00").getTime() };
+    const cls2 = { title: "課B", startDateTime: new Date("2026-04-08T08:00:00").getTime() };
+    const upcomingClasses = [cls1, cls2];
+    // When
+    const result = getNextClass(upcomingClasses);
+    // Then: cls2 has the earlier timestamp
+    expect(result).toBe(cls2);
   });
 });

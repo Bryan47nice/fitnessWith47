@@ -21,7 +21,30 @@ function getBmiLabel(b) {
   return "肥胖";
 }
 
-export default function DashboardTab({ workouts, bodyData, prMap, volumePeriod, setVolumePeriod, streak }) {
+function formatClassTime(startDateTime) {
+  const d = startDateTime instanceof Date ? startDateTime : new Date(startDateTime);
+  const month = d.getMonth() + 1;
+  const day = d.getDate();
+  const weekdays = ["日", "一", "二", "三", "四", "五", "六"];
+  const weekday = weekdays[d.getDay()];
+  const hh = String(d.getHours()).padStart(2, "0");
+  const mm = String(d.getMinutes()).padStart(2, "0");
+  return `${month}月${day}日 週${weekday} ${hh}:${mm}`;
+}
+
+function daysUntilClass(startDateTime) {
+  const today = new Date();
+  today.setHours(0, 0, 0, 0);
+  const d = startDateTime instanceof Date ? startDateTime : new Date(startDateTime);
+  const target = new Date(d);
+  target.setHours(0, 0, 0, 0);
+  const diff = Math.round((target - today) / 86400000);
+  if (diff === 0) return "今天";
+  if (diff === 1) return "明天";
+  return `${diff} 天後`;
+}
+
+export default function DashboardTab({ workouts, bodyData, prMap, volumePeriod, setVolumePeriod, streak, nextClass, calendarConnected, onConnectCalendar, onSyncCalendar, onDisconnectCalendar }) {
   const [prExpanded, setPrExpanded] = useState(true);
 
   const workoutDays = new Set(workouts.map(w => w.date)).size;
@@ -101,6 +124,69 @@ export default function DashboardTab({ workouts, bodyData, prMap, volumePeriod, 
 
   return (
     <div>
+      {/* 下次上課卡片 */}
+      <div style={{ ...styles.card, marginBottom: 12 }}>
+        <div style={{ display: "flex", justifyContent: "space-between", alignItems: "center" }}>
+          <div style={styles.sectionTitle}>下次上課</div>
+          {calendarConnected && (
+            <div style={{ display: "flex", gap: 8, alignItems: "center" }}>
+              <button
+                onClick={onSyncCalendar}
+                title="重新同步"
+                style={{ background: "none", border: "none", cursor: "pointer", fontSize: 15, color: "#888", padding: "2px 4px", lineHeight: 1 }}
+              >↻</button>
+              <button
+                onClick={onDisconnectCalendar}
+                title="中斷連結"
+                style={{ background: "none", border: "none", cursor: "pointer", fontSize: 13, color: "#555", padding: "2px 4px", lineHeight: 1 }}
+              >✕</button>
+            </div>
+          )}
+        </div>
+
+        {!calendarConnected ? (
+          <div style={{ textAlign: "center", paddingTop: 8, paddingBottom: 4 }}>
+            <div style={{ fontSize: 13, color: "#666", marginBottom: 12 }}>
+              連結 Google Calendar 自動顯示課程時間
+            </div>
+            <button
+              onClick={onConnectCalendar}
+              style={{
+                background: "linear-gradient(135deg, #4285F4, #34A853)",
+                color: "#fff", border: "none", borderRadius: 10,
+                padding: "10px 20px", fontSize: 14, fontWeight: 700,
+                cursor: "pointer", letterSpacing: "0.03em",
+              }}
+            >
+              連結 Google Calendar
+            </button>
+          </div>
+        ) : nextClass ? (
+          <div style={{ display: "flex", justifyContent: "space-between", alignItems: "center", marginTop: 8 }}>
+            <div>
+              <div style={{ fontSize: 18, fontWeight: 800, color: "#e8e4dc", marginBottom: 4 }}>
+                {nextClass.title}
+              </div>
+              <div style={{ fontSize: 13, color: "#aaa" }}>
+                {formatClassTime(nextClass.startDateTime)}
+              </div>
+            </div>
+            <div style={{
+              background: "rgba(255,106,0,0.15)", borderRadius: 10,
+              padding: "6px 14px", textAlign: "center",
+            }}>
+              <div style={{ fontSize: 22, fontWeight: 900, color: "#ff6a00", lineHeight: 1 }}>
+                {daysUntilClass(nextClass.startDateTime)}
+              </div>
+            </div>
+          </div>
+        ) : (
+          <div style={{ fontSize: 13, color: "#666", paddingTop: 8, textAlign: "center" }}>
+            近 30 天沒有排課
+          </div>
+        )}
+      </div>
+
       <div style={styles.statRow}>
         <div style={styles.stat}>
           <div style={styles.statNum}>{workoutDays}</div>

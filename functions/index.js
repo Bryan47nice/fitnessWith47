@@ -25,7 +25,7 @@ exports.generateFitnessComment = onCall(
     let content;
     if (exercise) {
       const histStr = (exerciseHistory || [])
-        .map(r => `${r.date}: ${JSON.stringify(r.sets)}`)
+        .map(r => `${r.date}: ${(r.sets || []).map(s => `${s.weight}kg×${s.reps}`).join(', ')}`)
         .join('\n');
       content = `你是健身 AI 教練，用繁體中文回覆，2到3句話，針對用戶的「${exercise}」訓練紀錄給出具體評價或建議。\n歷史紀錄（最近）：\n${histStr || '尚無紀錄'}\n只輸出評語本身，不要多餘說明。`;
     } else {
@@ -88,5 +88,75 @@ exports.sendWorkoutReminders = onSchedule(
     }
     await Promise.all(sends);
     console.log(`Processed ${sends.length} tokens`);
+  }
+);
+
+exports.sendClassReminders = onSchedule(
+  { schedule: '0 12 * * *', timeZone: 'UTC', region: 'asia-east1', memory: '256MiB' },
+  async () => {
+    const tomorrow = new Date();
+    tomorrow.setUTCDate(tomorrow.getUTCDate() + 1);
+    const tomorrowStr = tomorrow.toISOString().slice(0, 10); // YYYY-MM-DD
+
+    // Find all users who have a class tomorrow
+    const usersSnap = await db.collectionGroup('upcomingClasses')
+      .where('rawDate', '==', tomorrowStr)
+      .get();
+
+    if (usersSnap.empty) {
+      console.log('No classes scheduled for tomorrow.');
+      return;
+    }
+
+    // Group by user (parent path: users/{uid}/upcomingClasses/{id})
+    const userClassMap = {};
+    usersSnap.forEach(d => {
+      const uid = d.ref.parent.parent.id;
+      if (!userClassMap[uid]) userClassMap[uid] = [];
+      userClassMap[uid].push(d.data());
+    });
+
+    const oneDayAgoTs = Timestamp.fromMillis(Date.now() - ONE_DAY_MS);
+    const sends = [];
+
+    for (const [uid, classes] of Object.entries(userClassMap)) {
+      const tokenDoc = await db.collection('userPushTokens').doc(uid).get();
+      if (!tokenDoc.exists) continue;
+      const { fcmToken, lastNotifiedAt } = tokenDoc.data();
+      if (!fcmToken) continue;
+      if (lastNotifiedAt?.toMillis() > oneDayAgoTs.toMillis()) continue;
+
+      const cls = classes[0];
+      const startTime = cls.startDateTime?.toDate?.() || new Date(cls.startDateTime);
+      const hh = String(startTime.getHours()).padStart(2, '0');
+      const mm = String(startTime.getMinutes()).padStart(2, '0');
+      const timeStr = `${hh}:${mm}`;
+
+      sends.push(
+        getMessaging().send({
+          token: fcmToken,
+          notification: {
+            title: '明天有健身課 💪',
+            body: `${cls.title}  ${timeStr} 開始，準備好了嗎？`,
+          },
+          webpush: {
+            notification: {
+              icon: 'https://fitnesswith47.web.app/icons/icon-192.png',
+              badge: 'https://fitnesswith47.web.app/icons/badge-72.png',
+              tag: 'fitforge-class-reminder',
+            },
+            fcmOptions: { link: 'https://fitnesswith47.web.app' },
+          },
+        })
+        .then(() => tokenDoc.ref.update({ lastNotifiedAt: Timestamp.now() }))
+        .catch(async (err) => {
+          const stale = ['messaging/registration-token-not-registered', 'messaging/invalid-registration-token'];
+          if (stale.includes(err.code)) await tokenDoc.ref.delete();
+          else console.error(`FCM error uid=${uid}:`, err.code);
+        })
+      );
+    }
+    await Promise.all(sends);
+    console.log(`Sent class reminders to ${sends.length} users for ${tomorrowStr}`);
   }
 );
