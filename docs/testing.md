@@ -22,7 +22,7 @@
 | `getGoalProgress(goal, context)` | 計算目標進度百分比（0–100） | 無 |
 | `detectNewPR(exercise, sets, prMap)` | 偵測是否有新 PR | 無 |
 | `canSaveWorkout(exercise, sets)` | 儲存訓練按鈕是否可用 | 無 |
-| `canSaveGoal(targetValue, deadline, goalType, latestBMI)` | 儲存目標按鈕是否可用 | 無 |
+| `canSaveGoal(targetValue, deadline, goalType, latestBMI, opts)` | 儲存目標按鈕是否可用（opts 含 frequencyMode、targetExercise） | 無 |
 | `filterCalendarEvents(events, keyword)` | 依關鍵字篩選 Google Calendar 事件 | 無 |
 | `getNextClass(upcomingClasses)` | 回傳最近一筆即將到來的課程，無則回傳 null | 無 |
 
@@ -103,6 +103,16 @@
 - When：呼叫 `getGoalProgress(goal, context)`
 - Then：回傳 `50`（(90-85)/(90-80)*100）
 
+**TC-G11 訓練頻率目標（累計模式）：計算所有訓練日去重總天數**
+- Given：`{ type: "frequency", targetValue: 20, frequencyMode: "cumulative", startValue: 0 }`，workouts 含 10 筆記錄但僅 8 個不同日期
+- When：呼叫 `getGoalProgress(goal, context)`
+- Then：回傳 `40`（8 個不同訓練日 / 20 目標 * 100 = 40%）
+
+**TC-G12 有氧目標：使用 cardioMap 計算進度**
+- Given：`{ type: "cardio", targetExercise: "跑步機", startValue: 0, targetValue: 10, goalDirection: "increase" }`，`cardioMap["跑步機"].reps = 5`
+- When：呼叫 `getGoalProgress(goal, context)`
+- Then：回傳 `50`（(5-0)/(10-0)*100）
+
 ---
 
 ### 三、`getGoalTitle(goal)` — 目標標題文字
@@ -122,10 +132,15 @@
 - When：呼叫 `getGoalTitle(goal)`
 - Then：回傳 `"腰圍 目標：75 cm"`
 
-**TC-T4 訓練頻率目標**
-- Given：`{ type: "frequency", targetValue: 4 }`
+**TC-T4 訓練頻率目標（每週模式）**
+- Given：`{ type: "frequency", targetValue: 4, frequencyMode: "weekly" }`
 - When：呼叫 `getGoalTitle(goal)`
-- Then：回傳 `"訓練頻率目標：4 天/週"`
+- Then：回傳 `"訓練頻率目標：每週 4 天"`
+
+**TC-T4b 訓練頻率目標（累計模式）**
+- Given：`{ type: "frequency", targetValue: 20, frequencyMode: "cumulative" }`
+- When：呼叫 `getGoalTitle(goal)`
+- Then：回傳 `"訓練頻率目標：累計 20 天"`
 
 **TC-T5 動作 PR 目標**
 - Given：`{ type: "exercise_pr", targetExercise: "深蹲", targetValue: 120 }`
@@ -136,6 +151,21 @@
 - Given：`{ type: "unknown_type", targetValue: 99 }`
 - When：呼叫 `getGoalTitle(goal)`
 - Then：回傳 `"目標"`（fallback）
+
+**TC-T7 有氧目標標題（duration_min 時間單位）**
+- Given：`{ type: "cardio", targetExercise: "跑步機", targetCardioMetric: "duration_min", targetValue: 45 }`
+- When：呼叫 `getGoalTitle(goal)`
+- Then：回傳 `"跑步機 目標：45 分鐘"`
+
+**TC-T8 有氧目標標題（distance_km 距離單位）**
+- Given：`{ type: "cardio", targetExercise: "慢跑", targetCardioMetric: "distance_km", targetValue: 5 }`
+- When：呼叫 `getGoalTitle(goal)`
+- Then：回傳 `"慢跑 目標：5 km"`
+
+**TC-T9 有氧目標無 targetExercise 時標題使用預設「有氧」**
+- Given：`{ type: "cardio", targetExercise: "", targetCardioMetric: "distance_km", targetValue: 3 }`
+- When：呼叫 `getGoalTitle(goal)`
+- Then：回傳 `"有氧 目標：3 km"`（fallback to "有氧"）
 
 ---
 
@@ -199,6 +229,21 @@
 - When：呼叫 `canSaveWorkout("深蹲", sets)`
 - Then：回傳 `true`
 
+**TC-V3b saveWorkout — 有氧 set 填入時間時啟用**
+- Given：`exercise = "慢跑"`，`sets = [{ duration: "30", speed: "", incline: "" }]`
+- When：呼叫 `canSaveWorkout("慢跑", sets)`
+- Then：回傳 `true`
+
+**TC-V3c saveWorkout — 有氧 set 填入速度時啟用**
+- Given：`exercise = "跑步機"`，`sets = [{ duration: "", speed: "10", incline: "" }]`
+- When：呼叫 `canSaveWorkout("跑步機", sets)`
+- Then：回傳 `true`
+
+**TC-V3d saveWorkout — 有氧 set 全空時禁用**
+- Given：`exercise = "游泳"`，`sets = [{ duration: "", speed: "", incline: "" }]`
+- When：呼叫 `canSaveWorkout("游泳", sets)`
+- Then：回傳 `false`
+
 **TC-V4 saveGoal — 無截止日期時禁用**
 - Given：`targetValue = "65"`, `deadline = ""`
 - When：呼叫 `canSaveGoal("65", "", "weight", null)`
@@ -208,6 +253,41 @@
 - Given：`goalType = "bmi"`, `latestBMI = null`
 - When：呼叫 `canSaveGoal("22", "2026-06-01", "bmi", null)`
 - Then：回傳 `false`
+
+**TC-V5b saveGoal — 正常目標有值時啟用**
+- Given：`targetValue = "65"`, `deadline = "2026-06-01"`, `goalType = "weight"`, `latestBMI = null`
+- When：呼叫 `canSaveGoal("65", "2026-06-01", "weight", null)`
+- Then：回傳 `true`
+
+**TC-V5c saveGoal — BMI 目標有 BMI 資料時啟用**
+- Given：`goalType = "bmi"`, `latestBMI = 24.5`
+- When：呼叫 `canSaveGoal("22", "2026-06-01", "bmi", 24.5)`
+- Then：回傳 `true`
+
+**TC-V5d saveGoal — 頻率目標 targetValue < 1 時禁用**
+- Given：`goalType = "frequency"`, `targetValue = "0"`, `frequencyMode = "weekly"`
+- When：呼叫 `canSaveGoal("0", "2026-06-01", "frequency", null, { frequencyMode: "weekly" })`
+- Then：回傳 `false`（值低於最小值 1）
+
+**TC-V5e saveGoal — 每週頻率目標 targetValue > 7 時禁用**
+- Given：`goalType = "frequency"`, `targetValue = "8"`, `frequencyMode = "weekly"`
+- When：呼叫 `canSaveGoal("8", "2026-06-01", "frequency", null, { frequencyMode: "weekly" })`
+- Then：回傳 `false`（每週不可能超過 7 天）
+
+**TC-V5f saveGoal — 累計頻率目標 targetValue > 7 時仍可儲存**
+- Given：`goalType = "frequency"`, `targetValue = "30"`, `frequencyMode = "cumulative"`
+- When：呼叫 `canSaveGoal("30", "2026-12-31", "frequency", null, { frequencyMode: "cumulative" })`
+- Then：回傳 `true`（累計模式無上限）
+
+**TC-V5g saveGoal — 有氧目標未指定 targetExercise 時禁用**
+- Given：`goalType = "cardio"`, `opts.targetExercise = ""`
+- When：呼叫 `canSaveGoal("10", "2026-06-01", "cardio", null, { targetExercise: "" })`
+- Then：回傳 `false`（有氧目標必須指定動作）
+
+**TC-V5h saveGoal — 有氧目標有 targetExercise 時啟用**
+- Given：`goalType = "cardio"`, `opts.targetExercise = "跑步機"`
+- When：呼叫 `canSaveGoal("10", "2026-06-01", "cardio", null, { targetExercise: "跑步機" })`
+- Then：回傳 `true`
 
 ---
 

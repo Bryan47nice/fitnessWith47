@@ -20,7 +20,7 @@ import WorkoutTab from "./tabs/WorkoutTab.jsx";
 import BodyTab from "./tabs/BodyTab.jsx";
 import GoalsTab from "./tabs/GoalsTab.jsx";
 
-const APP_VERSION = "1.7.0";
+const APP_VERSION = "1.8.0";
 const toLocalDateStr = (d = new Date()) =>
   `${d.getFullYear()}-${String(d.getMonth() + 1).padStart(2, "0")}-${String(d.getDate()).padStart(2, "0")}`;
 
@@ -134,6 +134,10 @@ export default function FitForge({ user }) {
   const [goalDeadline, setGoalDeadline] = useState("");
   const [goalNote, setGoalNote] = useState("");
   const [goalCelebAnim, setGoalCelebAnim] = useState(false);
+  const [goalFrequencyMode, setGoalFrequencyMode] = useState("weekly"); // "weekly" | "cumulative"
+  const [goalCardioMetric, setGoalCardioMetric] = useState("distance_km"); // "distance_km" | "duration_min"
+  const [goalDirectionOverride, setGoalDirectionOverride] = useState(null); // null=auto | "increase" | "decrease"
+  const [editingGoalId, setEditingGoalId] = useState(null); // null=new | goalId=edit
   const [historyGroupMode, setHistoryGroupMode] = useState(
     () => localStorage.getItem("history_group_mode") || "week"
   );
@@ -677,15 +681,39 @@ export default function FitForge({ user }) {
   async function saveGoal() {
     if (!goalTargetValue || !goalDeadline) return;
     if (goalType === "bmi" && !latestBMI) return;
-    const ws = getWeekStart(today);
+
+    // Edit mode: only update editable fields, keep startValue unchanged
+    if (editingGoalId) {
+      const autoDirection = parseFloat(goalTargetValue) < (goals.find(g => g.id === editingGoalId)?.startValue ?? 0)
+        ? "decrease" : "increase";
+      const goalDirection = goalDirectionOverride ?? autoDirection;
+      await updateDoc(doc(db, "users", user.uid, "goals", editingGoalId), {
+        targetValue: parseFloat(goalTargetValue),
+        deadline: goalDeadline,
+        note: goalNote.trim(),
+        goalDirection,
+        celebrated: false, // allow re-celebrate if target raised
+      });
+      setGoalTargetValue(""); setGoalDeadline(""); setGoalNote("");
+      setEditingGoalId(null); setGoalDirectionOverride(null);
+      setShowGoalSheet(false);
+      return;
+    }
+
+    // New goal: calculate startValue
     let startValue = 0;
     let unit = "kg";
     if (goalType === "weight") {
       startValue = latestBody?.weight ? parseFloat(latestBody.weight) : 0;
       unit = "kg";
     } else if (goalType === "frequency") {
-      startValue = new Set(workouts.filter(w => w.date >= ws).map(w => w.date)).size;
-      unit = "天/週";
+      if (goalFrequencyMode === "cumulative") {
+        startValue = new Set(workouts.map(w => w.date)).size;
+        unit = "天（累計）";
+      } else {
+        startValue = 0; // weekly mode: always starts from 0 each week
+        unit = "天/週";
+      }
     } else if (goalType === "exercise_pr") {
       startValue = prMap[goalTargetExercise]?.weight ?? 0;
       unit = "kg";
@@ -695,16 +723,22 @@ export default function FitForge({ user }) {
     } else if (goalType === "bmi") {
       startValue = latestBMI;
       unit = "";
+    } else if (goalType === "cardio") {
+      startValue = cardioMap[goalTargetExercise]?.reps ?? 0;
+      unit = goalCardioMetric === "duration_min" ? "分鐘" : "km";
     }
-    const goalDirection = parseFloat(goalTargetValue) < startValue ? "decrease" : "increase";
+    const autoDirection = parseFloat(goalTargetValue) < startValue ? "decrease" : "increase";
+    const goalDirection = goalDirectionOverride ?? autoDirection;
     await addDoc(collection(db, "users", user.uid, "goals"), {
       type: goalType,
       targetValue: parseFloat(goalTargetValue),
       startValue,
       unit,
       goalDirection,
+      ...(goalType === "frequency" ? { frequencyMode: goalFrequencyMode } : {}),
       ...(goalType === "exercise_pr" ? { targetExercise: goalTargetExercise } : {}),
       ...(goalType === "body_measurement" ? { targetBodyPart: goalTargetBodyPart } : {}),
+      ...(goalType === "cardio" ? { targetExercise: goalTargetExercise, targetCardioMetric: goalCardioMetric } : {}),
       deadline: goalDeadline,
       note: goalNote.trim(),
       celebrated: false,
@@ -712,7 +746,25 @@ export default function FitForge({ user }) {
       completedAt: null,
     });
     setGoalTargetValue(""); setGoalDeadline(""); setGoalNote("");
+    setGoalDirectionOverride(null);
     setShowGoalSheet(false);
+  }
+
+  function openEditGoal(goal) {
+    setEditingGoalId(goal.id);
+    setGoalType(goal.type);
+    setGoalTargetValue(String(goal.targetValue));
+    setGoalDeadline(goal.deadline);
+    setGoalNote(goal.note || "");
+    setGoalDirectionOverride(goal.goalDirection ?? null);
+    if (goal.type === "frequency") setGoalFrequencyMode(goal.frequencyMode || "weekly");
+    if (goal.type === "cardio") {
+      setGoalTargetExercise(goal.targetExercise || exerciseCategories[0].exercises[0]);
+      setGoalCardioMetric(goal.targetCardioMetric || "distance_km");
+    }
+    if (goal.type === "exercise_pr") setGoalTargetExercise(goal.targetExercise || exerciseCategories[0].exercises[0]);
+    if (goal.type === "body_measurement") setGoalTargetBodyPart(goal.targetBodyPart || "waist");
+    setShowGoalSheet(true);
   }
 
   function shareApp() {
@@ -760,8 +812,21 @@ export default function FitForge({ user }) {
     });
   });
 
+  // Cardio Map: key=exercise, value={ reps (distance km or duration min), date }
+  const cardioMap = {};
+  workouts.forEach(w => {
+    w.sets?.forEach(s => {
+      const r = parseInt(s.reps);
+      if (!isNaN(r) && r > 0) {
+        if (!cardioMap[w.exercise] || r > cardioMap[w.exercise].reps) {
+          cardioMap[w.exercise] = { reps: r, date: w.date };
+        }
+      }
+    });
+  });
+
   const getGoalProgress = (goal) =>
-    _getGoalProgress(goal, { latestBody, latestBMI, workouts, prMap, today });
+    _getGoalProgress(goal, { latestBody, latestBMI, workouts, prMap, cardioMap, today });
 
   function getCategoryForExercise(name) {
     for (const cat of exerciseCategories) {
@@ -1152,7 +1217,11 @@ export default function FitForge({ user }) {
             goals={goals}
             today={today}
             getGoalProgress={getGoalProgress}
-            showGoalSheet={showGoalSheet} setShowGoalSheet={setShowGoalSheet}
+            showGoalSheet={showGoalSheet}
+            setShowGoalSheet={(v) => {
+              if (!v) { setEditingGoalId(null); setGoalDirectionOverride(null); }
+              setShowGoalSheet(v);
+            }}
             goalType={goalType} setGoalType={setGoalType}
             goalTargetValue={goalTargetValue} setGoalTargetValue={setGoalTargetValue}
             goalTargetExercise={goalTargetExercise} setGoalTargetExercise={setGoalTargetExercise}
@@ -1163,6 +1232,11 @@ export default function FitForge({ user }) {
             latestBMI={latestBMI}
             deleteGoal={deleteGoal}
             saveGoal={saveGoal}
+            editingGoalId={editingGoalId}
+            openEditGoal={openEditGoal}
+            goalFrequencyMode={goalFrequencyMode} setGoalFrequencyMode={setGoalFrequencyMode}
+            goalCardioMetric={goalCardioMetric} setGoalCardioMetric={setGoalCardioMetric}
+            goalDirectionOverride={goalDirectionOverride} setGoalDirectionOverride={setGoalDirectionOverride}
             setPickerTarget={setPickerTarget}
             setShowExPicker={setShowExPicker}
           />
@@ -1394,15 +1468,29 @@ export default function FitForge({ user }) {
               版本更新記錄
             </div>
 
-            {/* v1.7.0 */}
+            {/* v1.8.0 */}
             <div style={{ marginBottom: "24px" }}>
               <div style={{ display: "flex", alignItems: "center", gap: "10px", marginBottom: "10px" }}>
-                <span style={{ fontSize: "17px", fontWeight: 900, color: "#ffd700" }}>v1.7.0</span>
+                <span style={{ fontSize: "17px", fontWeight: 900, color: "#ffd700" }}>v1.8.0</span>
                 <span style={{
                   fontSize: "11px", fontWeight: 800, color: "#ff6a00",
                   background: "rgba(255,106,0,0.15)", border: "1px solid rgba(255,106,0,0.3)",
                   borderRadius: "6px", padding: "2px 7px", letterSpacing: "0.05em",
                 }}>最新</span>
+                <span style={{ fontSize: "12px", color: "#555", marginLeft: "auto" }}>2026-03-29</span>
+              </div>
+              <div style={{ display: "flex", flexDirection: "column", gap: "7px" }}>
+                <div style={{ fontSize: "14px", color: "#c8c4bc", display: "flex", gap: "8px" }}>
+                  <span style={{ color: "#ffd700", flexShrink: 0 }}>✨</span>
+                  <span>目標追蹤功能優化：有氧目標類型、頻率雙模式、目標可編輯、目標方向選擇</span>
+                </div>
+              </div>
+            </div>
+
+            {/* v1.7.0 */}
+            <div style={{ marginBottom: "24px" }}>
+              <div style={{ display: "flex", alignItems: "center", gap: "10px", marginBottom: "10px" }}>
+                <span style={{ fontSize: "17px", fontWeight: 900, color: "#e8e4dc" }}>v1.7.0</span>
                 <span style={{ fontSize: "12px", color: "#555", marginLeft: "auto" }}>2026-03-28</span>
               </div>
               <div style={{ display: "flex", flexDirection: "column", gap: "7px" }}>

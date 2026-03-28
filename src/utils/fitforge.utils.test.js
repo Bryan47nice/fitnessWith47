@@ -157,6 +157,41 @@ describe("getGoalProgress()", () => {
     // Then
     expect(result).toBe(50);
   });
+
+  test("TC-G11 訓練頻率目標（累計模式）：計算所有訓練日去重總天數", () => {
+    // Given: frequency goal with cumulative mode, targeting 20 total days
+    const goal = { type: "frequency", targetValue: 20, frequencyMode: "cumulative", startValue: 0, goalDirection: "increase" };
+    // workouts: 3 distinct dates (one date has 2 records, counts as 1)
+    const context = {
+      today: "2026-03-28",
+      workouts: [
+        { date: "2026-01-05", exercise: "深蹲" },
+        { date: "2026-01-10", exercise: "臥推" },
+        { date: "2026-01-10", exercise: "硬舉" }, // same date, counts as 1
+        { date: "2026-02-03", exercise: "肩推" },
+        { date: "2026-02-03", exercise: "引體向上" }, // same date, counts as 1
+        { date: "2026-03-01", exercise: "深蹲" },
+        { date: "2026-03-15", exercise: "臥推" },
+        { date: "2026-03-20", exercise: "跑步機" },
+        { date: "2026-03-25", exercise: "深蹲" },
+        { date: "2026-03-27", exercise: "硬舉" },
+      ],
+    };
+    // When: 8 distinct training days / 20 target = 40%  (startValue=0, so use increase formula: (8-0)/(20-0)*100)
+    const result = getGoalProgress(goal, context);
+    // Then
+    expect(result).toBe(40);
+  });
+
+  test("TC-G12 有氧目標：使用 cardioMap 計算進度", () => {
+    // Given: cardio goal for 跑步機, start 0 km → target 10 km, current cardioMap shows 5
+    const goal = { type: "cardio", targetExercise: "跑步機", startValue: 0, targetValue: 10, goalDirection: "increase" };
+    const context = { cardioMap: { 跑步機: { reps: 5, date: "2026-03-27" } } };
+    // When: (5 - 0) / (10 - 0) * 100 = 50%
+    const result = getGoalProgress(goal, context);
+    // Then
+    expect(result).toBe(50);
+  });
 });
 
 // ─── 三、getGoalTitle ─────────────────────────────────────────────────────
@@ -183,13 +218,22 @@ describe("getGoalTitle()", () => {
     expect(getGoalTitle(goal)).toBe("腰圍 目標：75 cm");
   });
 
-  test("TC-T4 訓練頻率目標標題", () => {
-    // Given: frequency goal with targetValue 4 days/week
-    const goal = { type: "frequency", targetValue: 4 };
+  test("TC-T4 訓練頻率目標標題（每週模式）", () => {
+    // Given: frequency goal with weekly mode
+    const goal = { type: "frequency", targetValue: 4, frequencyMode: "weekly" };
     // When
     const result = getGoalTitle(goal);
     // Then
-    expect(result).toBe("訓練頻率目標：4 天/週");
+    expect(result).toBe("訓練頻率目標：每週 4 天");
+  });
+
+  test("TC-T4b 訓練頻率目標標題（累計模式）", () => {
+    // Given: frequency goal with cumulative mode
+    const goal = { type: "frequency", targetValue: 20, frequencyMode: "cumulative" };
+    // When
+    const result = getGoalTitle(goal);
+    // Then
+    expect(result).toBe("訓練頻率目標：累計 20 天");
   });
 
   test("TC-T5 動作 PR 目標標題", () => {
@@ -208,6 +252,33 @@ describe("getGoalTitle()", () => {
     const result = getGoalTitle(goal);
     // Then: fallback default string
     expect(result).toBe("目標");
+  });
+
+  test("TC-T7 有氧目標標題（duration_min 時間單位）", () => {
+    // Given: cardio goal targeting duration, exercise "跑步機", metric "duration_min"
+    const goal = { type: "cardio", targetExercise: "跑步機", targetCardioMetric: "duration_min", targetValue: 45 };
+    // When
+    const result = getGoalTitle(goal);
+    // Then: unit should be "分鐘"
+    expect(result).toBe("跑步機 目標：45 分鐘");
+  });
+
+  test("TC-T8 有氧目標標題（distance_km 距離單位）", () => {
+    // Given: cardio goal targeting distance, exercise "慢跑", metric "distance_km"
+    const goal = { type: "cardio", targetExercise: "慢跑", targetCardioMetric: "distance_km", targetValue: 5 };
+    // When
+    const result = getGoalTitle(goal);
+    // Then: unit should be "km"
+    expect(result).toBe("慢跑 目標：5 km");
+  });
+
+  test("TC-T9 有氧目標無 targetExercise 時標題使用預設「有氧」", () => {
+    // Given: cardio goal with no targetExercise specified
+    const goal = { type: "cardio", targetExercise: "", targetCardioMetric: "distance_km", targetValue: 3 };
+    // When
+    const result = getGoalTitle(goal);
+    // Then: falls back to "有氧"
+    expect(result).toBe("有氧 目標：3 km");
   });
 });
 
@@ -354,6 +425,41 @@ describe("canSaveGoal()", () => {
   test("TC-V5c BMI 目標有 BMI 資料時啟用", () => {
     // Given
     const result = canSaveGoal("22", "2026-06-01", "bmi", 24.5);
+    // Then: enabled
+    expect(result).toBe(true);
+  });
+
+  test("TC-V5d 頻率目標 targetValue < 1 時禁用", () => {
+    // Given: frequency goal with target value below minimum
+    const result = canSaveGoal("0", "2026-06-01", "frequency", null, { frequencyMode: "weekly" });
+    // Then: disabled (< 1 is invalid)
+    expect(result).toBe(false);
+  });
+
+  test("TC-V5e 每週頻率目標 targetValue > 7 時禁用", () => {
+    // Given: weekly frequency goal with target value exceeding 7 days
+    const result = canSaveGoal("8", "2026-06-01", "frequency", null, { frequencyMode: "weekly" });
+    // Then: disabled (> 7 days/week is impossible)
+    expect(result).toBe(false);
+  });
+
+  test("TC-V5f 累計頻率目標 targetValue > 7 時仍可儲存", () => {
+    // Given: cumulative frequency goal with target value above 7 (allowed for cumulative)
+    const result = canSaveGoal("30", "2026-12-31", "frequency", null, { frequencyMode: "cumulative" });
+    // Then: enabled (cumulative mode is not capped at 7)
+    expect(result).toBe(true);
+  });
+
+  test("TC-V5g 有氧目標未指定 targetExercise 時禁用", () => {
+    // Given: cardio goal with no targetExercise
+    const result = canSaveGoal("10", "2026-06-01", "cardio", null, { targetExercise: "" });
+    // Then: disabled (cardio requires a target exercise)
+    expect(result).toBe(false);
+  });
+
+  test("TC-V5h 有氧目標有 targetExercise 時啟用", () => {
+    // Given: cardio goal with targetExercise specified
+    const result = canSaveGoal("10", "2026-06-01", "cardio", null, { targetExercise: "跑步機" });
     // Then: enabled
     expect(result).toBe(true);
   });
