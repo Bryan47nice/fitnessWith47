@@ -31,3 +31,67 @@ self.addEventListener('notificationclick', (event) => {
     })
   );
 });
+
+// ── Widget support ────────────────────────────────────────────────────────
+
+// IndexedDB helpers for widget data
+function openWidgetDB() {
+  return new Promise((resolve, reject) => {
+    const req = indexedDB.open('fitforge-widget', 1);
+    req.onupgradeneeded = (e) => e.target.result.createObjectStore('data');
+    req.onsuccess = (e) => resolve(e.target.result);
+    req.onerror = (e) => reject(e.target.error);
+  });
+}
+
+function saveWidgetData(data) {
+  return openWidgetDB().then(db => new Promise((resolve, reject) => {
+    const tx = db.transaction('data', 'readwrite');
+    tx.objectStore('data').put(data, 'widget');
+    tx.oncomplete = resolve;
+    tx.onerror = (e) => reject(e.target.error);
+  }));
+}
+
+function getWidgetData() {
+  return openWidgetDB().then(db => new Promise((resolve, reject) => {
+    const req = db.transaction('data', 'readonly').objectStore('data').get('widget');
+    req.onsuccess = (e) => resolve(e.target.result || null);
+    req.onerror = (e) => reject(e.target.error);
+  }));
+}
+
+// Intercept /widget-data.json and serve from IndexedDB
+self.addEventListener('fetch', (event) => {
+  if (new URL(event.request.url).pathname === '/widget-data.json') {
+    event.respondWith(
+      getWidgetData().then(data => new Response(
+        JSON.stringify(data || { nextClassTitle: '尚無課程', nextClassTime: '', daysUntil: '—', streak: 0, todayStatus: '' }),
+        { headers: { 'Content-Type': 'application/json' } }
+      ))
+    );
+  }
+});
+
+// Push widget data to Chrome widget engine
+async function updateWidget() {
+  if (!self.widgets) return;
+  const data = await getWidgetData();
+  if (!data) return;
+  await self.widgets.updateByTag('fitforge-overview', { data: JSON.stringify(data) });
+}
+
+// Widget lifecycle events
+self.addEventListener('widgetinstall', (event) => { event.waitUntil(updateWidget()); });
+self.addEventListener('widgetresume',  (event) => { event.waitUntil(updateWidget()); });
+self.addEventListener('widgetupdate',  (event) => { event.waitUntil(updateWidget()); });
+
+// Receive widget data from React app via postMessage
+self.addEventListener('message', (event) => {
+  if (event.data?.type === 'WIDGET_DATA') {
+    const payload = event.data.payload;
+    event.waitUntil(
+      saveWidgetData(payload).then(() => updateWidget())
+    );
+  }
+});

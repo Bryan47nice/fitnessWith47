@@ -1,0 +1,108 @@
+{
+  "type": "AdaptiveCard",
+  "version": "1.5",
+  "$schema": "http://adaptivecards.io/schemas/adaptive-card.json",
+  "body": [
+    {
+      "type": "TextBlock",
+      "text": "FitForge",
+      "size": "Small",
+      "weight": "Bolder",
+      "color": "Warning",
+      "spacing": "None"
+    },
+    {
+      "type": "ColumnSet",
+      "spacing": "Small",
+      "columns": [
+        {
+          "type": "Column",
+          "width": "stretch",
+          "items": [
+            {
+              "type": "TextBlock",
+              "text": "下次上課",
+              "size": "Small",
+              "color": "Accent",
+              "spacing": "None"
+            },
+            {
+              "type": "TextBlock",
+              "text": "${nextClassTitle}",
+              "size": "Medium",
+              "weight": "Bolder",
+              "color": "Light",
+              "wrap": true,
+              "maxLines": 1,
+              "spacing": "None"
+            },
+            {
+              "type": "TextBlock",
+              "text": "${nextClassTime}",
+              "size": "Small",
+              "color": "Default",
+              "isSubtle": true,
+              "spacing": "None"
+            }
+          ]
+        },
+        {
+          "type": "Column",
+          "width": "auto",
+          "items": [
+            {
+              "type": "TextBlock",
+              "text": "${daysUntil}",
+              "size": "Large",
+              "weight": "Bolder",
+              "color": "Warning",
+              "horizontalAlignment": "Right"
+            }
+          ],
+          "verticalContentAlignment": "Center"
+        }
+      ]
+    },
+    {
+      "type": "ColumnSet",
+      "separator": true,
+      "spacing": "Small",
+      "columns": [
+        {
+          "type": "Column",
+          "width": "stretch",
+          "items": [
+            {
+              "type": "TextBlock",
+              "text": "🔥 ${streak} 天連續",
+              "size": "Small",
+              "color": "Default",
+              "spacing": "None"
+            }
+          ]
+        },
+        {
+          "type": "Column",
+          "width": "auto",
+          "items": [
+            {
+              "type": "TextBlock",
+              "text": "${todayStatus}",
+              "size": "Small",
+              "color": "Good",
+              "horizontalAlignment": "Right",
+              "spacing": "None"
+            }
+          ]
+        }
+      ]
+    }
+  ],
+  "actions": [
+    {
+      "type": "Action.OpenUrl",
+      "title": "開啟 App",
+      "url": "https://fitnesswith47.web.app"
+    }
+  ]
+}

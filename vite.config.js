@@ -13,7 +13,7 @@ export default defineConfig({
     react(),
     VitePWA({
       registerType: 'autoUpdate',
-      includeAssets: ['logo.svg', 'icons/*.png'],
+      includeAssets: ['logo.svg', 'icons/*.png', 'widget-template.json'],
       manifest: {
         name: 'FitForge - 健身追蹤',
         short_name: 'FitForge',
@@ -41,6 +41,18 @@ export default defineConfig({
             sizes: '512x512',
             type: 'image/png',
             purpose: 'any maskable',
+          },
+        ],
+        widgets: [
+          {
+            name: 'FitForge 訓練概覽',
+            tag: 'fitforge-overview',
+            template: '/widget-template.json',
+            data: '/widget-data.json',
+            type: 'application/json',
+            short_name: 'FitForge',
+            description: '下次上課時間與訓練連續天數',
+            icons: [{ src: 'icons/icon-192.png', sizes: '192x192', type: 'image/png' }],
           },
         ],
       },

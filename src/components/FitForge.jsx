@@ -145,7 +145,7 @@ export default function FitForge({ user }) {
   const [calendarConnected, setCalendarConnected] = useState(false);
   const [nextClass, setNextClass] = useState(null);
   const [calendarSyncing, setCalendarSyncing] = useState(false);
-  const calendarKeyword = "健身";
+  const [calendarKeyword, setCalendarKeyword] = useState("健身");
 
   const today = toLocalDateStr();
   const todayWorked = workouts.some(w => w.date === today);
@@ -294,10 +294,44 @@ export default function FitForge({ user }) {
     return unsub;
   }, [user.uid]);
 
+  // Push widget data to Service Worker whenever key data changes
+  useEffect(() => {
+    if (!nextClass && streak.count === 0) return; // skip before data loads
+    const weekdays = ['日', '一', '二', '三', '四', '五', '六'];
+    let nextClassTitle = '尚無課程';
+    let nextClassTime = '';
+    let daysUntil = '—';
+    if (nextClass) {
+      const d = nextClass.startDateTime instanceof Date ? nextClass.startDateTime : new Date(nextClass.startDateTime);
+      nextClassTitle = nextClass.title;
+      const hh = String(d.getHours()).padStart(2, '0');
+      const mm = String(d.getMinutes()).padStart(2, '0');
+      nextClassTime = `${d.getMonth() + 1}月${d.getDate()}日 週${weekdays[d.getDay()]} ${hh}:${mm}`;
+      const todayMidnight = new Date(); todayMidnight.setHours(0, 0, 0, 0);
+      const targetMidnight = new Date(d); targetMidnight.setHours(0, 0, 0, 0);
+      const diff = Math.round((targetMidnight - todayMidnight) / 86400000);
+      daysUntil = diff === 0 ? '今天' : diff === 1 ? '明天' : `${diff} 天後`;
+    }
+    const payload = {
+      nextClassTitle,
+      nextClassTime,
+      daysUntil,
+      streak: streak.count || 0,
+      todayStatus: todayWorked ? '✓ 今日已訓練' : '',
+    };
+    navigator.serviceWorker?.ready.then(reg => {
+      reg.active?.postMessage({ type: 'WIDGET_DATA', payload });
+    }).catch(() => {});
+  }, [nextClass, streak, todayWorked]);
+
   // Subscribe to calendarSync meta
   useEffect(() => {
     const unsub = onSnapshot(doc(db, "users", user.uid, "meta", "calendarSync"), (snap) => {
-      if (snap.exists()) setCalendarConnected(snap.data().connected || false);
+      if (snap.exists()) {
+        const data = snap.data();
+        setCalendarConnected(data.connected || false);
+        if (data.keyword) setCalendarKeyword(data.keyword);
+      }
     });
     return unsub;
   }, [user.uid]);
@@ -326,7 +360,8 @@ export default function FitForge({ user }) {
     });
   }
 
-  async function syncCalendar(token) {
+  async function syncCalendar(token, keyword) {
+    const kw = keyword ?? calendarKeyword;
     setCalendarSyncing(true);
     try {
       const now = new Date();
@@ -334,7 +369,7 @@ export default function FitForge({ user }) {
       const url = `https://www.googleapis.com/calendar/v3/calendars/primary/events?timeMin=${encodeURIComponent(now.toISOString())}&timeMax=${encodeURIComponent(timeMax.toISOString())}&singleEvents=true&orderBy=startTime&maxResults=50`;
       const res = await fetch(url, { headers: { Authorization: `Bearer ${token}` } });
       const data = await res.json();
-      const filtered = filterCalendarEvents(data.items || [], calendarKeyword);
+      const filtered = filterCalendarEvents(data.items || [], kw);
 
       const batch = writeBatch(db);
       const existing = await getDocs(collection(db, "users", user.uid, "upcomingClasses"));
@@ -351,7 +386,7 @@ export default function FitForge({ user }) {
       });
       batch.set(doc(db, "users", user.uid, "meta", "calendarSync"), {
         connected: true,
-        keyword: calendarKeyword,
+        keyword: kw,
         lastSynced: serverTimestamp(),
       }, { merge: true });
       await batch.commit();
@@ -362,7 +397,7 @@ export default function FitForge({ user }) {
     }
   }
 
-  async function connectGoogleCalendar() {
+  async function connectGoogleCalendar(keywordOverride) {
     const clientId = import.meta.env.VITE_GOOGLE_CALENDAR_CLIENT_ID;
     if (!clientId) { alert("尚未設定 Google Calendar Client ID"); return; }
     await loadGIS();
@@ -370,7 +405,7 @@ export default function FitForge({ user }) {
       client_id: clientId,
       scope: "https://www.googleapis.com/auth/calendar.readonly",
       callback: async (response) => {
-        if (response.access_token) await syncCalendar(response.access_token);
+        if (response.access_token) await syncCalendar(response.access_token, keywordOverride);
       },
     });
     tokenClient.requestAccessToken();
@@ -384,6 +419,13 @@ export default function FitForge({ user }) {
     await batch.commit();
     setCalendarConnected(false);
     setNextClass(null);
+  }
+
+  async function saveCalendarKeyword(newKeyword) {
+    const kw = newKeyword.trim() || "健身";
+    setCalendarKeyword(kw);
+    await setDoc(doc(db, "users", user.uid, "meta", "calendarSync"), { keyword: kw }, { merge: true });
+    connectGoogleCalendar(kw); // pass kw explicitly to avoid stale closure
   }
 
   // Achievement detection
@@ -1031,9 +1073,11 @@ export default function FitForge({ user }) {
             streak={streak}
             nextClass={nextClass}
             calendarConnected={calendarConnected}
+            calendarKeyword={calendarKeyword}
             onConnectCalendar={connectGoogleCalendar}
             onSyncCalendar={connectGoogleCalendar}
             onDisconnectCalendar={disconnectCalendar}
+            onSaveCalendarKeyword={saveCalendarKeyword}
           />
         )}
 
