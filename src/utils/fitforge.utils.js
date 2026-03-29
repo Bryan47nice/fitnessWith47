@@ -97,6 +97,11 @@ export function getGoalProgress(goal, context = {}) {
     current = cardioMap[targetExercise]?.reps ?? 0;
   }
 
+  // 身體相關目標若尚無量測資料（current=0），無法判斷進度
+  if ((type === "weight" || type === "body_measurement" || type === "bmi") && current === 0) {
+    return 0;
+  }
+
   const isDecrease = goal.goalDirection === "decrease" ||
     (goal.goalDirection == null && targetValue < startValue);
 
