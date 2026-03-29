@@ -61,6 +61,8 @@ export default function WorkoutTab({
   historyActiveCategory, setHistoryActiveCategory,
   // Streak
   streak,
+  // AI refresh
+  aiRefreshKey,
 }) {
   const MONTHS_ZH = ["一月","二月","三月","四月","五月","六月","七月","八月","九月","十月","十一月","十二月"];
   const toLocalDateStr = (d = new Date()) =>
@@ -165,7 +167,7 @@ export default function WorkoutTab({
     if (cached) { setAiComment(cached); return; }
     fetchAiComment();
   // eslint-disable-next-line react-hooks/exhaustive-deps
-  }, []);
+  }, [aiRefreshKey]);
 
   const fetchExAiComment = async (exerciseName) => {
     setExAiLoading(true);

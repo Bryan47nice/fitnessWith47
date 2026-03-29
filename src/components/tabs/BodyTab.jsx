@@ -3,14 +3,14 @@ import { calcBMI } from "../../utils/fitforge.utils.js";
 import styles from "../../styles/fitforge.styles.js";
 
 const metricConfig = {
-  weight: { label: "體重",   unit: "kg" },
-  bmi:    { label: "BMI",    unit: "" },
-  height: { label: "身高",   unit: "cm" },
-  chest:  { label: "胸圍",   unit: "cm" },
-  waist:  { label: "腰圍",   unit: "cm" },
-  hip:    { label: "臀圍",   unit: "cm" },
-  arm:    { label: "手臂圍", unit: "cm" },
-  thigh:  { label: "大腿圍", unit: "cm" },
+  weight:      { label: "體重",     unit: "kg" },
+  bmi:         { label: "BMI",      unit: "" },
+  height:      { label: "身高",     unit: "cm" },
+  waist:       { label: "腰圍",     unit: "cm" },
+  hip:         { label: "臀圍",     unit: "cm" },
+  bodyfat:     { label: "體脂率",   unit: "%" },
+  muscle_mass: { label: "骨骼肌肉量", unit: "kg" },
+  visceral_fat: { label: "內臟脂肪等級", unit: "" },
 };
 
 function CustomTooltip({ active, payload, activeMetric }) {
@@ -40,8 +40,8 @@ export default function BodyTab({
   bodyData, existingBodyForDate,
   bDate, setBDate,
   bWeight, setBWeight, bHeight, setBHeight,
-  bChest, setBChest, bWaist, setBWaist,
-  bHip, setBHip, bArm, setBArm, bThigh, setBThigh,
+  bWaist, setBWaist, bHip, setBHip,
+  bBodyfat, setBBodyfat, bMuscleMass, setBMuscleMass, bVisceralFat, setBVisceralFat,
   activeMetric, setActiveMetric,
   bSavedAnim,
   saveBody, deleteBodyRecord,
@@ -81,11 +81,11 @@ export default function BodyTab({
           {[
             ["體重", "kg", bWeight, setBWeight],
             ["身高", "cm", bHeight, setBHeight],
-            ["胸圍", "cm", bChest, setBChest],
             ["腰圍", "cm", bWaist, setBWaist],
             ["臀圍", "cm", bHip, setBHip],
-            ["手臂圍", "cm", bArm, setBArm],
-            ["大腿圍", "cm", bThigh, setBThigh],
+            ["體脂率", "%", bBodyfat, setBBodyfat],
+            ["骨骼肌肉量", "kg", bMuscleMass, setBMuscleMass],
+            ["內臟脂肪等級", "1–30", bVisceralFat, setBVisceralFat],
           ].map(([label, unit, val, setter]) => (
             <div key={label}>
               <label style={styles.label}>{label} ({unit})</label>
@@ -209,7 +209,7 @@ export default function BodyTab({
                     {b[activeMetric] ? `${b[activeMetric]}${cfg.unit}` : "—"}
                   </div>
                   <div style={{ fontSize: "12px", color: "#666", marginTop: "2px" }}>
-                    {b.chest && `胸${b.chest} `}{b.waist && `腰${b.waist} `}{b.hip && `臀${b.hip}`}
+                    {b.waist && `腰${b.waist} `}{b.hip && `臀${b.hip} `}{b.bodyfat && `脂${b.bodyfat}% `}{b.muscle_mass && `肌${b.muscle_mass}kg`}
                   </div>
                 </div>
                 <div style={{ textAlign: "right" }}>

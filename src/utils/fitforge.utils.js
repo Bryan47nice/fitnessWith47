@@ -24,11 +24,17 @@ export function calcBMI(weight, height) {
 }
 
 export const bodyPartLabels = {
-  waist: "腰圍",
-  chest: "胸圍",
-  hip:   "臀圍",
-  arm:   "手臂圍",
-  thigh: "大腿圍",
+  waist:       "腰圍",
+  hip:         "臀圍",
+  bodyfat:     "體脂率",
+  muscle_mass: "骨骼肌肉量",
+};
+
+export const bodyPartUnits = {
+  waist:       "cm",
+  hip:         "cm",
+  bodyfat:     "%",
+  muscle_mass: "kg",
 };
 
 /**
@@ -41,7 +47,10 @@ export function getGoalTitle(goal) {
     return `訓練頻率目標：每週 ${goal.targetValue} 天`;
   }
   if (goal.type === "exercise_pr")      return `${goal.targetExercise} 目標：${goal.targetValue} kg`;
-  if (goal.type === "body_measurement") return `${bodyPartLabels[goal.targetBodyPart] || goal.targetBodyPart} 目標：${goal.targetValue} cm`;
+  if (goal.type === "body_measurement") {
+    const unit = bodyPartUnits[goal.targetBodyPart] || "cm";
+    return `${bodyPartLabels[goal.targetBodyPart] || goal.targetBodyPart} 目標：${goal.targetValue} ${unit}`;
+  }
   if (goal.type === "bmi")              return `BMI 目標：${goal.targetValue}`;
   if (goal.type === "cardio") {
     const unit = goal.targetCardioMetric === "duration_min" ? "分鐘" : "km";

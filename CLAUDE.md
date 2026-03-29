@@ -27,29 +27,89 @@
 
 ## 開發流程（三層 Agent）
 
-### 三層 Agent 職責
+### 五層 Agent 職責
 
 | Agent | 角色 | 說明 |
 |-------|------|------|
 | Plan Agent | 規劃 | Plan Mode + Explore subagent，輸出計畫後等用戶核准 |
 | Dev Agent | 實作 | 主對話執行功能開發 |
-| QA Agent | 測試 | 功能完成後由主對話啟動，跑測試 + 補 GWT |
+| Review Agent | 審查 | Dev 完成後啟動，檢查規範違反與安全問題 |
+| QA Agent | 測試 | Review 通過後啟動，跑測試 + 補 GWT |
+| Deploy Agent | 部署 | 文案選定後由主對話啟動，依序 build → deploy → RC → FCM |
 
-### 完整開發流程（七步驟）
+### 開發流程：Full Mode vs Quick Mode
+
+依修改規模選擇流程：
+
+| 模式 | 適用情境 | 判斷標準 |
+|------|---------|---------|
+| **Full Mode** | 新功能、架構調整 | 影響 2 個以上元件、涉及新資料結構或 Firestore schema |
+| **Quick Mode** | Bug fix、細微調整 | 單一元件/函式修改、純文字或樣式修正 |
+
+#### Full Mode（八步驟）
 
 ```
 1. Plan Mode（Plan + Explore agents）→ 用戶核准計畫
 2. Dev（主對話）→ 實作功能
+3. Review Agent（subagent）→ 規範審查
+4. QA Agent（subagent）→ 跑測試 + 補 GWT
+5. Version bump（/version-bump skill）
+6. Commit + push
+7. 輸出三組文案選項（Changelog / RC / FCM）
+8. 用戶選完 → Deploy Agent
+```
+
+#### Quick Mode（六步驟）
+
+```
+1. Dev（主對話）→ 實作功能（跳過 Plan）
+2. Review Agent（subagent）→ 規範審查
 3. QA Agent（subagent）→ 跑測試 + 補 GWT
 4. Version bump（/version-bump skill）
 5. Commit + push
-6. 輸出三組文案選項（Changelog / RC / FCM）
-7. 用戶選完 → Build + deploy + RC 更新 + FCM 推播
+6. 輸出三組文案選項 → 用戶選完 → Deploy Agent
 ```
+
+### Review Agent 啟動時機（強制）
+
+**每次 Dev 完成後（Full Mode 步驟 2、Quick Mode 步驟 1），主對話必須以 `Agent tool, subagent_type: general-purpose` 啟動 Review Agent。**
+
+Review Agent 固定任務（依序執行）：
+1. 執行 `git diff HEAD`，取得本次所有變更
+2. 逐一檢查以下規範：
+   - **LocalStorage**：新增 localStorage key 是否已登記至 `CLAUDE.md` 的 LocalStorage Keys 登記表
+   - **樣式規範**：是否有新增 CSS 檔案或 class-based 樣式（違反 inline styles 規範）
+   - **破壞性操作**：刪除資料的操作是否有走 `confirmDialog` 流程
+   - **彈窗渲染**：新增彈窗是否使用 `createPortal`
+   - **純函式**：新增的純函式是否已放入 `fitforge.utils.js`（而非寫在元件內）
+   - **安全性**：是否有未驗證的用戶輸入直接寫入 Firestore
+3. 回報：「✅ Review 通過，無規範違反」或列出問題清單（需 Dev 修正後重新 Review）
+
+### Review Agent Prompt 範本
+
+啟動 Review Agent 時使用以下 prompt：
+
+```
+你是 FitForge 專案的 Review Agent。請依序完成以下審查：
+
+1. 執行 `git diff HEAD`，取得本次所有變更內容。
+2. 逐一檢查以下規範是否有違反：
+   - LocalStorage：新增的 localStorage key 是否已登記至 CLAUDE.md 的「LocalStorage Keys 登記表」
+   - 樣式規範：是否有新增 CSS 檔案或 className（規範要求全部 inline styles）
+   - 破壞性操作：刪除資料的操作是否有走 confirmDialog 流程
+   - 彈窗渲染：新增彈窗是否使用 createPortal
+   - 純函式位置：新增的純函式是否已放入 src/utils/fitforge.utils.js
+   - 安全性：是否有未驗證的用戶輸入直接寫入 Firestore
+3. 輸出結果：「✅ Review 通過，無規範違反」或條列問題清單。
+```
+
+> **不得**在 Review Agent 回報通過前啟動 QA Agent。
+
+---
 
 ### QA Agent 啟動時機（強制）
 
-**每次功能實作完成後（步驟 2 → 步驟 3），主對話必須以 `Agent tool, subagent_type: general-purpose` 啟動 QA Agent。**
+**每次 Review Agent 通過後（Full Mode 步驟 3 → 4、Quick Mode 步驟 2 → 3），主對話必須以 `Agent tool, subagent_type: general-purpose` 啟動 QA Agent。**
 
 QA Agent 固定任務（依序執行）：
 1. 執行 `npm test`，確認現有測試全數通過
@@ -95,13 +155,71 @@ QA Agent 測試規範：
 2. **Remote Config 彈窗文案**（標題 / 內文 / 按鈕文字，兩個選項）
 3. **FCM 推播文案**（標題 / 內文，兩個選項）
 
-等用戶三項都選完後，依序執行：
-1. `npm run build`
-2. `firebase deploy --only hosting`
-3. Remote Config REST API 更新（trigger_type=1, trigger_count=1）
-4. `node scripts/push-notify.cjs "<標題>" "<內文>"`
+等用戶三項都選完後，啟動 Deploy Agent 執行部署。
 
 > **不得**在用戶選擇前自行 build / deploy / 推播。
+
+---
+
+## Deploy Agent 設計
+
+### Deploy Agent 啟動時機（強制）
+
+**步驟 7 文案選定後，主對話必須以 `Agent tool, subagent_type: general-purpose` 啟動 Deploy Agent。**
+
+### Deploy Agent 執行步驟（依序，Build / Deploy 失敗即停止）
+
+| 步驟 | 指令 | 失敗處理 |
+|------|------|---------|
+| 1. Build | `npm run build` | 立即停止，不繼續部署 |
+| 2. Deploy Hosting | `firebase deploy --only hosting` | 立即停止，不執行 RC / FCM |
+| 3. Remote Config 更新 | REST API PUT（見參數說明） | 警告但繼續 FCM |
+| 4. FCM 推播 | `node scripts/push-notify.cjs "<title>" "<body>"` | 警告回報，不影響已部署版本 |
+
+### Remote Config 更新參數
+
+```
+popup_enabled: true
+popup_title: {RC_TITLE}
+popup_body: {RC_BODY}
+popup_button_text: {RC_BUTTON}
+popup_trigger_type: 1
+popup_trigger_count: "1"
+```
+
+### 回報格式
+
+```
+✅ Build 完成
+✅ Hosting 部署完成（vX.Y.Z）
+✅ Remote Config 更新完成
+✅ FCM 推播完成（已送出 X 則）
+---
+🚀 vX.Y.Z 部署完成！
+```
+
+### Deploy Agent Prompt 範本
+
+啟動 Deploy Agent 時使用以下 prompt（貼入 Agent tool 的 prompt 欄位，替換大括號內容）：
+
+```
+你是 FitForge 專案的 Deploy Agent。請依序執行以下部署步驟，Build 或 Deploy 失敗時立即停止並回報錯誤，不繼續執行後續步驟。
+
+輸入參數：
+- version: {VERSION}
+- rc_title: {RC_TITLE}
+- rc_body: {RC_BODY}
+- rc_button: {RC_BUTTON}
+- fcm_title: {FCM_TITLE}
+- fcm_body: {FCM_BODY}
+
+步驟：
+1. 在 E:\claudecode\fitnessWith47 執行 `npm run build`，確認輸出至 build/ 目錄無報錯。若失敗，立即停止。
+2. 執行 `firebase deploy --only hosting`。若失敗，立即停止。
+3. 更新 Firebase Remote Config（使用 REST API，設定 popup_enabled=true, popup_title={RC_TITLE}, popup_body={RC_BODY}, popup_button_text={RC_BUTTON}, popup_trigger_type=1, popup_trigger_count="1"）。若失敗，輸出警告並繼續。
+4. 執行 `node scripts/push-notify.cjs "{FCM_TITLE}" "{FCM_BODY}"`。若失敗，輸出警告。
+5. 輸出每步驟結果（✅/⚠️），最後一行輸出「🚀 {VERSION} 部署完成！」
+```
 
 ---
 
@@ -154,8 +272,9 @@ firebase deploy --only functions     # 部署 Cloud Functions
 ```
 users/{userId}/
   ├── workouts/{id}           → { date, exercise, sets, note, createdAt }
-  ├── bodyData/{date}         → { weight, height, chest, waist, hip, arm, thigh, createdAt }
+  ├── bodyData/{date}         → { weight, height, waist, hip, bodyfat, muscle_mass, visceral_fat, createdAt }
   │                              ↑ date 字串為 doc ID（v1.2.2 起，同日覆蓋機制）
+  │                              ↑ v1.8.1：移除 chest/arm/thigh，新增 bodyfat/muscle_mass/visceral_fat
   ├── customExercises/{id}    → { name, createdAt }
   └── meta/streak             → { count, lastDate }
 

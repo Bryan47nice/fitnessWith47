@@ -44,8 +44,10 @@ function daysUntilClass(startDateTime) {
   return `${diff} 天後`;
 }
 
-export default function DashboardTab({ workouts, bodyData, prMap, volumePeriod, setVolumePeriod, streak, nextClass, calendarConnected, onConnectCalendar, onSyncCalendar, onDisconnectCalendar }) {
+export default function DashboardTab({ workouts, bodyData, prMap, volumePeriod, setVolumePeriod, streak, nextClass, calendarConnected, calendarKeyword, onConnectCalendar, onSyncCalendar, onDisconnectCalendar, onSaveCalendarKeyword }) {
   const [prExpanded, setPrExpanded] = useState(true);
+  const [editingKeyword, setEditingKeyword] = useState(false);
+  const [keywordInput, setKeywordInput] = useState("");
 
   const workoutDays = new Set(workouts.map(w => w.date)).size;
   const latestBody  = bodyData[0];
@@ -185,6 +187,49 @@ export default function DashboardTab({ workouts, bodyData, prMap, volumePeriod, 
             近 30 天沒有排課
           </div>
         )}
+
+        {/* 關鍵字設定列 */}
+        {calendarConnected && (
+          <div style={{ marginTop: 12, paddingTop: 10, borderTop: "1px solid rgba(255,255,255,0.06)" }}>
+            {editingKeyword ? (
+              <div style={{ display: "flex", gap: 8, alignItems: "center" }}>
+                <input
+                  value={keywordInput}
+                  onChange={e => setKeywordInput(e.target.value)}
+                  onKeyDown={e => {
+                    if (e.key === "Enter") { onSaveCalendarKeyword(keywordInput); setEditingKeyword(false); }
+                    if (e.key === "Escape") setEditingKeyword(false);
+                  }}
+                  placeholder="輸入關鍵字"
+                  autoFocus
+                  style={{
+                    flex: 1, background: "rgba(255,255,255,0.07)", border: "1px solid rgba(255,106,0,0.4)",
+                    borderRadius: 8, padding: "6px 10px", color: "#e8e4dc", fontSize: 13, outline: "none",
+                  }}
+                />
+                <button
+                  onClick={() => { onSaveCalendarKeyword(keywordInput); setEditingKeyword(false); }}
+                  style={{ background: "#ff6a00", border: "none", borderRadius: 8, padding: "6px 12px", color: "#fff", fontSize: 12, fontWeight: 700, cursor: "pointer" }}
+                >儲存</button>
+                <button
+                  onClick={() => setEditingKeyword(false)}
+                  style={{ background: "none", border: "none", color: "#666", fontSize: 13, cursor: "pointer", padding: "6px 4px" }}
+                >✕</button>
+              </div>
+            ) : (
+              <div style={{ display: "flex", alignItems: "center", gap: 6 }}>
+                <span style={{ fontSize: 12, color: "#555" }}>篩選關鍵字：</span>
+                <span style={{ fontSize: 12, color: "#888", background: "rgba(255,255,255,0.06)", borderRadius: 6, padding: "2px 8px" }}>
+                  {calendarKeyword || "健身"}
+                </span>
+                <button
+                  onClick={() => { setKeywordInput(calendarKeyword || "健身"); setEditingKeyword(true); }}
+                  style={{ background: "none", border: "none", color: "#666", fontSize: 12, cursor: "pointer", padding: "2px 4px" }}
+                >✏️</button>
+              </div>
+            )}
+          </div>
+        )}
       </div>
 
       <div style={styles.statRow}>
@@ -270,10 +315,15 @@ export default function DashboardTab({ workouts, bodyData, prMap, volumePeriod, 
               </div>
               <div style={{ fontSize: "13px", color: getBmiColor(bmi) }}>{getBmiLabel(bmi)}</div>
             </div>
-            <div style={{ textAlign: "right", fontSize: "13px", color: "#888", lineHeight: "1.8" }}>
-              {latestBody.chest && <div>胸 {latestBody.chest}cm</div>}
-              {latestBody.waist && <div>腰 {latestBody.waist}cm</div>}
-              {latestBody.hip && <div>臀 {latestBody.hip}cm</div>}
+            <div style={{ textAlign: "right", fontSize: "13px", lineHeight: "1.8" }}>
+              {latestBody.bodyfat && <div style={{ color: "#888" }}>體脂 {latestBody.bodyfat}%</div>}
+              {latestBody.muscle_mass && <div style={{ color: "#888" }}>骨骼肌 {latestBody.muscle_mass}kg</div>}
+              {latestBody.visceral_fat && (() => {
+                const lv = parseInt(latestBody.visceral_fat);
+                const color = lv <= 9 ? "#4ade80" : lv <= 14 ? "#facc15" : "#f87171";
+                return <div style={{ color }}>內臟脂 Lv.{latestBody.visceral_fat}</div>;
+              })()}
+              {latestBody.waist && <div style={{ color: "#888" }}>腰 {latestBody.waist}cm</div>}
             </div>
           </div>
           {bmi && (

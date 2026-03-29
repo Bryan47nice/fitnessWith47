@@ -36,7 +36,11 @@ export default function GoalsTab({
   function getTargetLabel() {
     if (goalType === "bmi") return "目標 BMI";
     if (goalType === "frequency") return goalFrequencyMode === "cumulative" ? "目標天數（累計）" : "目標天數（天/週，1–7）";
-    if (goalType === "body_measurement") return "目標數值（cm）";
+    if (goalType === "body_measurement") {
+      const units = { waist: "cm", hip: "cm", bodyfat: "%", muscle_mass: "kg" };
+      const u = units[goalTargetBodyPart] || "cm";
+      return `目標數值（${u}）`;
+    }
     if (goalType === "cardio") return goalCardioMetric === "duration_min" ? "目標時長（分鐘）" : "目標距離（km）";
     return "目標數值（kg）";
   }
@@ -168,7 +172,7 @@ export default function GoalsTab({
                       { id: "weight", label: "體重" },
                       { id: "frequency", label: "訓練頻率" },
                       { id: "exercise_pr", label: "動作重量" },
-                      { id: "body_measurement", label: "身材圍度" },
+                      { id: "body_measurement", label: "身材數據" },
                       { id: "bmi", label: "BMI 目標" },
                       { id: "cardio", label: "🏃 有氧目標" },
                     ].map(t => (

@@ -20,7 +20,7 @@ import WorkoutTab from "./tabs/WorkoutTab.jsx";
 import BodyTab from "./tabs/BodyTab.jsx";
 import GoalsTab from "./tabs/GoalsTab.jsx";
 
-const APP_VERSION = "1.8.0";
+const APP_VERSION = "1.8.1";
 const toLocalDateStr = (d = new Date()) =>
   `${d.getFullYear()}-${String(d.getMonth() + 1).padStart(2, "0")}-${String(d.getDate()).padStart(2, "0")}`;
 
@@ -116,11 +116,11 @@ export default function FitForge({ user }) {
   const [bDate, setBDate] = useState(toLocalDateStr());
   const [bWeight, setBWeight] = useState("");
   const [bHeight, setBHeight] = useState("");
-  const [bChest, setBChest] = useState("");
   const [bWaist, setBWaist] = useState("");
   const [bHip, setBHip] = useState("");
-  const [bArm, setBArm] = useState("");
-  const [bThigh, setBThigh] = useState("");
+  const [bBodyfat, setBBodyfat] = useState("");
+  const [bMuscleMass, setBMuscleMass] = useState("");
+  const [bVisceralFat, setBVisceralFat] = useState("");
   const [activeMetric, setActiveMetric] = useState("weight");
   const [bSavedAnim, setBSavedAnim] = useState(false);
 
@@ -263,14 +263,14 @@ export default function FitForge({ user }) {
     if (existing) {
       setBWeight(existing.weight || "");
       setBHeight(existing.height || "");
-      setBChest(existing.chest || "");
       setBWaist(existing.waist || "");
       setBHip(existing.hip || "");
-      setBArm(existing.arm || "");
-      setBThigh(existing.thigh || "");
+      setBBodyfat(existing.bodyfat || "");
+      setBMuscleMass(existing.muscle_mass || "");
+      setBVisceralFat(existing.visceral_fat || "");
     } else {
-      setBWeight(""); setBHeight(""); setBChest(""); setBWaist("");
-      setBHip(""); setBArm(""); setBThigh("");
+      setBWeight(""); setBHeight(""); setBWaist(""); setBHip("");
+      setBBodyfat(""); setBMuscleMass(""); setBVisceralFat("");
     }
   }, [bDate, bodyData]);
 
@@ -584,11 +584,12 @@ export default function FitForge({ user }) {
   }
 
   async function saveBody() {
-    const hasData = [bWeight, bHeight, bChest, bWaist, bHip, bArm, bThigh].some(v => v !== "");
+    const hasData = [bWeight, bHeight, bWaist, bHip, bBodyfat, bMuscleMass, bVisceralFat].some(v => v !== "");
     if (!hasData) return;
     await setDoc(doc(db, "users", user.uid, "bodyData", bDate), {
-      date: bDate, weight: bWeight, height: bHeight, chest: bChest,
-      waist: bWaist, hip: bHip, arm: bArm, thigh: bThigh,
+      date: bDate, weight: bWeight, height: bHeight,
+      waist: bWaist, hip: bHip,
+      bodyfat: bBodyfat, muscle_mass: bMuscleMass, visceral_fat: bVisceralFat,
       createdAt: serverTimestamp(),
     });
     setBSavedAnim(true);
@@ -1200,11 +1201,11 @@ export default function FitForge({ user }) {
             bDate={bDate} setBDate={setBDate}
             bWeight={bWeight} setBWeight={setBWeight}
             bHeight={bHeight} setBHeight={setBHeight}
-            bChest={bChest} setBChest={setBChest}
             bWaist={bWaist} setBWaist={setBWaist}
             bHip={bHip} setBHip={setBHip}
-            bArm={bArm} setBArm={setBArm}
-            bThigh={bThigh} setBThigh={setBThigh}
+            bBodyfat={bBodyfat} setBBodyfat={setBBodyfat}
+            bMuscleMass={bMuscleMass} setBMuscleMass={setBMuscleMass}
+            bVisceralFat={bVisceralFat} setBVisceralFat={setBVisceralFat}
             activeMetric={activeMetric} setActiveMetric={setActiveMetric}
             bSavedAnim={bSavedAnim}
             saveBody={saveBody}
@@ -1468,15 +1469,29 @@ export default function FitForge({ user }) {
               版本更新記錄
             </div>
 
-            {/* v1.8.0 */}
+            {/* v1.8.1 */}
             <div style={{ marginBottom: "24px" }}>
               <div style={{ display: "flex", alignItems: "center", gap: "10px", marginBottom: "10px" }}>
-                <span style={{ fontSize: "17px", fontWeight: 900, color: "#ffd700" }}>v1.8.0</span>
+                <span style={{ fontSize: "17px", fontWeight: 900, color: "#ffd700" }}>v1.8.1</span>
                 <span style={{
                   fontSize: "11px", fontWeight: 800, color: "#ff6a00",
                   background: "rgba(255,106,0,0.15)", border: "1px solid rgba(255,106,0,0.3)",
                   borderRadius: "6px", padding: "2px 7px", letterSpacing: "0.05em",
                 }}>最新</span>
+                <span style={{ fontSize: "12px", color: "#555", marginLeft: "auto" }}>2026-03-29</span>
+              </div>
+              <div style={{ display: "flex", flexDirection: "column", gap: "7px" }}>
+                <div style={{ fontSize: "14px", color: "#c8c4bc", display: "flex", gap: "8px" }}>
+                  <span style={{ color: "#ffd700", flexShrink: 0 }}>✨</span>
+                  <span>身材記錄新增體脂率、骨骼肌肉量、內臟脂肪等級三項體組成指標</span>
+                </div>
+              </div>
+            </div>
+
+            {/* v1.8.0 */}
+            <div style={{ marginBottom: "24px" }}>
+              <div style={{ display: "flex", alignItems: "center", gap: "10px", marginBottom: "10px" }}>
+                <span style={{ fontSize: "17px", fontWeight: 900, color: "#e8e4dc" }}>v1.8.0</span>
                 <span style={{ fontSize: "12px", color: "#555", marginLeft: "auto" }}>2026-03-29</span>
               </div>
               <div style={{ display: "flex", flexDirection: "column", gap: "7px" }}>
