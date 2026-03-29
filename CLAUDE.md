@@ -15,13 +15,14 @@
 - Changelog modal 位於 `src/components/FitForge.jsx`，搜尋 `showChangelog` 可定位
 - 新版本條目加在最頂端，標上「最新」badge，舊的「最新」badge 一併移除
 - 格式參考既有條目（版號、日期、✨ 或 • 條列說明）
-- 版號、日期、說明文字需與 `MEMORY.md` 版本記錄一致
+- 版號、日期、說明文字需與 `docs/product.md` 第八節版本歷史一致
 
-## APP_VERSION 更新三步驟（強制）
+## APP_VERSION 更新四步驟（強制）
 
 1. 修改 `FitForge.jsx` 頂部的 `APP_VERSION` 常數
 2. 更新同檔案內的 Changelog modal（搜尋 `showChangelog` 定位）
-3. 更新 `MEMORY.md` 的版本記錄區塊
+3. 在 `docs/product.md` 第八節版本歷史最頂端新增一行（含版號、日期、說明）
+4. 更新 `MEMORY.md` 的版本記錄區塊（本機 Claude context 用）
 
 ---
 
@@ -237,6 +238,7 @@ popup_trigger_count: "1"
 | `vite.config.js` | Vite 建構設定（含 PWA plugin） |
 | `src/utils/fitforge.utils.js` | 純函式工具層（可測試的業務邏輯） |
 | `src/utils/fitforge.utils.test.js` | Vitest GWT 測試（30 個案例） |
+| `docs/product.md` | 產品功能規格 + 技術架構 + 版本歷史（跨電腦 source of truth） |
 | `docs/testing.md` | GWT 測試案例完整文件 |
 
 ---
