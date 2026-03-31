@@ -48,6 +48,7 @@ export default function WorkoutTab({
   userCustomCategories,
   // History state
   historyGroupMode, setHistoryGroupMode, expandedGroupKeys, setExpandedGroupKeys,
+  expandedDayKeys, setExpandedDayKeys,
   // Handlers
   saveWorkout, addSet, updateSet, removeSet, batchAddSets,
   deleteWorkout, openEditWorkout,
@@ -789,6 +790,7 @@ export default function WorkoutTab({
                 setHistoryGroupMode(mode);
                 localStorage.setItem("history_group_mode", mode);
                 setExpandedGroupKeys(null);
+                setExpandedDayKeys(null);
               }} style={{
                 padding: "5px 12px", borderRadius: "20px", cursor: "pointer", fontFamily: "inherit", fontSize: "12px", fontWeight: historyGroupMode === mode ? 700 : 400,
                 border: historyGroupMode === mode ? "1px solid #ff6a00" : "1px solid rgba(255,255,255,0.12)",
@@ -939,15 +941,29 @@ export default function WorkoutTab({
           });
           const workoutGroups = Array.from(groupMap.values())
             .sort((a, b) => b.key.localeCompare(a.key))
-            .map(g => ({
-              ...g,
-              items: [...g.items].sort((a, b) =>
+            .map(g => {
+              const sortedItems = [...g.items].sort((a, b) =>
                 b.date !== a.date
                   ? b.date.localeCompare(a.date)
                   : (b.createdAt?.seconds || 0) - (a.createdAt?.seconds || 0)
-              ),
-              totalSets: g.items.reduce((sum, w) => sum + (w.sets?.length || 0), 0),
-            }));
+              );
+              const dayMap = new Map();
+              sortedItems.forEach(w => {
+                if (!dayMap.has(w.date)) dayMap.set(w.date, []);
+                dayMap.get(w.date).push(w);
+              });
+              const days = Array.from(dayMap.entries()).map(([date, items]) => ({
+                date,
+                items,
+                totalSets: items.reduce((sum, w) => sum + (w.sets?.length || 0), 0),
+              }));
+              return {
+                ...g,
+                items: sortedItems,
+                totalSets: sortedItems.reduce((sum, w) => sum + (w.sets?.length || 0), 0),
+                days,
+              };
+            });
           const allExpanded = workoutGroups.length > 0 && workoutGroups.every(g =>
             expandedGroupKeys !== null && expandedGroupKeys.has(g.key)
           );
@@ -987,37 +1003,73 @@ export default function WorkoutTab({
                   </span>
                   <span style={{ color: "#666", fontSize: "12px" }}>{isOpen ? "▲" : "▼"}</span>
                 </div>
-                {isOpen && group.items.map(w => (
-                  <div key={w.id} style={{ ...styles.workoutItem, marginBottom: "10px" }}>
-                    <div style={{ display: "flex", justifyContent: "space-between", alignItems: "center", marginBottom: "6px" }}>
-                      <div style={styles.historyDate}>{w.date}</div>
-                      <div style={{ display: "flex", gap: "6px" }}>
-                        <button style={styles.historyActionBtn} onClick={() => openEditWorkout(w)}>編輯</button>
-                        <button style={styles.historyDeleteBtn} onClick={() => deleteWorkout(w.id)}>刪除</button>
+                {isOpen && group.days.map((day, dayIdx) => {
+                  const isDayOpen = expandedDayKeys === null
+                    ? idx === 0 && dayIdx === 0
+                    : expandedDayKeys.has(day.date);
+                  const WEEKDAYS = ["日", "一", "二", "三", "四", "五", "六"];
+                  const d = new Date(day.date + 'T00:00:00');
+                  const weekday = WEEKDAYS[d.getDay()];
+                  const mm = String(d.getMonth() + 1).padStart(2, '0');
+                  const dd = String(d.getDate()).padStart(2, '0');
+                  const dateLabel = `${mm}/${dd}（週${weekday}）`;
+                  return (
+                    <div key={day.date} style={{ marginBottom: "4px" }}>
+                      <div onClick={() => {
+                        setExpandedDayKeys(prev => {
+                          const base = prev ?? new Set(
+                            workoutGroups[0]?.days[0] ? [workoutGroups[0].days[0].date] : []
+                          );
+                          const next = new Set(base);
+                          if (isDayOpen) next.delete(day.date);
+                          else next.add(day.date);
+                          return next;
+                        });
+                      }} style={{
+                        display: "flex", justifyContent: "space-between", alignItems: "center",
+                        padding: "8px 14px", borderRadius: "8px",
+                        background: "rgba(255,255,255,0.03)", cursor: "pointer",
+                        border: "1px solid rgba(255,255,255,0.06)",
+                        marginBottom: isDayOpen ? "6px" : 0,
+                      }}>
+                        <span style={{ fontSize: "13px", color: "#bbb", fontWeight: 600 }}>
+                          📅 {dateLabel} · {day.items.length} 個動作 · {day.totalSets} 組
+                        </span>
+                        <span style={{ color: "#555", fontSize: "11px" }}>{isDayOpen ? "▲" : "▼"}</span>
                       </div>
+                      {isDayOpen && day.items.map(w => (
+                        <div key={w.id} style={{ ...styles.workoutItem, marginBottom: "8px" }}>
+                          <div style={{ display: "flex", justifyContent: "space-between", alignItems: "center", marginBottom: "8px" }}>
+                            <div style={{ fontSize: "17px", fontWeight: 700 }}>{w.exercise}</div>
+                            <div style={{ display: "flex", gap: "6px" }}>
+                              <button style={styles.historyActionBtn} onClick={() => openEditWorkout(w)}>編輯</button>
+                              <button style={styles.historyDeleteBtn} onClick={() => deleteWorkout(w.id)}>刪除</button>
+                            </div>
+                          </div>
+                          <div style={{ display: "flex", gap: "6px", flexWrap: "wrap", marginBottom: w.note ? "8px" : 0 }}>
+                            {w.sets?.map((s, i) => {
+                              if (s.duration !== undefined) {
+                                const parts = [
+                                  s.duration && `${s.duration}分鐘`,
+                                  s.distance && `${s.distance} km`,
+                                  s.speed && `${s.speed} km/h`,
+                                  s.incline && `坡度${s.incline}%`,
+                                ].filter(Boolean);
+                                return <span key={i} style={styles.tag}>{parts.join(" · ") || "—"}</span>;
+                              }
+                              return (
+                                <span key={i} style={styles.tag}>
+                                  第{i + 1}組 {s.reps ? `${s.reps}下` : ""}{s.weight ? ` × ${s.weight}kg` : ""}
+                                </span>
+                              );
+                            })}
+                          </div>
+                          {w.note && <div style={{ fontSize: "13px", color: "#888", fontStyle: "italic", whiteSpace: "pre-wrap", marginTop: 2 }}>📝 {w.note}</div>}
+                        </div>
+                      ))}
                     </div>
-                    <div style={{ fontSize: "17px", fontWeight: 700, marginBottom: "8px" }}>{w.exercise}</div>
-                    <div style={{ display: "flex", gap: "6px", flexWrap: "wrap", marginBottom: w.note ? "8px" : 0 }}>
-                      {w.sets?.map((s, i) => {
-                        if (s.duration !== undefined) {
-                          const parts = [
-                            s.duration && `${s.duration}分鐘`,
-                            s.distance && `${s.distance} km`,
-                            s.speed && `${s.speed} km/h`,
-                            s.incline && `坡度${s.incline}%`,
-                          ].filter(Boolean);
-                          return <span key={i} style={styles.tag}>{parts.join(" · ") || "—"}</span>;
-                        }
-                        return (
-                          <span key={i} style={styles.tag}>
-                            第{i + 1}組 {s.reps ? `${s.reps}下` : ""}{s.weight ? ` × ${s.weight}kg` : ""}
-                          </span>
-                        );
-                      })}
-                    </div>
-                    {w.note && <div style={{ fontSize: "13px", color: "#888", fontStyle: "italic", whiteSpace: "pre-wrap", marginTop: 2 }}>📝 {w.note}</div>}
-                  </div>
-                ))}
+                  );
+                })}
               </div>
             );
           })}</>
