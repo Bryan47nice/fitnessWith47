@@ -196,3 +196,16 @@ export function getNextClass(upcomingClasses) {
     return t < et ? cur : earliest;
   });
 }
+
+/**
+ * Formats a duration in seconds as "m:ss" for rest timer display.
+ * e.g. 90 → "1:30", 65 → "1:05", 0 → "0:00"
+ *
+ * @param {number} seconds - non-negative integer
+ * @returns {string} formatted time string
+ */
+export function formatRestTime(seconds) {
+  const m = Math.floor(seconds / 60);
+  const s = seconds % 60;
+  return `${m}:${s.toString().padStart(2, '0')}`;
+}

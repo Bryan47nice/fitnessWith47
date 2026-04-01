@@ -1,4 +1,4 @@
-import { useState, useEffect } from "react";
+import { useState, useEffect, useRef } from "react";
 import { createPortal } from "react-dom";
 import {
   collection, addDoc, onSnapshot, query, orderBy,
@@ -13,6 +13,7 @@ import {
   getGoalProgress as _getGoalProgress,
   detectNewPR,
   filterCalendarEvents, getNextClass,
+  formatRestTime,
 } from "../utils/fitforge.utils.js";
 import styles from "../styles/fitforge.styles.js";
 import DashboardTab from "./tabs/DashboardTab.jsx";
@@ -20,7 +21,7 @@ import WorkoutTab from "./tabs/WorkoutTab.jsx";
 import BodyTab from "./tabs/BodyTab.jsx";
 import GoalsTab from "./tabs/GoalsTab.jsx";
 
-const APP_VERSION = "1.8.3";
+const APP_VERSION = "1.9.0";
 const toLocalDateStr = (d = new Date()) =>
   `${d.getFullYear()}-${String(d.getMonth() + 1).padStart(2, "0")}-${String(d.getDate()).padStart(2, "0")}`;
 
@@ -75,6 +76,18 @@ export default function FitForge({ user }) {
   const [savedAnim, setSavedAnim] = useState(false);
   const [prAnim, setPrAnim] = useState(false);
   const [aiRefreshKey, setAiRefreshKey] = useState(0);
+
+  // Rest Timer state
+  const [restTimerActive, setRestTimerActive] = useState(false);
+  const [restTimerRemaining, setRestTimerRemaining] = useState(0);
+  const [restTimerTotal, setRestTimerTotal] = useState(90);
+  const [restTimerEditing, setRestTimerEditing] = useState(false);
+  const [restTimerEditInput, setRestTimerEditInput] = useState("");
+  const restTimerRef = useRef(null);
+  const [restTimerDefault, setRestTimerDefaultState] = useState(() => {
+    const saved = localStorage.getItem("rest_timer_duration");
+    return saved ? parseInt(saved, 10) : 90;
+  });
 
   // More Panel state
   const [showMorePanel, setShowMorePanel] = useState(false);
@@ -562,6 +575,59 @@ export default function FitForge({ user }) {
     setBatchReps(""); setBatchWeight(""); setBatchCount(3);
   }
 
+  function playRestTimerBeep() {
+    try {
+      const ctx = new (window.AudioContext || window.webkitAudioContext)();
+      const osc = ctx.createOscillator();
+      const gain = ctx.createGain();
+      osc.connect(gain);
+      gain.connect(ctx.destination);
+      osc.frequency.value = 880;
+      gain.gain.setValueAtTime(0.3, ctx.currentTime);
+      gain.gain.exponentialRampToValueAtTime(0.001, ctx.currentTime + 0.6);
+      osc.start(ctx.currentTime);
+      osc.stop(ctx.currentTime + 0.6);
+    } catch (e) {}
+  }
+
+  function setRestTimerDefaultDuration(seconds) {
+    const clamped = Math.max(15, Math.min(600, seconds));
+    localStorage.setItem("rest_timer_duration", String(clamped));
+    setRestTimerDefaultState(clamped);
+  }
+
+  function startRestTimer(duration) {
+    const d = duration ?? restTimerDefault;
+    if (restTimerRef.current) clearInterval(restTimerRef.current);
+    setRestTimerTotal(d);
+    setRestTimerRemaining(d);
+    setRestTimerActive(true);
+    setRestTimerEditing(false);
+    restTimerRef.current = setInterval(() => {
+      setRestTimerRemaining(prev => {
+        if (prev <= 1) {
+          clearInterval(restTimerRef.current);
+          setRestTimerActive(false);
+          if (navigator.vibrate) navigator.vibrate([300, 100, 300]);
+          playRestTimerBeep();
+          return 0;
+        }
+        return prev - 1;
+      });
+    }, 1000);
+  }
+
+  function stopRestTimer() {
+    if (restTimerRef.current) clearInterval(restTimerRef.current);
+    setRestTimerActive(false);
+    setRestTimerRemaining(0);
+    setRestTimerEditing(false);
+  }
+
+  function adjustRestTimer(delta) {
+    setRestTimerRemaining(prev => Math.max(5, prev + delta));
+  }
+
   async function saveWorkout() {
     const name = wExercise;
     const isNewPR = !isCardio(name) && detectNewPR(name, wSets, prMap);
@@ -581,6 +647,9 @@ export default function FitForge({ user }) {
     if (isNewPR) {
       setPrAnim(true);
       setTimeout(() => setPrAnim(false), 2500);
+    }
+    if (!isCardio(name)) {
+      startRestTimer();
     }
   }
 
@@ -1277,6 +1346,127 @@ export default function FitForge({ user }) {
         </div>
       )}
 
+      {/* Rest Timer Overlay */}
+      {restTimerActive && createPortal(
+        <div style={{
+          position: "fixed", bottom: "80px", left: "50%", transform: "translateX(-50%)",
+          background: "rgba(18,18,30,0.95)", backdropFilter: "blur(12px)",
+          borderRadius: "20px", padding: "12px 16px",
+          boxShadow: "0 4px 32px rgba(0,0,0,0.5)",
+          border: "1px solid rgba(255,255,255,0.08)",
+          zIndex: 290, minWidth: "300px", maxWidth: "92vw",
+          display: "flex", flexDirection: "column", alignItems: "center", gap: "8px",
+        }}>
+          {!restTimerEditing ? (
+            <>
+              {/* Timer row */}
+              <div style={{ display: "flex", alignItems: "center", gap: "12px", width: "100%" }}>
+                {/* SVG ring */}
+                <svg width="44" height="44" style={{ flexShrink: 0 }}>
+                  <circle cx="22" cy="22" r="18" fill="none" stroke="rgba(255,255,255,0.1)" strokeWidth="3" />
+                  <circle
+                    cx="22" cy="22" r="18" fill="none"
+                    stroke={restTimerRemaining <= 10 ? "#ff4757" : "#ff9f43"}
+                    strokeWidth="3"
+                    strokeLinecap="round"
+                    strokeDasharray={`${2 * Math.PI * 18}`}
+                    strokeDashoffset={`${2 * Math.PI * 18 * (1 - restTimerRemaining / restTimerTotal)}`}
+                    transform="rotate(-90 22 22)"
+                    style={{ transition: "stroke-dashoffset 0.9s linear, stroke 0.3s" }}
+                  />
+                </svg>
+                {/* Time text */}
+                <span style={{
+                  fontSize: "28px", fontWeight: 800, letterSpacing: "0.04em",
+                  color: restTimerRemaining <= 10 ? "#ff4757" : "#ff9f43",
+                  fontFamily: "'Barlow Condensed','Noto Sans TC',sans-serif",
+                  minWidth: "60px",
+                }}>
+                  {formatRestTime(restTimerRemaining)}
+                </span>
+                {/* Controls */}
+                <div style={{ display: "flex", gap: "6px", marginLeft: "auto", alignItems: "center" }}>
+                  <button onClick={() => adjustRestTimer(-15)} style={{
+                    background: "rgba(255,255,255,0.08)", border: "none", borderRadius: "8px",
+                    color: "#ccc", fontSize: "13px", fontWeight: 600, padding: "6px 10px", cursor: "pointer",
+                  }}>-15</button>
+                  <button onClick={stopRestTimer} style={{
+                    background: "rgba(255,255,255,0.08)", border: "none", borderRadius: "8px",
+                    color: "#ccc", fontSize: "13px", fontWeight: 600, padding: "6px 10px", cursor: "pointer",
+                  }}>跳過</button>
+                  <button onClick={() => adjustRestTimer(15)} style={{
+                    background: "rgba(255,255,255,0.08)", border: "none", borderRadius: "8px",
+                    color: "#ccc", fontSize: "13px", fontWeight: 600, padding: "6px 10px", cursor: "pointer",
+                  }}>+15</button>
+                  <button onClick={() => {
+                    setRestTimerEditing(true);
+                    setRestTimerEditInput(String(restTimerDefault));
+                  }} style={{
+                    background: "none", border: "none", fontSize: "16px", cursor: "pointer",
+                    padding: "4px 6px", lineHeight: 1,
+                  }} title="設定預設時長">✏️</button>
+                </div>
+              </div>
+              <div style={{ fontSize: "11px", color: "rgba(255,255,255,0.3)", alignSelf: "flex-start", paddingLeft: "4px" }}>
+                組間休息 · 預設 {formatRestTime(restTimerDefault)}
+              </div>
+            </>
+          ) : (
+            <>
+              {/* Edit mode */}
+              <div style={{ display: "flex", flexDirection: "column", gap: "10px", width: "100%" }}>
+                <div style={{ fontSize: "13px", color: "rgba(255,255,255,0.6)", fontWeight: 600 }}>
+                  設定預設休息時間
+                </div>
+                {/* Quick presets */}
+                <div style={{ display: "flex", gap: "8px" }}>
+                  {[60, 90, 120, 180].map(s => (
+                    <button key={s} onClick={() => setRestTimerEditInput(String(s))} style={{
+                      flex: 1, padding: "6px 0", borderRadius: "8px", border: "none",
+                      background: restTimerEditInput === String(s) ? "#ff9f43" : "rgba(255,255,255,0.08)",
+                      color: restTimerEditInput === String(s) ? "#0a0a0f" : "#ccc",
+                      fontSize: "13px", fontWeight: 600, cursor: "pointer",
+                    }}>
+                      {formatRestTime(s)}
+                    </button>
+                  ))}
+                </div>
+                {/* Number input */}
+                <div style={{ display: "flex", alignItems: "center", gap: "8px" }}>
+                  <input
+                    type="number"
+                    value={restTimerEditInput}
+                    onChange={e => setRestTimerEditInput(e.target.value)}
+                    min="15" max="600"
+                    style={{
+                      flex: 1, background: "rgba(255,255,255,0.06)", border: "1px solid rgba(255,255,255,0.12)",
+                      borderRadius: "8px", color: "#fff", fontSize: "16px", fontWeight: 700,
+                      padding: "6px 10px", outline: "none", textAlign: "center",
+                    }}
+                  />
+                  <span style={{ color: "rgba(255,255,255,0.5)", fontSize: "13px" }}>秒</span>
+                  <button onClick={() => {
+                    const v = parseInt(restTimerEditInput, 10);
+                    if (!isNaN(v)) setRestTimerDefaultDuration(v);
+                    setRestTimerEditing(false);
+                  }} style={{
+                    background: "#ff9f43", border: "none", borderRadius: "8px",
+                    color: "#0a0a0f", fontWeight: 700, fontSize: "13px",
+                    padding: "6px 14px", cursor: "pointer",
+                  }}>確認</button>
+                  <button onClick={() => setRestTimerEditing(false)} style={{
+                    background: "rgba(255,255,255,0.08)", border: "none", borderRadius: "8px",
+                    color: "#ccc", fontWeight: 600, fontSize: "13px",
+                    padding: "6px 10px", cursor: "pointer",
+                  }}>取消</button>
+                </div>
+              </div>
+            </>
+          )}
+        </div>,
+        document.body
+      )}
+
       {/* FAB */}
       {tab !== "workout" && (
         <button
@@ -1471,15 +1661,29 @@ export default function FitForge({ user }) {
               版本更新記錄
             </div>
 
-            {/* v1.8.3 */}
+            {/* v1.9.0 */}
             <div style={{ marginBottom: "24px" }}>
               <div style={{ display: "flex", alignItems: "center", gap: "10px", marginBottom: "10px" }}>
-                <span style={{ fontSize: "17px", fontWeight: 900, color: "#ffd700" }}>v1.8.3</span>
+                <span style={{ fontSize: "17px", fontWeight: 900, color: "#ffd700" }}>v1.9.0</span>
                 <span style={{
                   fontSize: "11px", fontWeight: 800, color: "#ff6a00",
                   background: "rgba(255,106,0,0.15)", border: "1px solid rgba(255,106,0,0.3)",
                   borderRadius: "6px", padding: "2px 7px", letterSpacing: "0.05em",
                 }}>最新</span>
+                <span style={{ fontSize: "12px", color: "#555", marginLeft: "auto" }}>2026-04-02</span>
+              </div>
+              <div style={{ display: "flex", flexDirection: "column", gap: "7px" }}>
+                <div style={{ fontSize: "14px", color: "#c8c4bc", display: "flex", gap: "8px" }}>
+                  <span style={{ color: "#ffd700", flexShrink: 0 }}>✨</span>
+                  <span>組間計時器 — 儲存訓練後自動倒數，底部浮動顯示，可調整預設休息時間</span>
+                </div>
+              </div>
+            </div>
+
+            {/* v1.8.3 */}
+            <div style={{ marginBottom: "24px" }}>
+              <div style={{ display: "flex", alignItems: "center", gap: "10px", marginBottom: "10px" }}>
+                <span style={{ fontSize: "17px", fontWeight: 900, color: "#e8e4dc" }}>v1.8.3</span>
                 <span style={{ fontSize: "12px", color: "#555", marginLeft: "auto" }}>2026-03-31</span>
               </div>
               <div style={{ display: "flex", flexDirection: "column", gap: "7px" }}>

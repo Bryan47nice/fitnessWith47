@@ -17,6 +17,7 @@ import {
   canSaveGoal,
   filterCalendarEvents,
   getNextClass,
+  formatRestTime,
 } from "./fitforge.utils.js";
 
 // ─── 一、getWeekStart ──────────────────────────────────────────────────────
@@ -636,5 +637,32 @@ describe("getNextClass()", () => {
     const result = getNextClass(upcomingClasses);
     // Then: cls2 has the earlier timestamp
     expect(result).toBe(cls2);
+  });
+});
+
+// ─── 九、formatRestTime ────────────────────────────────────────────────────
+describe("formatRestTime()", () => {
+  test("TC-F1 標準秒數 90s 格式化為 1:30", () => {
+    // Given: seconds = 90
+    // When:
+    const result = formatRestTime(90);
+    // Then:
+    expect(result).toBe("1:30");
+  });
+
+  test("TC-F2 零秒格式化為 0:00", () => {
+    // Given: seconds = 0
+    // When:
+    const result = formatRestTime(0);
+    // Then:
+    expect(result).toBe("0:00");
+  });
+
+  test("TC-F3 個位數秒補零 65s 格式化為 1:05", () => {
+    // Given: seconds = 65
+    // When:
+    const result = formatRestTime(65);
+    // Then:
+    expect(result).toBe("1:05");
   });
 });

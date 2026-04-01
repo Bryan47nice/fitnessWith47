@@ -296,6 +296,7 @@ userPushTokens/{userId}       → { fcmToken, lastActiveAt, lastNotifiedAt }
 | `body_migrated_date_key_v122` | 身材資料遷移旗標（v1.2.2 一次性遷移） |
 | `ex_active_tag` | 上次選擇的動作部位 Tag（胸/背/肩/腿/手臂/核心/有氧/自訂） |
 | `popup_seen_goals_intro_v130` | 目標追蹤頁首次進入引導彈窗（v1.3.3 新增） |
+| `rest_timer_duration` | 組間計時器預設秒數（v1.9.0 新增，預設 90） |
 
 ---
 

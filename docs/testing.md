@@ -25,6 +25,7 @@
 | `canSaveGoal(targetValue, deadline, goalType, latestBMI, opts)` | 儲存目標按鈕是否可用（opts 含 frequencyMode、targetExercise） | 無 |
 | `filterCalendarEvents(events, keyword)` | 依關鍵字篩選 Google Calendar 事件 | 無 |
 | `getNextClass(upcomingClasses)` | 回傳最近一筆即將到來的課程，無則回傳 null | 無 |
+| `formatRestTime(seconds)` | 將秒數格式化為 "m:ss" 字串（例：90 → "1:30"） | 無 |
 
 > 所有函式從 `FitForge.jsx` 抽取後，`FitForge.jsx` 改為 import 使用，行為不變。
 
@@ -375,6 +376,25 @@
 - Given：兩筆課程，startDateTime 為毫秒 timestamp，分別對應 4/10 和 4/8
 - When：呼叫 `getNextClass(upcomingClasses)`
 - Then：回傳 4/8 的課程（timestamp 較小）
+
+---
+
+### 十、`formatRestTime(seconds)` — 休息計時器格式化
+
+**TC-F1 標準秒數 90s 格式化為 1:30**
+- Given：`seconds = 90`
+- When：呼叫 `formatRestTime(90)`
+- Then：回傳 `"1:30"`
+
+**TC-F2 零秒格式化為 0:00**
+- Given：`seconds = 0`
+- When：呼叫 `formatRestTime(0)`
+- Then：回傳 `"0:00"`
+
+**TC-F3 個位數秒補零 65s 格式化為 1:05**
+- Given：`seconds = 65`
+- When：呼叫 `formatRestTime(65)`
+- Then：回傳 `"1:05"`（秒數不足兩位數時補零）
 
 ---
 
