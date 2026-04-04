@@ -177,8 +177,8 @@ export function canSaveGoal(targetValue, deadline, goalType, latestBMI, opts = {
  */
 export function filterCalendarEvents(events, keyword) {
   if (!Array.isArray(events) || !keyword) return [];
-  const lower = keyword.toLowerCase();
-  return events.filter(e => (e.summary || "").toLowerCase().includes(lower));
+  const lower = String(keyword).toLowerCase();
+  return events.filter(e => String(e.summary || "").toLowerCase().includes(lower));
 }
 
 /**

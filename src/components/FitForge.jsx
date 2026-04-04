@@ -379,7 +379,7 @@ export default function FitForge({ user }) {
   }
 
   async function syncCalendar(token, keyword) {
-    const kw = keyword ?? calendarKeyword;
+    const kw = String(keyword ?? calendarKeyword ?? "健身");
     setCalendarSyncing(true);
     try {
       const now = new Date();
@@ -389,7 +389,10 @@ export default function FitForge({ user }) {
         headers: { Authorization: `Bearer ${token}` },
         cache: "no-store",
       });
-      if (!res.ok) throw new Error(`Calendar API error: ${res.status}`);
+      if (!res.ok) {
+        const errBody = await res.json().catch(() => ({}));
+        throw new Error(`Calendar API error: ${res.status} – ${errBody?.error?.message || "unknown"}`);
+      }
       const data = await res.json();
       const filtered = filterCalendarEvents(data.items || [], kw);
 
