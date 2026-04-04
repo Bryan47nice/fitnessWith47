@@ -167,6 +167,9 @@ export default function FitForge({ user }) {
 
   const today = toLocalDateStr();
   const todayWorked = workouts.some(w => w.date === today);
+  const yesterday = toLocalDateStr(new Date(Date.now() - 86400000));
+  const effectiveStreak = (streak.lastDate === today || streak.lastDate === yesterday)
+    ? streak.count : 0;
 
   // Subscribe to workouts
   useEffect(() => {
@@ -334,7 +337,7 @@ export default function FitForge({ user }) {
       nextClassTitle,
       nextClassTime,
       daysUntil,
-      streak: streak.count || 0,
+      streak: effectiveStreak,
       todayStatus: todayWorked ? '✓ 今日已訓練' : '',
     };
     navigator.serviceWorker?.ready.then(reg => {
@@ -473,7 +476,6 @@ export default function FitForge({ user }) {
     if (loading) return;
     const todayWorked = workouts.some(w => w.date === today);
     if (todayWorked && streak.lastDate !== today) {
-      const yesterday = toLocalDateStr(new Date(Date.now() - 86400000));
       const newCount = streak.lastDate === yesterday ? streak.count + 1 : 1;
       setDoc(doc(db, "users", user.uid, "meta", "streak"), { count: newCount, lastDate: today });
     }
@@ -1126,8 +1128,8 @@ export default function FitForge({ user }) {
           FITFORGE
         </div>
         <div style={{ display: "flex", alignItems: "center", gap: "10px" }}>
-          <div style={styles.streakBadge(streak.count)}>
-            🔥 {streak.count} 天連續
+          <div style={styles.streakBadge(effectiveStreak)}>
+            🔥 {effectiveStreak} 天連續
           </div>
           <div style={{ position: "relative", flexShrink: 0 }}>
             <button
@@ -1214,7 +1216,7 @@ export default function FitForge({ user }) {
             prMap={prMap}
             volumePeriod={volumePeriod}
             setVolumePeriod={setVolumePeriod}
-            streak={streak}
+            streak={{ ...streak, count: effectiveStreak }}
             nextClass={nextClass}
             calendarConnected={calendarConnected}
             calendarKeyword={calendarKeyword}
@@ -1268,7 +1270,7 @@ export default function FitForge({ user }) {
             deleteCustomExercise={deleteCustomExercise}
             updateCustomExercise={updateCustomExercise}
             setConfirmDialog={setConfirmDialog}
-            streak={streak}
+            streak={{ ...streak, count: effectiveStreak }}
             aiRefreshKey={aiRefreshKey}
           />
         )}
