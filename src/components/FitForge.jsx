@@ -21,7 +21,7 @@ import WorkoutTab from "./tabs/WorkoutTab.jsx";
 import BodyTab from "./tabs/BodyTab.jsx";
 import GoalsTab from "./tabs/GoalsTab.jsx";
 
-const APP_VERSION = "1.9.2";
+const APP_VERSION = "1.9.3";
 const toLocalDateStr = (d = new Date()) =>
   `${d.getFullYear()}-${String(d.getMonth() + 1).padStart(2, "0")}-${String(d.getDate()).padStart(2, "0")}`;
 
@@ -385,7 +385,11 @@ export default function FitForge({ user }) {
       const now = new Date();
       const timeMax = new Date(now.getTime() + 30 * 24 * 60 * 60 * 1000);
       const url = `https://www.googleapis.com/calendar/v3/calendars/primary/events?timeMin=${encodeURIComponent(now.toISOString())}&timeMax=${encodeURIComponent(timeMax.toISOString())}&singleEvents=true&orderBy=startTime&maxResults=50`;
-      const res = await fetch(url, { headers: { Authorization: `Bearer ${token}` } });
+      const res = await fetch(url, {
+        headers: { Authorization: `Bearer ${token}` },
+        cache: "no-store",
+      });
+      if (!res.ok) throw new Error(`Calendar API error: ${res.status}`);
       const data = await res.json();
       const filtered = filterCalendarEvents(data.items || [], kw);
 
@@ -410,6 +414,7 @@ export default function FitForge({ user }) {
       await batch.commit();
     } catch (err) {
       console.error("Calendar sync error:", err);
+      alert("行事曆同步失敗，請重新連結 Google 行事曆");
     } finally {
       setCalendarSyncing(false);
     }
@@ -1702,15 +1707,29 @@ export default function FitForge({ user }) {
               版本更新記錄
             </div>
 
-            {/* v1.9.2 */}
+            {/* v1.9.3 */}
             <div style={{ marginBottom: "24px" }}>
               <div style={{ display: "flex", alignItems: "center", gap: "10px", marginBottom: "10px" }}>
-                <span style={{ fontSize: "17px", fontWeight: 900, color: "#ffd700" }}>v1.9.2</span>
+                <span style={{ fontSize: "17px", fontWeight: 900, color: "#ffd700" }}>v1.9.3</span>
                 <span style={{
                   fontSize: "11px", fontWeight: 800, color: "#ff6a00",
                   background: "rgba(255,106,0,0.15)", border: "1px solid rgba(255,106,0,0.3)",
                   borderRadius: "6px", padding: "2px 7px", letterSpacing: "0.05em",
                 }}>最新</span>
+                <span style={{ fontSize: "12px", color: "#555", marginLeft: "auto" }}>2026-04-03</span>
+              </div>
+              <div style={{ display: "flex", flexDirection: "column", gap: "7px" }}>
+                <div style={{ fontSize: "14px", color: "#c8c4bc", display: "flex", gap: "8px" }}>
+                  <span style={{ color: "#ffd700", flexShrink: 0 }}>✨</span>
+                  <span>修正行事曆同步靜默失敗問題：同步失敗時顯示錯誤提示，並防止 PWA 快取舊的課程資料</span>
+                </div>
+              </div>
+            </div>
+
+            {/* v1.9.2 */}
+            <div style={{ marginBottom: "24px" }}>
+              <div style={{ display: "flex", alignItems: "center", gap: "10px", marginBottom: "10px" }}>
+                <span style={{ fontSize: "17px", fontWeight: 900, color: "#e8e4dc" }}>v1.9.2</span>
                 <span style={{ fontSize: "12px", color: "#555", marginLeft: "auto" }}>2026-04-03</span>
               </div>
               <div style={{ display: "flex", flexDirection: "column", gap: "7px" }}>
