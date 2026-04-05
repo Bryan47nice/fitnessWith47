@@ -174,19 +174,8 @@ QA Agent 測試規範：
 |------|------|---------|
 | 1. Build | `npm run build` | 立即停止，不繼續部署 |
 | 2. Deploy Hosting | `firebase deploy --only hosting` | 立即停止，不執行 RC / FCM |
-| 3. Remote Config 更新 | REST API PUT（見參數說明） | 警告但繼續 FCM |
+| 3. Remote Config 更新 | `node scripts/rc-update.cjs "{RC_TITLE}" "{RC_BODY}" "{RC_BUTTON}"` | 警告但繼續 FCM |
 | 4. FCM 推播 | `node scripts/push-notify.cjs "<title>" "<body>"` | 警告回報，不影響已部署版本 |
-
-### Remote Config 更新參數
-
-```
-popup_enabled: true
-popup_title: {RC_TITLE}
-popup_body: {RC_BODY}
-popup_button_text: {RC_BUTTON}
-popup_trigger_type: 1
-popup_trigger_count: "1"
-```
 
 ### 回報格式
 
@@ -204,21 +193,13 @@ popup_trigger_count: "1"
 啟動 Deploy Agent 時使用以下 prompt（貼入 Agent tool 的 prompt 欄位，替換大括號內容）：
 
 ```
-你是 FitForge 專案的 Deploy Agent。請依序執行以下部署步驟，Build 或 Deploy 失敗時立即停止並回報錯誤，不繼續執行後續步驟。
-
-輸入參數：
-- version: {VERSION}
-- rc_title: {RC_TITLE}
-- rc_body: {RC_BODY}
-- rc_button: {RC_BUTTON}
-- fcm_title: {FCM_TITLE}
-- fcm_body: {FCM_BODY}
+你是 FitForge 專案的 Deploy Agent。請依序執行以下部署步驟，Build 或 Deploy 失敗時立即停止並回報錯誤，不繼續執行後續步驟。所有指令都在 E:\claudecode\fitnessWith47 目錄下執行。不需要讀取任何程式碼或設定檔，直接依序執行以下指令即可。
 
 步驟：
-1. 在 E:\claudecode\fitnessWith47 執行 `npm run build`，確認輸出至 build/ 目錄無報錯。若失敗，立即停止。
-2. 執行 `firebase deploy --only hosting`。若失敗，立即停止。
-3. 更新 Firebase Remote Config（使用 REST API，設定 popup_enabled=true, popup_title={RC_TITLE}, popup_body={RC_BODY}, popup_button_text={RC_BUTTON}, popup_trigger_type=1, popup_trigger_count="1"）。若失敗，輸出警告並繼續。
-4. 執行 `node scripts/push-notify.cjs "{FCM_TITLE}" "{FCM_BODY}"`。若失敗，輸出警告。
+1. `npm run build` — 若失敗，立即停止。
+2. `firebase deploy --only hosting` — 若失敗，立即停止。
+3. `node scripts/rc-update.cjs "{RC_TITLE}" "{RC_BODY}" "{RC_BUTTON}"` — 若失敗，輸出警告並繼續。
+4. `node scripts/push-notify.cjs "{FCM_TITLE}" "{FCM_BODY}"` — 若失敗，輸出警告。
 5. 輸出每步驟結果（✅/⚠️），最後一行輸出「🚀 {VERSION} 部署完成！」
 ```
 
