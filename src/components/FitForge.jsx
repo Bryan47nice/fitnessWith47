@@ -21,7 +21,7 @@ import WorkoutTab from "./tabs/WorkoutTab.jsx";
 import BodyTab from "./tabs/BodyTab.jsx";
 import GoalsTab from "./tabs/GoalsTab.jsx";
 
-const APP_VERSION = "1.9.3";
+const APP_VERSION = "1.9.4";
 const toLocalDateStr = (d = new Date()) =>
   `${d.getFullYear()}-${String(d.getMonth() + 1).padStart(2, "0")}-${String(d.getDate()).padStart(2, "0")}`;
 
@@ -1591,6 +1591,37 @@ export default function FitForge({ user }) {
             </div>
           </div>
 
+          {/* Streak reset */}
+          <div style={{ padding: "8px 24px 0" }}>
+            <div style={{
+              padding: "12px 14px",
+              border: "1px solid rgba(255,255,255,0.08)",
+              borderRadius: "12px",
+              background: "rgba(255,255,255,0.03)",
+              display: "flex", alignItems: "center", justifyContent: "space-between",
+            }}>
+              <div>
+                <div style={{ fontSize: "15px", fontWeight: 700, color: "#e8e4dc" }}>🔥 連續天數</div>
+                <div style={{ fontSize: "12px", color: "#666", marginTop: "2px" }}>
+                  目前 {effectiveStreak} 天
+                </div>
+              </div>
+              <button
+                onClick={async () => {
+                  const confirmed = await confirmDialog("確定要重置連續天數為 0 嗎？");
+                  if (!confirmed) return;
+                  await setDoc(doc(db, "users", user.uid, "meta", "streak"), { count: 0, lastDate: null });
+                }}
+                style={{
+                  padding: "6px 12px", borderRadius: "8px",
+                  background: "rgba(255,255,255,0.06)",
+                  border: "1px solid rgba(255,255,255,0.12)",
+                  color: "#aaa", fontSize: "12px", cursor: "pointer", fontFamily: "inherit",
+                }}
+              >重置</button>
+            </div>
+          </div>
+
           {/* Changelog button */}
           <div style={{ padding: "10px 24px 0" }}>
             <button
@@ -1712,16 +1743,30 @@ export default function FitForge({ user }) {
               版本更新記錄
             </div>
 
-            {/* v1.9.3 */}
+            {/* v1.9.4 */}
             <div style={{ marginBottom: "24px" }}>
               <div style={{ display: "flex", alignItems: "center", gap: "10px", marginBottom: "10px" }}>
-                <span style={{ fontSize: "17px", fontWeight: 900, color: "#ffd700" }}>v1.9.3</span>
+                <span style={{ fontSize: "17px", fontWeight: 900, color: "#ffd700" }}>v1.9.4</span>
                 <span style={{
                   fontSize: "11px", fontWeight: 800, color: "#ff6a00",
                   background: "rgba(255,106,0,0.15)", border: "1px solid rgba(255,106,0,0.3)",
                   borderRadius: "6px", padding: "2px 7px", letterSpacing: "0.05em",
                 }}>最新</span>
-                <span style={{ fontSize: "12px", color: "#555", marginLeft: "auto" }}>2026-04-03</span>
+                <span style={{ fontSize: "12px", color: "#555", marginLeft: "auto" }}>2026-04-04</span>
+              </div>
+              <div style={{ display: "flex", flexDirection: "column", gap: "7px" }}>
+                <div style={{ fontSize: "14px", color: "#c8c4bc", display: "flex", gap: "8px" }}>
+                  <span style={{ color: "#ffd700", flexShrink: 0 }}>✨</span>
+                  <span>帳號設定新增連續天數重置按鈕，可手動修正錯誤的連續紀錄</span>
+                </div>
+              </div>
+            </div>
+
+            {/* v1.9.3 */}
+            <div style={{ marginBottom: "24px" }}>
+              <div style={{ display: "flex", alignItems: "center", gap: "10px", marginBottom: "10px" }}>
+                <span style={{ fontSize: "17px", fontWeight: 900, color: "#e8e4dc" }}>v1.9.3</span>
+                <span style={{ fontSize: "12px", color: "#555", marginLeft: "auto" }}>2026-04-04</span>
               </div>
               <div style={{ display: "flex", flexDirection: "column", gap: "7px" }}>
                 <div style={{ fontSize: "14px", color: "#c8c4bc", display: "flex", gap: "8px" }}>
