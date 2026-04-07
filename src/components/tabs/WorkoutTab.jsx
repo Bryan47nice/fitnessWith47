@@ -1036,29 +1036,23 @@ export default function WorkoutTab({
                         border: isCoachDay ? "1px solid rgba(255,215,0,0.25)" : "1px solid rgba(255,255,255,0.06)",
                         marginBottom: isDayOpen ? "6px" : 0,
                       }}>
-                        <span style={{ display: "flex", alignItems: "center", gap: "6px", fontSize: "13px", color: "#bbb", fontWeight: 600 }}>
-                          📅 {dateLabel} · {day.items.length} 個動作 · {day.totalSets} 組
-                          {isCoachDay && (
-                            <span style={{
-                              fontSize: "11px", fontWeight: 800,
-                              background: "linear-gradient(135deg, #ffd700, #ff9500)",
-                              color: "#1a1100", borderRadius: "20px",
-                              padding: "2px 8px", lineHeight: 1.4,
-                            }}>🏅 教練課</span>
-                          )}
+                        <span style={{ fontSize: "13px", color: "#bbb", fontWeight: 600, flex: 1, minWidth: 0 }}>
+                          {isCoachDay ? "🏅" : "📅"} {dateLabel} · {day.items.length} 個動作 · {day.totalSets} 組
                         </span>
-                        <div style={{ display: "flex", alignItems: "center", gap: "8px" }}>
+                        <div style={{ display: "flex", alignItems: "center", gap: "6px", flexShrink: 0 }}>
                           <button
                             onClick={e => { e.stopPropagation(); toggleCoachDay?.(day.date); }}
                             style={{
-                              fontSize: "11px", padding: "2px 8px",
-                              borderRadius: "6px", cursor: "pointer",
+                              width: "28px", height: "28px",
+                              borderRadius: "50%", cursor: "pointer",
                               background: "transparent",
-                              border: isCoachDay ? "1px solid rgba(255,215,0,0.4)" : "1px solid rgba(255,255,255,0.1)",
+                              border: isCoachDay ? "1px solid rgba(255,215,0,0.5)" : "1px solid rgba(255,255,255,0.1)",
                               color: isCoachDay ? "#ffd700" : "#555",
-                              fontFamily: "inherit",
+                              fontSize: "13px",
+                              display: "flex", alignItems: "center", justifyContent: "center",
+                              fontFamily: "inherit", lineHeight: 1,
                             }}
-                          >{isCoachDay ? "✕ 取消" : "＋ 教練課"}</button>
+                          >{isCoachDay ? "✕" : "🏅"}</button>
                           <span style={{ color: "#555", fontSize: "11px" }}>{isDayOpen ? "▲" : "▼"}</span>
                         </div>
                       </div>
