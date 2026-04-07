@@ -64,6 +64,8 @@ export default function WorkoutTab({
   streak,
   // AI refresh
   aiRefreshKey,
+  // Coach days
+  coachDays, toggleCoachDay,
 }) {
   const MONTHS_ZH = ["一月","二月","三月","四月","五月","六月","七月","八月","九月","十月","十一月","十二月"];
   const toLocalDateStr = (d = new Date()) =>
@@ -1013,6 +1015,7 @@ export default function WorkoutTab({
                   const mm = String(d.getMonth() + 1).padStart(2, '0');
                   const dd = String(d.getDate()).padStart(2, '0');
                   const dateLabel = `${mm}/${dd}（週${weekday}）`;
+                  const isCoachDay = coachDays?.includes(day.date);
                   return (
                     <div key={day.date} style={{ marginBottom: "4px" }}>
                       <div onClick={() => {
@@ -1028,14 +1031,36 @@ export default function WorkoutTab({
                       }} style={{
                         display: "flex", justifyContent: "space-between", alignItems: "center",
                         padding: "8px 14px", borderRadius: "8px",
-                        background: "rgba(255,255,255,0.03)", cursor: "pointer",
-                        border: "1px solid rgba(255,255,255,0.06)",
+                        background: isCoachDay ? "rgba(255,215,0,0.07)" : "rgba(255,255,255,0.03)",
+                        cursor: "pointer",
+                        border: isCoachDay ? "1px solid rgba(255,215,0,0.25)" : "1px solid rgba(255,255,255,0.06)",
                         marginBottom: isDayOpen ? "6px" : 0,
                       }}>
-                        <span style={{ fontSize: "13px", color: "#bbb", fontWeight: 600 }}>
+                        <span style={{ display: "flex", alignItems: "center", gap: "6px", fontSize: "13px", color: "#bbb", fontWeight: 600 }}>
                           📅 {dateLabel} · {day.items.length} 個動作 · {day.totalSets} 組
+                          {isCoachDay && (
+                            <span style={{
+                              fontSize: "11px", fontWeight: 800,
+                              background: "linear-gradient(135deg, #ffd700, #ff9500)",
+                              color: "#1a1100", borderRadius: "20px",
+                              padding: "2px 8px", lineHeight: 1.4,
+                            }}>🏅 教練課</span>
+                          )}
                         </span>
-                        <span style={{ color: "#555", fontSize: "11px" }}>{isDayOpen ? "▲" : "▼"}</span>
+                        <div style={{ display: "flex", alignItems: "center", gap: "8px" }}>
+                          <button
+                            onClick={e => { e.stopPropagation(); toggleCoachDay?.(day.date); }}
+                            style={{
+                              fontSize: "11px", padding: "2px 8px",
+                              borderRadius: "6px", cursor: "pointer",
+                              background: "transparent",
+                              border: isCoachDay ? "1px solid rgba(255,215,0,0.4)" : "1px solid rgba(255,255,255,0.1)",
+                              color: isCoachDay ? "#ffd700" : "#555",
+                              fontFamily: "inherit",
+                            }}
+                          >{isCoachDay ? "✕ 取消" : "＋ 教練課"}</button>
+                          <span style={{ color: "#555", fontSize: "11px" }}>{isDayOpen ? "▲" : "▼"}</span>
+                        </div>
                       </div>
                       {isDayOpen && day.items.map(w => (
                         <div key={w.id} style={{ ...styles.workoutItem, marginBottom: "8px" }}>

@@ -2,7 +2,7 @@ import { useState, useEffect, useRef } from "react";
 import { createPortal } from "react-dom";
 import {
   collection, addDoc, onSnapshot, query, orderBy,
-  doc, setDoc, serverTimestamp, deleteDoc, updateDoc, writeBatch, getDocs,
+  doc, setDoc, serverTimestamp, deleteDoc, updateDoc, writeBatch, getDocs, getDoc,
 } from "firebase/firestore";
 import { signOut } from "firebase/auth";
 import { fetchAndActivate, getBoolean, getString, getNumber } from "firebase/remote-config";
@@ -21,7 +21,7 @@ import WorkoutTab from "./tabs/WorkoutTab.jsx";
 import BodyTab from "./tabs/BodyTab.jsx";
 import GoalsTab from "./tabs/GoalsTab.jsx";
 
-const APP_VERSION = "1.9.4";
+const APP_VERSION = "1.10.0";
 const toLocalDateStr = (d = new Date()) =>
   `${d.getFullYear()}-${String(d.getMonth() + 1).padStart(2, "0")}-${String(d.getDate()).padStart(2, "0")}`;
 
@@ -164,6 +164,11 @@ export default function FitForge({ user }) {
   const [nextClass, setNextClass] = useState(null);
   const [calendarSyncing, setCalendarSyncing] = useState(false);
   const [calendarKeyword, setCalendarKeyword] = useState("健身");
+
+  // Coach days
+  const [coachDays, setCoachDays] = useState([]); // array of date strings
+  const [coachQuota, setCoachQuota] = useState({ total: 24 });
+  const [quotaInput, setQuotaInput] = useState("");
 
   const today = toLocalDateStr();
   const todayWorked = workouts.some(w => w.date === today);
@@ -367,6 +372,21 @@ export default function FitForge({ user }) {
       setNextClass(getNextClass(classes));
     });
     return unsub;
+  }, [user.uid]);
+
+  // Subscribe to coachDays
+  useEffect(() => {
+    const unsub = onSnapshot(collection(db, "users", user.uid, "coachDays"), (snap) => {
+      setCoachDays(snap.docs.map(d => d.id));
+    });
+    return unsub;
+  }, [user.uid]);
+
+  // Load coachQuota
+  useEffect(() => {
+    getDoc(doc(db, "users", user.uid, "meta", "coachQuota")).then(snap => {
+      if (snap.exists()) setCoachQuota(snap.data());
+    });
   }, [user.uid]);
 
   // ── Google Calendar helpers ──────────────────────────────────────────────
@@ -722,6 +742,28 @@ export default function FitForge({ user }) {
       setPrAnim(true);
       setTimeout(() => setPrAnim(false), 2500);
     }
+  }
+
+  async function toggleCoachDay(date) {
+    const docRef = doc(db, "users", user.uid, "coachDays", date);
+    if (coachDays.includes(date)) {
+      setConfirmDialog({
+        message: "確認取消此教練課標記？",
+        onConfirm: async () => {
+          await deleteDoc(docRef);
+          setConfirmDialog(null);
+        },
+      });
+    } else {
+      await setDoc(docRef, { date, createdAt: serverTimestamp() });
+    }
+  }
+
+  async function saveCoachQuota(total) {
+    const t = parseInt(total, 10);
+    if (!t || t <= 0) return;
+    await setDoc(doc(db, "users", user.uid, "meta", "coachQuota"), { total: t }, { merge: true });
+    setCoachQuota({ total: t });
   }
 
   function deleteWorkout(id) {
@@ -1224,6 +1266,8 @@ export default function FitForge({ user }) {
             onSyncCalendar={connectGoogleCalendar}
             onDisconnectCalendar={disconnectCalendar}
             onSaveCalendarKeyword={saveCalendarKeyword}
+            coachDays={coachDays}
+            coachQuota={coachQuota}
           />
         )}
 
@@ -1272,6 +1316,8 @@ export default function FitForge({ user }) {
             setConfirmDialog={setConfirmDialog}
             streak={{ ...streak, count: effectiveStreak }}
             aiRefreshKey={aiRefreshKey}
+            coachDays={coachDays}
+            toggleCoachDay={toggleCoachDay}
           />
         )}
 
@@ -1622,6 +1668,51 @@ export default function FitForge({ user }) {
             </div>
           </div>
 
+          {/* Coach quota */}
+          <div style={{ padding: "8px 24px 0" }}>
+            <div style={{
+              padding: "12px 14px",
+              border: "1px solid rgba(255,215,0,0.2)",
+              borderRadius: "12px",
+              background: "rgba(255,215,0,0.04)",
+              display: "flex", alignItems: "center", justifyContent: "space-between",
+            }}>
+              <div>
+                <div style={{ fontSize: "15px", fontWeight: 700, color: "#e8e4dc" }}>🏅 教練課扣打</div>
+                <div style={{ fontSize: "12px", color: "#666", marginTop: "2px" }}>
+                  總堂數 {coachQuota.total} 堂 · 已上 {coachDays.length} 堂
+                </div>
+              </div>
+              <div style={{ display: "flex", gap: "6px", alignItems: "center" }}>
+                <input
+                  type="number"
+                  value={quotaInput}
+                  onChange={e => setQuotaInput(e.target.value)}
+                  placeholder={String(coachQuota.total)}
+                  style={{
+                    width: "52px", padding: "6px 8px",
+                    background: "rgba(255,255,255,0.06)",
+                    border: "1px solid rgba(255,255,255,0.15)",
+                    borderRadius: "8px", color: "#e8e4dc",
+                    fontSize: "13px", textAlign: "center",
+                    fontFamily: "inherit",
+                  }}
+                />
+                <button
+                  onClick={() => { saveCoachQuota(quotaInput); setQuotaInput(""); }}
+                  disabled={!quotaInput}
+                  style={{
+                    padding: "6px 10px", borderRadius: "8px",
+                    background: quotaInput ? "rgba(255,215,0,0.2)" : "rgba(255,255,255,0.04)",
+                    border: "1px solid rgba(255,215,0,0.3)",
+                    color: quotaInput ? "#ffd700" : "#555", fontSize: "12px",
+                    cursor: quotaInput ? "pointer" : "default", fontFamily: "inherit",
+                  }}
+                >儲存</button>
+              </div>
+            </div>
+          </div>
+
           {/* Changelog button */}
           <div style={{ padding: "10px 24px 0" }}>
             <button
@@ -1743,15 +1834,29 @@ export default function FitForge({ user }) {
               版本更新記錄
             </div>
 
-            {/* v1.9.4 */}
+            {/* v1.10.0 */}
             <div style={{ marginBottom: "24px" }}>
               <div style={{ display: "flex", alignItems: "center", gap: "10px", marginBottom: "10px" }}>
-                <span style={{ fontSize: "17px", fontWeight: 900, color: "#ffd700" }}>v1.9.4</span>
+                <span style={{ fontSize: "17px", fontWeight: 900, color: "#ffd700" }}>v1.10.0</span>
                 <span style={{
                   fontSize: "11px", fontWeight: 800, color: "#ff6a00",
                   background: "rgba(255,106,0,0.15)", border: "1px solid rgba(255,106,0,0.3)",
                   borderRadius: "6px", padding: "2px 7px", letterSpacing: "0.05em",
                 }}>最新</span>
+                <span style={{ fontSize: "12px", color: "#555", marginLeft: "auto" }}>2026-04-07</span>
+              </div>
+              <div style={{ display: "flex", flexDirection: "column", gap: "7px" }}>
+                <div style={{ fontSize: "14px", color: "#c8c4bc", display: "flex", gap: "8px" }}>
+                  <span style={{ color: "#ffd700", flexShrink: 0 }}>✨</span>
+                  <span>教練課標記功能：訓練日誌可標記教練課、Dashboard 進度條追蹤扣打用量</span>
+                </div>
+              </div>
+            </div>
+
+            {/* v1.9.4 */}
+            <div style={{ marginBottom: "24px" }}>
+              <div style={{ display: "flex", alignItems: "center", gap: "10px", marginBottom: "10px" }}>
+                <span style={{ fontSize: "17px", fontWeight: 900, color: "#e8e4dc" }}>v1.9.4</span>
                 <span style={{ fontSize: "12px", color: "#555", marginLeft: "auto" }}>2026-04-04</span>
               </div>
               <div style={{ display: "flex", flexDirection: "column", gap: "7px" }}>

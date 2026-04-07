@@ -44,13 +44,21 @@ function daysUntilClass(startDateTime) {
   return `${diff} 天後`;
 }
 
-export default function DashboardTab({ workouts, bodyData, prMap, volumePeriod, setVolumePeriod, streak, nextClass, calendarConnected, calendarKeyword, onConnectCalendar, onSyncCalendar, onDisconnectCalendar, onSaveCalendarKeyword }) {
+export default function DashboardTab({ workouts, bodyData, prMap, volumePeriod, setVolumePeriod, streak, nextClass, calendarConnected, calendarKeyword, onConnectCalendar, onSyncCalendar, onDisconnectCalendar, onSaveCalendarKeyword, coachDays = [], coachQuota = { total: 24 } }) {
   const [prExpanded, setPrExpanded] = useState(true);
   const [editingKeyword, setEditingKeyword] = useState(false);
   const [keywordInput, setKeywordInput] = useState("");
 
   const workoutDays = new Set(workouts.map(w => w.date)).size;
   const latestBody  = bodyData[0];
+
+  // Coach session stats
+  const thisMonthPrefix = new Date().toISOString().slice(0, 7); // "YYYY-MM"
+  const coachThisMonth = coachDays.filter(d => d.startsWith(thisMonthPrefix)).length;
+  const coachTotal = coachDays.length;
+  const coachQuotaTotal = coachQuota.total || 24;
+  const coachRemaining = Math.max(0, coachQuotaTotal - coachTotal);
+  const coachProgressPct = Math.min(100, (coachTotal / coachQuotaTotal) * 100);
 
   // This week's training days (Mon–Sun)
   const toLocalDateStr = (d = new Date()) =>
@@ -232,19 +240,41 @@ export default function DashboardTab({ workouts, bodyData, prMap, volumePeriod, 
         )}
       </div>
 
-      <div style={styles.statRow}>
-        <div style={styles.stat}>
-          <div style={styles.statNum}>{workoutDays}</div>
-          <div style={styles.statLabel}>訓練天數</div>
+      {/* 教練課進度卡 */}
+      <div style={{ ...styles.card, marginBottom: 12 }}>
+        <div style={{ display: "flex", justifyContent: "space-between", alignItems: "center", marginBottom: 10 }}>
+          <div style={styles.sectionTitle}>🏅 教練課進度</div>
+          <div style={{ fontSize: "12px", color: "#666" }}>本月 {coachThisMonth} 堂</div>
         </div>
+        <div style={{ display: "flex", alignItems: "center", gap: "12px" }}>
+          <div style={{ flex: 1, height: "8px", borderRadius: "4px", background: "rgba(255,255,255,0.08)", overflow: "hidden" }}>
+            <div style={{
+              height: "100%", width: `${coachProgressPct}%`,
+              background: coachProgressPct >= 100 ? "linear-gradient(90deg,#ffd700,#ff6a00)" : "linear-gradient(90deg,#ffd700,#ff9500)",
+              borderRadius: "4px", transition: "width 0.5s",
+            }} />
+          </div>
+          <div style={{ fontSize: "13px", fontWeight: 700, color: "#ffd700", whiteSpace: "nowrap" }}>
+            {coachTotal} / {coachQuotaTotal}
+          </div>
+        </div>
+        {coachProgressPct >= 100 ? (
+          <div style={{ fontSize: "12px", color: "#ffd700", marginTop: "6px" }}>已完成全部扣打 🎉</div>
+        ) : (
+          <div style={{ fontSize: "12px", color: "#666", marginTop: "6px" }}>剩餘 {coachRemaining} 堂</div>
+        )}
+      </div>
+
+      <div style={{ ...styles.statRow, gridTemplateColumns: "1fr 1fr" }}>
         <div style={styles.stat}>
           <div style={styles.statNum}>{thisWeekCount}</div>
           <div style={styles.statLabel}>本週訓練</div>
           <div style={{ fontSize: "11px", color: "#555", marginTop: "1px" }}>/ 7 天</div>
         </div>
         <div style={styles.stat}>
-          <div style={{ ...styles.statNum, color: bmi ? getBmiColor(bmi) : "#ff6a00" }}>{bmi || "—"}</div>
-          <div style={styles.statLabel}>BMI</div>
+          <div style={{ ...styles.statNum, color: "#ffd700" }}>{coachRemaining}</div>
+          <div style={styles.statLabel}>教練課剩餘</div>
+          <div style={{ fontSize: "11px", color: "#555", marginTop: "1px" }}>堂</div>
         </div>
       </div>
 

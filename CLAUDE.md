@@ -259,7 +259,9 @@ users/{userId}/
   │                              ↑ date 字串為 doc ID（v1.2.2 起，同日覆蓋機制）
   │                              ↑ v1.8.1：移除 chest/arm/thigh，新增 bodyfat/muscle_mass/visceral_fat
   ├── customExercises/{id}    → { name, createdAt }
-  └── meta/streak             → { count, lastDate }
+  ├── meta/streak             → { count, lastDate }
+  ├── coachDays/{YYYY-MM-DD}  → { date, createdAt }
+  └── meta/coachQuota         → { total: 24 }
 
 userPushTokens/{userId}       → { fcmToken, lastActiveAt, lastNotifiedAt }
 ```
