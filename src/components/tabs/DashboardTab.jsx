@@ -1,4 +1,5 @@
 import { useState } from "react";
+import { createPortal } from "react-dom";
 import { ResponsiveContainer, LineChart, Line, XAxis, YAxis, Tooltip } from "recharts";
 import { getWeekStart } from "../../utils/fitforge.utils.js";
 import styles from "../../styles/fitforge.styles.js";
@@ -45,7 +46,8 @@ function daysUntilClass(startDateTime) {
 }
 
 export default function DashboardTab({ workouts, bodyData, prMap, volumePeriod, setVolumePeriod, streak, nextClass, calendarConnected, calendarKeyword, onConnectCalendar, onSyncCalendar, onDisconnectCalendar, onSaveCalendarKeyword, coachDays = [], coachQuota = { total: 24 } }) {
-  const [prExpanded, setPrExpanded] = useState(true);
+  const [prFullView, setPrFullView] = useState(false);
+  const [selectedPrExercise, setSelectedPrExercise] = useState(null);
   const [editingKeyword, setEditingKeyword] = useState(false);
   const [keywordInput, setKeywordInput] = useState("");
 
@@ -80,9 +82,21 @@ export default function DashboardTab({ workouts, bodyData, prMap, volumePeriod, 
         : (b.createdAt?.seconds || 0) - (a.createdAt?.seconds || 0)
     )
     .slice(0, 5);
-  const topPRs = Object.entries(prMap)
-    .sort(([, a], [, b]) => b.weight - a.weight)
-    .slice(0, 5);
+  const allPRsSortedByDate = Object.entries(prMap)
+    .sort(([, a], [, b]) => b.date.localeCompare(a.date));
+  const recentPRs = allPRsSortedByDate.slice(0, 3);
+
+  const prTrendData = selectedPrExercise
+    ? workouts
+        .filter(w => w.exercise === selectedPrExercise)
+        .map(w => ({
+          label: w.date.slice(5),
+          weight: Math.max(...(w.sets?.map(s => parseFloat(s.weight) || 0) || [0]))
+        }))
+        .filter(d => d.weight > 0)
+        .sort((a, b) => a.label < b.label ? -1 : 1)
+        .slice(-12)
+    : [];
 
   let bmi = null;
   if (latestBody?.weight && latestBody?.height) {
@@ -390,18 +404,18 @@ export default function DashboardTab({ workouts, bodyData, prMap, volumePeriod, 
       )}
 
       {/* 個人最佳 PR */}
-      {topPRs.length > 0 && (
+      {recentPRs.length > 0 && (
         <div style={styles.card}>
-          <div style={{ display: "flex", justifyContent: "space-between", alignItems: "center", marginBottom: prExpanded ? 8 : 0 }}>
+          <div style={{ display: "flex", justifyContent: "space-between", alignItems: "center", marginBottom: 8 }}>
             <div style={styles.sectionTitle}>個人最佳 PR</div>
             <button
-              onClick={() => setPrExpanded(v => !v)}
-              style={{ background: "none", border: "none", color: "#666", cursor: "pointer", fontSize: 12, padding: "2px 6px" }}
+              onClick={() => setPrFullView(true)}
+              style={{ background: "none", border: "none", color: "#ff6a00", cursor: "pointer", fontSize: 12, padding: "2px 6px" }}
             >
-              {prExpanded ? "▲" : "▼"}
+              查看全部
             </button>
           </div>
-          {prExpanded && topPRs.map(([exercise, { weight, date }]) => (
+          {recentPRs.map(([exercise, { weight, date }]) => (
             <div key={exercise} style={{ ...styles.workoutItem, display: "flex", justifyContent: "space-between", alignItems: "center" }}>
               <div style={{ fontWeight: 700, fontSize: "15px" }}>{exercise}</div>
               <div style={{ textAlign: "right" }}>
@@ -413,6 +427,104 @@ export default function DashboardTab({ workouts, bodyData, prMap, volumePeriod, 
             </div>
           ))}
         </div>
+      )}
+
+      {/* 全螢幕 PR 頁 */}
+      {prFullView && createPortal(
+        <div style={{
+          position: "fixed", top: 0, left: 0, right: 0, bottom: 0,
+          background: "rgba(10,10,18,0.98)",
+          backdropFilter: "blur(12px)",
+          zIndex: 9999,
+          overflowY: "auto",
+          display: "flex", flexDirection: "column",
+        }}>
+          {/* 頂部返回列 */}
+          <div style={{
+            display: "flex", alignItems: "center", gap: 12,
+            padding: "16px 20px",
+            borderBottom: "1px solid rgba(255,255,255,0.08)",
+            position: "sticky", top: 0,
+            background: "rgba(10,10,18,0.98)",
+            backdropFilter: "blur(12px)",
+          }}>
+            <button
+              onClick={() => { setPrFullView(false); setSelectedPrExercise(null); }}
+              style={{ background: "none", border: "none", color: "#e8e4dc", fontSize: 22, cursor: "pointer", padding: 0, lineHeight: 1 }}
+            >←</button>
+            <div style={{ fontSize: 16, fontWeight: 700, color: "#e8e4dc" }}>個人最佳 PR</div>
+            <div style={{ marginLeft: "auto", fontSize: 12, color: "#555" }}>
+              共 {allPRsSortedByDate.length} 個動作
+            </div>
+          </div>
+
+          {/* PR 列表 */}
+          <div style={{ padding: "12px 16px", flex: 1 }}>
+            {allPRsSortedByDate.map(([exercise, { weight, date }]) => {
+              const isSelected = selectedPrExercise === exercise;
+              const trendData = isSelected ? prTrendData : [];
+              return (
+                <div
+                  key={exercise}
+                  onClick={() => setSelectedPrExercise(prev => prev === exercise ? null : exercise)}
+                  style={{
+                    ...styles.workoutItem,
+                    cursor: "pointer",
+                    borderRadius: 10,
+                    background: isSelected ? "rgba(255,215,0,0.07)" : "transparent",
+                    transition: "background 0.15s",
+                  }}
+                >
+                  <div style={{ display: "flex", justifyContent: "space-between", alignItems: "center" }}>
+                    <div>
+                      <div style={{ fontWeight: 700, fontSize: "15px" }}>{exercise}</div>
+                      <div style={{ fontSize: "11px", color: "#555", marginTop: 2 }}>{date}</div>
+                    </div>
+                    <div style={{ textAlign: "right" }}>
+                      <div style={{ fontSize: "22px", fontWeight: 900, color: "#ffd700" }}>
+                        {weight}<span style={{ fontSize: "13px", fontWeight: 400, color: "#888", marginLeft: "2px" }}>kg</span>
+                      </div>
+                    </div>
+                  </div>
+                  {isSelected && (
+                    <div style={{ marginTop: 10 }}>
+                      {trendData.length > 1 ? (
+                        <ResponsiveContainer width="100%" height={120}>
+                          <LineChart data={trendData} margin={{ top: 4, right: 8, bottom: 0, left: -16 }}>
+                            <XAxis dataKey="label" tick={{ fill: "#666", fontSize: 9 }} tickLine={false} axisLine={false} />
+                            <YAxis tick={{ fill: "#666", fontSize: 9 }} tickLine={false} axisLine={false} width={32} domain={["auto", "auto"]} />
+                            <Tooltip
+                              content={({ active, payload }) => {
+                                if (!active || !payload?.length) return null;
+                                const { label, weight: w } = payload[0].payload;
+                                return (
+                                  <div style={{ background: "rgba(18,18,28,0.96)", border: "1px solid rgba(255,215,0,0.4)", borderRadius: 8, padding: "6px 12px", pointerEvents: "none" }}>
+                                    <div style={{ fontSize: 10, color: "#888" }}>{label}</div>
+                                    <div style={{ fontSize: 18, fontWeight: 900, color: "#ffd700" }}>{w}<span style={{ fontSize: 11, color: "#888" }}> kg</span></div>
+                                  </div>
+                                );
+                              }}
+                              cursor={{ stroke: "rgba(255,215,0,0.2)", strokeWidth: 1, strokeDasharray: "4 4" }}
+                            />
+                            <Line type="monotone" dataKey="weight" stroke="#ffd700" strokeWidth={2}
+                              dot={{ r: 3, fill: "#ffd700", strokeWidth: 0 }}
+                              activeDot={{ r: 5, fill: "#fff", stroke: "#ffd700", strokeWidth: 2 }}
+                            />
+                          </LineChart>
+                        </ResponsiveContainer>
+                      ) : (
+                        <div style={{ fontSize: 12, color: "#555", textAlign: "center", padding: "12px 0" }}>
+                          訓練次數不足，尚無趨勢資料
+                        </div>
+                      )}
+                    </div>
+                  )}
+                </div>
+              );
+            })}
+          </div>
+        </div>,
+        document.body
       )}
 
       <div style={styles.card}>

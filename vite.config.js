@@ -8,6 +8,7 @@ export default defineConfig({
   },
   test: {
     environment: 'jsdom',
+    include: ['src/**/*.test.{js,ts,jsx,tsx}'],
   },
   plugins: [
     react(),
