@@ -26,7 +26,8 @@ const styles = {
   },
   header: {
     position: "relative", zIndex: 10,
-    padding: "24px 20px 0",
+    paddingTop: "calc(24px + env(safe-area-inset-top, 0px))",
+    paddingLeft: "20px", paddingRight: "20px",
     display: "flex", alignItems: "center", justifyContent: "space-between",
   },
   logo: {
