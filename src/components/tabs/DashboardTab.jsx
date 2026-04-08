@@ -417,12 +417,12 @@ export default function DashboardTab({ workouts, bodyData, prMap, volumePeriod, 
           </div>
           {recentPRs.map(([exercise, { weight, date }]) => (
             <div key={exercise} style={{ ...styles.workoutItem, display: "flex", justifyContent: "space-between", alignItems: "center" }}>
-              <div style={{ fontWeight: 700, fontSize: "15px" }}>{exercise}</div>
+              <div style={{ fontWeight: 700, fontSize: "15px", color: "#e8e4dc" }}>{exercise}</div>
               <div style={{ textAlign: "right" }}>
                 <div style={{ fontSize: "20px", fontWeight: 900, color: "#ffd700" }}>
                   {weight}<span style={{ fontSize: "13px", fontWeight: 400, color: "#888", marginLeft: "2px" }}>kg</span>
                 </div>
-                <div style={{ fontSize: "11px", color: "#555" }}>{date}</div>
+                <div style={{ fontSize: "11px", color: "#888" }}>{date}</div>
               </div>
             </div>
           ))}
@@ -471,23 +471,30 @@ export default function DashboardTab({ workouts, bodyData, prMap, volumePeriod, 
                     ...styles.workoutItem,
                     cursor: "pointer",
                     borderRadius: 10,
-                    background: isSelected ? "rgba(255,215,0,0.07)" : "transparent",
-                    transition: "background 0.15s",
+                    border: isSelected
+                      ? "1px solid rgba(255,215,0,0.35)"
+                      : "1px solid rgba(255,255,255,0.07)",
+                    background: "transparent",
+                    marginBottom: 8,
+                    transition: "border-color 0.15s",
                   }}
                 >
                   <div style={{ display: "flex", justifyContent: "space-between", alignItems: "center" }}>
                     <div>
-                      <div style={{ fontWeight: 700, fontSize: "15px" }}>{exercise}</div>
-                      <div style={{ fontSize: "11px", color: "#555", marginTop: 2 }}>{date}</div>
+                      <div style={{ fontWeight: 700, fontSize: "15px", color: "#e8e4dc" }}>{exercise}</div>
+                      <div style={{ fontSize: "11px", color: "#888", marginTop: 2 }}>{date}</div>
                     </div>
-                    <div style={{ textAlign: "right" }}>
-                      <div style={{ fontSize: "22px", fontWeight: 900, color: "#ffd700" }}>
-                        {weight}<span style={{ fontSize: "13px", fontWeight: 400, color: "#888", marginLeft: "2px" }}>kg</span>
+                    <div style={{ display: "flex", alignItems: "center", gap: 6 }}>
+                      <div style={{ textAlign: "right" }}>
+                        <div style={{ fontSize: "22px", fontWeight: 900, color: "#ffd700" }}>
+                          {weight}<span style={{ fontSize: "13px", fontWeight: 400, color: "#888", marginLeft: "2px" }}>kg</span>
+                        </div>
                       </div>
+                      <div style={{ fontSize: 14, color: "#555" }}>{isSelected ? "∨" : "›"}</div>
                     </div>
                   </div>
                   {isSelected && (
-                    <div style={{ marginTop: 10 }}>
+                    <div style={{ marginTop: 10, paddingTop: 10, borderTop: "1px solid rgba(255,215,0,0.15)" }}>
                       {trendData.length > 1 ? (
                         <ResponsiveContainer width="100%" height={120}>
                           <LineChart data={trendData} margin={{ top: 4, right: 8, bottom: 0, left: -16 }}>
