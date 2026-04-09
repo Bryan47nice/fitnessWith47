@@ -18,6 +18,7 @@ import {
   filterCalendarEvents,
   getNextClass,
   formatRestTime,
+  getNeglectedExercises,
 } from "./fitforge.utils.js";
 
 // ─── 一、getWeekStart ──────────────────────────────────────────────────────
@@ -640,7 +641,102 @@ describe("getNextClass()", () => {
   });
 });
 
-// ─── 九、formatRestTime ────────────────────────────────────────────────────
+// ─── 十、getNeglectedExercises ────────────────────────────────────────────
+describe("getNeglectedExercises()", () => {
+  test("TC-NE1 超過門檻天數的動作被回傳", () => {
+    // Given: one workout done 20 days before today (2026-04-09), threshold = 14
+    const workouts = [
+      { exercise: "深蹲", date: "2026-03-20" },
+    ];
+    // When
+    const result = getNeglectedExercises(workouts, 14, 10);
+    // Then: 深蹲 is neglected (20 days ago >= 14 threshold)
+    expect(result.length).toBeGreaterThanOrEqual(1);
+    expect(result[0].name).toBe("深蹲");
+    expect(result[0].daysAgo).toBeGreaterThanOrEqual(14);
+  });
+
+  test("TC-NE2 未超過門檻天數的動作不被回傳", () => {
+    // Given: one workout done 5 days before today (recent), threshold = 14
+    const today = new Date();
+    today.setHours(0, 0, 0, 0);
+    const recentDate = new Date(today);
+    recentDate.setDate(recentDate.getDate() - 5);
+    const dateStr = recentDate.toISOString().slice(0, 10);
+    const workouts = [{ exercise: "臥推", date: dateStr }];
+    // When
+    const result = getNeglectedExercises(workouts, 14, 10);
+    // Then: 臥推 is not neglected (only 5 days ago)
+    expect(result).toHaveLength(0);
+  });
+
+  test("TC-NE3 同一動作多筆紀錄時取最新日期", () => {
+    // Given: 深蹲 has two records, one older and one newer (5 days ago, within threshold)
+    const today = new Date();
+    today.setHours(0, 0, 0, 0);
+    const recent = new Date(today);
+    recent.setDate(recent.getDate() - 5);
+    const recentStr = recent.toISOString().slice(0, 10);
+    const workouts = [
+      { exercise: "深蹲", date: "2026-01-01" }, // old
+      { exercise: "深蹲", date: recentStr },     // newer, within threshold
+    ];
+    // When
+    const result = getNeglectedExercises(workouts, 14, 10);
+    // Then: 深蹲 is NOT neglected because last date is recent
+    const found = result.find(e => e.name === "深蹲");
+    expect(found).toBeUndefined();
+  });
+
+  test("TC-NE4 回傳結果依 daysAgo 降序排列（最久未練排首位）", () => {
+    // Given: 三個動作，距今天數分別約 30、20、15 天
+    const today = new Date();
+    today.setHours(0, 0, 0, 0);
+    const d30 = new Date(today); d30.setDate(d30.getDate() - 30);
+    const d20 = new Date(today); d20.setDate(d20.getDate() - 20);
+    const d15 = new Date(today); d15.setDate(d15.getDate() - 15);
+    const workouts = [
+      { exercise: "臥推",   date: d20.toISOString().slice(0, 10) },
+      { exercise: "深蹲",   date: d30.toISOString().slice(0, 10) },
+      { exercise: "肩推",   date: d15.toISOString().slice(0, 10) },
+    ];
+    // When
+    const result = getNeglectedExercises(workouts, 14, 10);
+    // Then: sorted by daysAgo descending (深蹲 first, 肩推 last)
+    expect(result[0].name).toBe("深蹲");
+    expect(result[result.length - 1].name).toBe("肩推");
+  });
+
+  test("TC-NE5 limit 參數限制回傳數量", () => {
+    // Given: 5 exercises all neglected (30 days ago), limit = 3
+    const today = new Date();
+    today.setHours(0, 0, 0, 0);
+    const d30 = new Date(today); d30.setDate(d30.getDate() - 30);
+    const dateStr = d30.toISOString().slice(0, 10);
+    const workouts = [
+      { exercise: "深蹲",   date: dateStr },
+      { exercise: "臥推",   date: dateStr },
+      { exercise: "硬舉",   date: dateStr },
+      { exercise: "肩推",   date: dateStr },
+      { exercise: "引體向上", date: dateStr },
+    ];
+    // When
+    const result = getNeglectedExercises(workouts, 14, 3);
+    // Then: at most 3 results returned
+    expect(result).toHaveLength(3);
+  });
+
+  test("TC-NE6 空 workouts 陣列時回傳空陣列", () => {
+    // Given: no workouts at all
+    const workouts = [];
+    // When
+    const result = getNeglectedExercises(workouts, 14, 10);
+    // Then: nothing to return
+    expect(result).toHaveLength(0);
+  });
+});
+
+// ─── 十一、formatRestTime ─────────────────────────────────────────────────
 describe("formatRestTime()", () => {
   test("TC-F1 標準秒數 90s 格式化為 1:30", () => {
     // Given: seconds = 90

@@ -14,6 +14,7 @@ import {
   detectNewPR,
   filterCalendarEvents, getNextClass,
   formatRestTime,
+  getNeglectedExercises,
 } from "../utils/fitforge.utils.js";
 import styles from "../styles/fitforge.styles.js";
 import DashboardTab from "./tabs/DashboardTab.jsx";
@@ -21,7 +22,7 @@ import WorkoutTab from "./tabs/WorkoutTab.jsx";
 import BodyTab from "./tabs/BodyTab.jsx";
 import GoalsTab from "./tabs/GoalsTab.jsx";
 
-const APP_VERSION = "1.12.0";
+const APP_VERSION = "1.13.0";
 const toLocalDateStr = (d = new Date()) =>
   `${d.getFullYear()}-${String(d.getMonth() + 1).padStart(2, "0")}-${String(d.getDate()).padStart(2, "0")}`;
 
@@ -169,6 +170,12 @@ export default function FitForge({ user }) {
   const [coachDays, setCoachDays] = useState([]); // array of date strings
   const [coachQuota, setCoachQuota] = useState({ total: 24 });
   const [quotaInput, setQuotaInput] = useState("");
+
+  // Today's plan (neglected exercise suggestions)
+  const [todayPlan, setTodayPlan] = useState([]);
+  const [showFabMenu, setShowFabMenu] = useState(false);
+  const [showPlanSheet, setShowPlanSheet] = useState(false);
+  const [planChecked, setPlanChecked] = useState({}); // { [exerciseName]: boolean }
 
   const today = toLocalDateStr();
   const todayWorked = workouts.some(w => w.date === today);
@@ -1318,6 +1325,8 @@ export default function FitForge({ user }) {
             aiRefreshKey={aiRefreshKey}
             coachDays={coachDays}
             toggleCoachDay={toggleCoachDay}
+            todayPlan={todayPlan}
+            setTodayPlan={setTodayPlan}
           />
         )}
 
@@ -1526,32 +1535,185 @@ export default function FitForge({ user }) {
         document.body
       )}
 
-      {/* FAB */}
-      {tab !== "workout" && (
-        <button
-          style={{
-            position: "fixed", bottom: "28px", right: "20px", zIndex: 150,
-            width: "56px", height: "56px", borderRadius: "50%", border: "none",
-            background: "linear-gradient(135deg, #ff6a00, #ff9500)",
-            color: "#fff", fontSize: todayWorked ? "26px" : "22px", cursor: "pointer",
-            boxShadow: "0 4px 20px rgba(255,106,0,0.45)",
-            display: "flex", alignItems: "center", justifyContent: "center",
-            fontFamily: "inherit",
-            animation: !todayWorked ? "fitforge-pulse 1.5s ease-out infinite" : "none",
-          }}
-          onClick={() => {
-            setTab("workout");
-            setWDate(today);
-            setExPickerExpanded(true);
-          }}
-        >
-          {todayWorked ? "+" : "💪"}
-        </button>
+      {/* FAB speed dial */}
+      {tab !== "workout" && createPortal(
+        <>
+          {/* Dismiss overlay when menu open */}
+          {showFabMenu && (
+            <div
+              style={{ position: "fixed", inset: 0, zIndex: 148 }}
+              onClick={() => setShowFabMenu(false)}
+            />
+          )}
+          {/* Sub-button: 今日計畫 📋 */}
+          <button
+            style={{
+              position: "fixed", right: "20px", zIndex: 149,
+              bottom: showFabMenu ? "154px" : "28px",
+              width: "46px", height: "46px", borderRadius: "50%", border: "1px solid rgba(255,255,255,0.15)",
+              background: "rgba(20,20,30,0.92)", backdropFilter: "blur(10px)",
+              color: "#fff", fontSize: "20px", cursor: "pointer",
+              display: "flex", alignItems: "center", justifyContent: "center",
+              fontFamily: "inherit",
+              opacity: showFabMenu ? 1 : 0, pointerEvents: showFabMenu ? "auto" : "none",
+              transition: "bottom 0.22s cubic-bezier(0.34,1.56,0.64,1), opacity 0.15s",
+              boxShadow: "0 2px 12px rgba(0,0,0,0.4)",
+            }}
+            onClick={() => {
+              setShowFabMenu(false);
+              const neglected = getNeglectedExercises(workouts, 14, 10);
+              const initial = {};
+              neglected.forEach(e => { initial[e.name] = true; });
+              setPlanChecked(initial);
+              setShowPlanSheet(true);
+            }}
+          >📋</button>
+          {/* Sub-button: 直接記錄 ✏️ */}
+          <button
+            style={{
+              position: "fixed", right: "20px", zIndex: 149,
+              bottom: showFabMenu ? "96px" : "28px",
+              width: "46px", height: "46px", borderRadius: "50%", border: "1px solid rgba(255,255,255,0.15)",
+              background: "rgba(20,20,30,0.92)", backdropFilter: "blur(10px)",
+              color: "#fff", fontSize: "20px", cursor: "pointer",
+              display: "flex", alignItems: "center", justifyContent: "center",
+              fontFamily: "inherit",
+              opacity: showFabMenu ? 1 : 0, pointerEvents: showFabMenu ? "auto" : "none",
+              transition: "bottom 0.16s cubic-bezier(0.34,1.56,0.64,1), opacity 0.15s",
+              boxShadow: "0 2px 12px rgba(0,0,0,0.4)",
+            }}
+            onClick={() => {
+              setShowFabMenu(false);
+              setTab("workout");
+              setWDate(today);
+              setExPickerExpanded(true);
+            }}
+          >✏️</button>
+          {/* Main FAB */}
+          <button
+            style={{
+              position: "fixed", bottom: "28px", right: "20px", zIndex: 150,
+              width: "56px", height: "56px", borderRadius: "50%", border: "none",
+              background: "linear-gradient(135deg, #ff6a00, #ff9500)",
+              color: "#fff", fontSize: "22px", cursor: "pointer",
+              boxShadow: "0 4px 20px rgba(255,106,0,0.45)",
+              display: "flex", alignItems: "center", justifyContent: "center",
+              fontFamily: "inherit",
+              animation: (!todayWorked && !showFabMenu) ? "fitforge-pulse 1.5s ease-out infinite" : "none",
+              transform: showFabMenu ? "rotate(45deg)" : "rotate(0deg)",
+              transition: "transform 0.2s",
+            }}
+            onClick={() => setShowFabMenu(v => !v)}
+          >
+            {todayWorked ? "+" : "💪"}
+          </button>
+        </>,
+        document.body
       )}
 
 
     </div>
     {showExPicker && createPortal(exPickerSheet, document.body)}
+
+    {/* Today's Plan Sheet */}
+    {showPlanSheet && createPortal(
+      (() => {
+        const neglected = getNeglectedExercises(workouts, 14, 10);
+        const checkedCount = Object.values(planChecked).filter(Boolean).length;
+        return (
+          <div style={{ position: "fixed", inset: 0, zIndex: 9998, background: "rgba(10,10,18,0.98)", backdropFilter: "blur(12px)", display: "flex", flexDirection: "column" }}>
+            {/* Header */}
+            <div style={{ display: "flex", alignItems: "center", gap: "12px", padding: "16px 20px 12px", borderBottom: "1px solid rgba(255,255,255,0.07)", flexShrink: 0 }}>
+              <button onClick={() => setShowPlanSheet(false)} style={{ background: "none", border: "none", color: "#888", fontSize: "22px", cursor: "pointer", padding: "4px 8px 4px 0", fontFamily: "inherit" }}>←</button>
+              <div style={{ fontSize: "17px", fontWeight: 800, color: "#e8e4dc" }}>今日訓練建議</div>
+            </div>
+            {/* Content */}
+            <div style={{ flex: 1, overflowY: "auto", padding: "16px 20px" }}>
+              {neglected.length === 0 ? (
+                <div style={{ textAlign: "center", padding: "48px 20px", color: "#888" }}>
+                  <div style={{ fontSize: "40px", marginBottom: "16px" }}>✅</div>
+                  <div style={{ fontSize: "16px", fontWeight: 700, color: "#e8e4dc", marginBottom: "8px" }}>訓練很均衡！</div>
+                  <div style={{ fontSize: "14px" }}>所有動作都在 14 天內練過了</div>
+                  <button
+                    onClick={() => { setShowPlanSheet(false); setTab("workout"); setWDate(today); setExPickerExpanded(true); }}
+                    style={{ marginTop: "24px", padding: "12px 28px", borderRadius: "12px", border: "none", background: "linear-gradient(135deg,#ff6a00,#ff9500)", color: "#fff", fontSize: "15px", fontWeight: 700, cursor: "pointer", fontFamily: "inherit" }}
+                  >直接記錄訓練</button>
+                </div>
+              ) : (
+                <>
+                  <div style={{ fontSize: "12px", color: "#666", marginBottom: "14px" }}>勾選想練的動作，加入今日計畫</div>
+                  {neglected.map(ex => {
+                    const checked = !!planChecked[ex.name];
+                    const urgent = ex.daysAgo >= 30;
+                    return (
+                      <button
+                        key={ex.name}
+                        onClick={() => setPlanChecked(prev => ({ ...prev, [ex.name]: !prev[ex.name] }))}
+                        style={{
+                          width: "100%", display: "flex", alignItems: "center", gap: "14px",
+                          padding: "14px 16px", marginBottom: "10px", borderRadius: "14px",
+                          background: checked ? "rgba(255,106,0,0.12)" : "rgba(255,255,255,0.03)",
+                          border: `1px solid ${checked ? "rgba(255,106,0,0.4)" : "rgba(255,255,255,0.07)"}`,
+                          cursor: "pointer", textAlign: "left", fontFamily: "inherit",
+                          transition: "background 0.15s, border-color 0.15s",
+                        }}
+                      >
+                        {/* Checkbox */}
+                        <div style={{
+                          width: "22px", height: "22px", borderRadius: "6px", flexShrink: 0,
+                          background: checked ? "#ff6a00" : "transparent",
+                          border: `2px solid ${checked ? "#ff6a00" : "rgba(255,255,255,0.2)"}`,
+                          display: "flex", alignItems: "center", justifyContent: "center",
+                          transition: "background 0.15s, border-color 0.15s",
+                        }}>
+                          {checked && <span style={{ color: "#fff", fontSize: "13px", fontWeight: 900 }}>✓</span>}
+                        </div>
+                        {/* Exercise info */}
+                        <div style={{ flex: 1 }}>
+                          <div style={{ fontSize: "15px", fontWeight: 700, color: "#e8e4dc" }}>{ex.name}</div>
+                          <div style={{ fontSize: "12px", color: "#666", marginTop: "2px" }}>上次：{ex.lastDate}</div>
+                        </div>
+                        {/* Days count */}
+                        <div style={{ textAlign: "right", flexShrink: 0 }}>
+                          <div style={{ fontSize: "20px", fontWeight: 900, color: urgent ? "#ff6a00" : "#ffd700" }}>{ex.daysAgo}</div>
+                          <div style={{ fontSize: "11px", color: "#666" }}>天未練</div>
+                        </div>
+                      </button>
+                    );
+                  })}
+                </>
+              )}
+            </div>
+            {/* Footer button */}
+            {neglected.length > 0 && (
+              <div style={{ padding: "16px 20px 32px", borderTop: "1px solid rgba(255,255,255,0.07)", flexShrink: 0 }}>
+                <button
+                  disabled={checkedCount === 0}
+                  onClick={() => {
+                    const selected = Object.entries(planChecked).filter(([, v]) => v).map(([k]) => k);
+                    setTodayPlan(selected);
+                    setShowPlanSheet(false);
+                    setTab("workout");
+                    setWDate(today);
+                    setExPickerExpanded(true);
+                  }}
+                  style={{
+                    width: "100%", padding: "14px", borderRadius: "14px", border: "none",
+                    background: checkedCount > 0 ? "linear-gradient(135deg,#ff6a00,#ff9500)" : "rgba(255,255,255,0.06)",
+                    color: checkedCount > 0 ? "#fff" : "#555",
+                    fontSize: "16px", fontWeight: 700, cursor: checkedCount > 0 ? "pointer" : "default",
+                    fontFamily: "inherit", transition: "background 0.2s, color 0.2s",
+                  }}
+                >
+                  {checkedCount > 0 ? `開始訓練（${checkedCount} 個動作）` : "請選擇動作"}
+                </button>
+              </div>
+            )}
+          </div>
+        );
+      })(),
+      document.body
+    )}
 
     {showMorePanel && createPortal(
       <div
@@ -1834,15 +1996,31 @@ export default function FitForge({ user }) {
               版本更新記錄
             </div>
 
-            {/* v1.12.0 */}
+            {/* v1.13.0 */}
             <div style={{ marginBottom: "24px" }}>
               <div style={{ display: "flex", alignItems: "center", gap: "10px", marginBottom: "10px" }}>
-                <span style={{ fontSize: "17px", fontWeight: 900, color: "#ffd700" }}>v1.12.0</span>
+                <span style={{ fontSize: "17px", fontWeight: 900, color: "#ffd700" }}>v1.13.0</span>
                 <span style={{
                   fontSize: "11px", fontWeight: 800, color: "#ff6a00",
                   background: "rgba(255,106,0,0.15)", border: "1px solid rgba(255,106,0,0.3)",
                   borderRadius: "6px", padding: "2px 7px", letterSpacing: "0.05em",
                 }}>最新</span>
+                <span style={{ fontSize: "12px", color: "#555", marginLeft: "auto" }}>2026-04-10</span>
+              </div>
+              <div style={{ display: "flex", flexDirection: "column", gap: "7px" }}>
+                <div style={{ fontSize: "14px", color: "#c8c4bc", display: "flex", gap: "8px" }}>
+                  <span style={{ color: "#ffd700", flexShrink: 0 }}>✨</span>
+                  <span>FAB 速撥選單 + 今日訓練建議：久未訓練動作一鍵加入今日計畫，均衡訓練各部位</span>
+                </div>
+              </div>
+            </div>
+
+            <div style={{ height: "1px", background: "rgba(255,255,255,0.07)", marginBottom: "20px" }} />
+
+            {/* v1.12.0 */}
+            <div style={{ marginBottom: "24px" }}>
+              <div style={{ display: "flex", alignItems: "center", gap: "10px", marginBottom: "10px" }}>
+                <span style={{ fontSize: "17px", fontWeight: 900, color: "#e8e4dc" }}>v1.12.0</span>
                 <span style={{ fontSize: "12px", color: "#555", marginLeft: "auto" }}>2026-04-08</span>
               </div>
               <div style={{ display: "flex", flexDirection: "column", gap: "7px" }}>

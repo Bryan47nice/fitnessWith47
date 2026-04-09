@@ -25,6 +25,7 @@
 | `canSaveGoal(targetValue, deadline, goalType, latestBMI, opts)` | 儲存目標按鈕是否可用（opts 含 frequencyMode、targetExercise） | 無 |
 | `filterCalendarEvents(events, keyword)` | 依關鍵字篩選 Google Calendar 事件 | 無 |
 | `getNextClass(upcomingClasses)` | 回傳最近一筆即將到來的課程，無則回傳 null | 無 |
+| `getNeglectedExercises(workouts, thresholdDays, limit)` | 回傳超過門檻天數未練的動作清單，依最久未練排序 | 無 |
 | `formatRestTime(seconds)` | 將秒數格式化為 "m:ss" 字串（例：90 → "1:30"） | 無 |
 
 > 所有函式從 `FitForge.jsx` 抽取後，`FitForge.jsx` 改為 import 使用，行為不變。
@@ -379,7 +380,41 @@
 
 ---
 
-### 十、`formatRestTime(seconds)` — 休息計時器格式化
+### 十、`getNeglectedExercises(workouts, thresholdDays, limit)` — 久未練動作查詢
+
+**TC-NE1 超過門檻天數的動作被回傳**
+- Given：workouts 含一筆「深蹲」，距今約 20 天，threshold = 14
+- When：呼叫 `getNeglectedExercises(workouts, 14, 10)`
+- Then：回傳陣列包含「深蹲」，且 `daysAgo >= 14`
+
+**TC-NE2 未超過門檻天數的動作不被回傳**
+- Given：workouts 含一筆「臥推」，距今僅 5 天，threshold = 14
+- When：呼叫 `getNeglectedExercises(workouts, 14, 10)`
+- Then：回傳空陣列（5 天 < 14 天門檻）
+
+**TC-NE3 同一動作多筆紀錄時取最新日期**
+- Given：「深蹲」有兩筆記錄，一舊一新（新的距今 5 天），threshold = 14
+- When：呼叫 `getNeglectedExercises(workouts, 14, 10)`
+- Then：深蹲不在回傳結果中（以最新日期計算，5 天 < 14 天）
+
+**TC-NE4 回傳結果依 daysAgo 降序排列（最久未練排首位）**
+- Given：三個動作，距今天數分別約 30、20、15 天，皆超過 threshold = 14
+- When：呼叫 `getNeglectedExercises(workouts, 14, 10)`
+- Then：結果第一筆為 30 天（深蹲），最後一筆為 15 天（肩推）
+
+**TC-NE5 limit 參數限制回傳數量**
+- Given：5 個動作皆距今 30 天（皆超過 threshold），limit = 3
+- When：呼叫 `getNeglectedExercises(workouts, 14, 3)`
+- Then：回傳陣列長度為 3
+
+**TC-NE6 空 workouts 陣列時回傳空陣列**
+- Given：`workouts = []`
+- When：呼叫 `getNeglectedExercises([], 14, 10)`
+- Then：回傳 `[]`
+
+---
+
+### 十一、`formatRestTime(seconds)` — 休息計時器格式化
 
 **TC-F1 標準秒數 90s 格式化為 1:30**
 - Given：`seconds = 90`

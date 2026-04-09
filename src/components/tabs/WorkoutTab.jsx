@@ -66,6 +66,8 @@ export default function WorkoutTab({
   aiRefreshKey,
   // Coach days
   coachDays, toggleCoachDay,
+  // Today's plan
+  todayPlan, setTodayPlan,
 }) {
   const MONTHS_ZH = ["一月","二月","三月","四月","五月","六月","七月","八月","九月","十月","十一月","十二月"];
   const toLocalDateStr = (d = new Date()) =>
@@ -415,6 +417,42 @@ export default function WorkoutTab({
                 </button>
               ))}
             </div>
+
+            {/* 今日計畫 chips */}
+            {todayPlan && todayPlan.length > 0 && (
+              <div style={{ marginBottom: "10px" }}>
+                <div style={{ fontSize: "11px", color: "#666", marginBottom: "6px", letterSpacing: "0.06em" }}>今日計畫</div>
+                <div style={{ display: "flex", gap: "8px", overflowX: "auto", WebkitOverflowScrolling: "touch", scrollbarWidth: "none", paddingBottom: "2px" }}>
+                  {todayPlan.map(name => {
+                    const done = workouts.some(w => w.exercise === name && w.date === todayStr);
+                    return (
+                      <button
+                        key={name}
+                        onClick={() => setWExercise(name)}
+                        style={{
+                          flexShrink: 0, padding: "5px 12px", borderRadius: "20px", cursor: "pointer",
+                          fontFamily: "inherit", fontSize: "13px",
+                          background: done ? "rgba(255,255,255,0.04)" : "rgba(255,106,0,0.12)",
+                          border: `1px solid ${done ? "rgba(255,255,255,0.08)" : "rgba(255,106,0,0.35)"}`,
+                          color: done ? "#555" : "#ff6a00",
+                        }}
+                      >
+                        {done ? `✓ ${name}` : name}
+                      </button>
+                    );
+                  })}
+                  <button
+                    onClick={() => setTodayPlan([])}
+                    style={{
+                      flexShrink: 0, padding: "5px 10px", borderRadius: "20px", cursor: "pointer",
+                      fontFamily: "inherit", fontSize: "12px",
+                      background: "transparent", border: "1px solid rgba(255,255,255,0.06)",
+                      color: "#444",
+                    }}
+                  >✕</button>
+                </div>
+              </div>
+            )}
 
             {/* 動作列表 */}
             <div style={{

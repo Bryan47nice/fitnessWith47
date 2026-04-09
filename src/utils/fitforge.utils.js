@@ -198,6 +198,34 @@ export function getNextClass(upcomingClasses) {
 }
 
 /**
+ * Returns exercises the user has done before but not within thresholdDays days.
+ * Sorted by most-neglected first.
+ *
+ * @param {Array}  workouts      - array of workout documents { exercise, date, … }
+ * @param {number} thresholdDays - minimum days since last workout to be considered neglected (default 14)
+ * @param {number} limit         - max number of results to return (default 10)
+ * @returns {Array} [{ name, lastDate, daysAgo }, …]
+ */
+export function getNeglectedExercises(workouts, thresholdDays = 14, limit = 10) {
+  const map = {};
+  workouts.forEach(w => {
+    if (w.exercise && (!map[w.exercise] || w.date > map[w.exercise])) {
+      map[w.exercise] = w.date;
+    }
+  });
+  const today = new Date();
+  today.setHours(0, 0, 0, 0);
+  return Object.entries(map)
+    .map(([name, lastDate]) => {
+      const diff = Math.floor((today - new Date(lastDate)) / 86400000);
+      return { name, lastDate, daysAgo: diff };
+    })
+    .filter(e => e.daysAgo >= thresholdDays)
+    .sort((a, b) => b.daysAgo - a.daysAgo)
+    .slice(0, limit);
+}
+
+/**
  * Formats a duration in seconds as "m:ss" for rest timer display.
  * e.g. 90 → "1:30", 65 → "1:05", 0 → "0:00"
  *
