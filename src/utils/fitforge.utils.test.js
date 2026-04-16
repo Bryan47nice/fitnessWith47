@@ -19,6 +19,7 @@ import {
   getNextClass,
   formatRestTime,
   getNeglectedExercises,
+  getLastSessionSets,
 } from "./fitforge.utils.js";
 
 // ─── 一、getWeekStart ──────────────────────────────────────────────────────
@@ -760,5 +761,87 @@ describe("formatRestTime()", () => {
     const result = formatRestTime(65);
     // Then:
     expect(result).toBe("1:05");
+  });
+});
+
+// ─── 十二、getLastSessionSets ─────────────────────────────────────────────
+describe("getLastSessionSets()", () => {
+  test("TC-LS1 有歷史紀錄時回傳最新一次的 sets 副本", () => {
+    // Given: two workouts for 深蹲, with different dates; the more recent is 2026-04-10
+    const workouts = [
+      { exercise: "深蹲", date: "2026-03-01", sets: [{ reps: "5", weight: "80" }] },
+      { exercise: "深蹲", date: "2026-04-10", sets: [{ reps: "3", weight: "100" }, { reps: "3", weight: "105" }] },
+    ];
+    // When:
+    const result = getLastSessionSets("深蹲", workouts);
+    // Then: returns the sets from the most recent workout (2026-04-10)
+    expect(result).toHaveLength(2);
+    expect(result[0]).toEqual({ reps: "3", weight: "100" });
+    expect(result[1]).toEqual({ reps: "3", weight: "105" });
+  });
+
+  test("TC-LS2 回傳的是副本，修改不影響原始資料", () => {
+    // Given: one workout for 臥推 with a set
+    const originalSet = { reps: "8", weight: "70" };
+    const workouts = [
+      { exercise: "臥推", date: "2026-04-01", sets: [originalSet] },
+    ];
+    // When: obtain copy and mutate it
+    const result = getLastSessionSets("臥推", workouts);
+    result[0].weight = "999";
+    // Then: original set object is not mutated
+    expect(originalSet.weight).toBe("70");
+  });
+
+  test("TC-LS3 找不到該動作的歷史紀錄時回傳 null", () => {
+    // Given: workouts contain only 深蹲, but we query 硬舉
+    const workouts = [
+      { exercise: "深蹲", date: "2026-04-01", sets: [{ reps: "5", weight: "80" }] },
+    ];
+    // When:
+    const result = getLastSessionSets("硬舉", workouts);
+    // Then: no match, return null
+    expect(result).toBeNull();
+  });
+
+  test("TC-LS4 空 workouts 陣列時回傳 null", () => {
+    // Given: no workouts at all
+    const workouts = [];
+    // When:
+    const result = getLastSessionSets("深蹲", workouts);
+    // Then:
+    expect(result).toBeNull();
+  });
+
+  test("TC-LS5 exercise 為空字串時回傳 null", () => {
+    // Given: exercise name is empty
+    const workouts = [
+      { exercise: "深蹲", date: "2026-04-01", sets: [{ reps: "5", weight: "80" }] },
+    ];
+    // When:
+    const result = getLastSessionSets("", workouts);
+    // Then: guard returns null for empty exercise
+    expect(result).toBeNull();
+  });
+
+  test("TC-LS6 workouts 非陣列時回傳 null", () => {
+    // Given: workouts is not an array
+    // When:
+    const result = getLastSessionSets("深蹲", null);
+    // Then: guard returns null
+    expect(result).toBeNull();
+  });
+
+  test("TC-LS7 符合動作但 sets 為空陣列的紀錄被略過", () => {
+    // Given: one workout has empty sets, another has valid sets
+    const workouts = [
+      { exercise: "深蹲", date: "2026-04-12", sets: [] },
+      { exercise: "深蹲", date: "2026-04-10", sets: [{ reps: "5", weight: "90" }] },
+    ];
+    // When:
+    const result = getLastSessionSets("深蹲", workouts);
+    // Then: empty-sets record is skipped; valid sets from 2026-04-10 are returned
+    expect(result).toHaveLength(1);
+    expect(result[0]).toEqual({ reps: "5", weight: "90" });
   });
 });
