@@ -1,3 +1,4 @@
+import { useState } from "react";
 import { ResponsiveContainer, LineChart, Line, XAxis, YAxis, Tooltip, ReferenceLine } from "recharts";
 import { calcBMI } from "../../utils/fitforge.utils.js";
 import styles from "../../styles/fitforge.styles.js";
@@ -36,6 +37,10 @@ function CustomTooltip({ active, payload, activeMetric }) {
   );
 }
 
+// Metrics where a higher value is better (green ↑, red ↓).
+// All other metrics default to lower-is-better (green ↓, red ↑).
+const HIGHER_IS_BETTER = new Set(["muscle_mass"]);
+
 export default function BodyTab({
   bodyData, existingBodyForDate,
   bDate, setBDate,
@@ -46,6 +51,7 @@ export default function BodyTab({
   bSavedAnim,
   saveBody, deleteBodyRecord,
 }) {
+  const [showAllBody, setShowAllBody] = useState(false);
   const chartPoints = bodyData
     .filter(b => {
       if (activeMetric === "bmi") {
@@ -197,11 +203,16 @@ export default function BodyTab({
             </div>
           )}
 
-          {bodyData.slice(0, 5).map((b, i) => {
+          {bodyData.slice(0, showAllBody ? bodyData.length : 5).map((b, i) => {
             const cfg = metricConfig[activeMetric];
             const val = parseFloat(b[activeMetric]);
-            const prevVal = parseFloat(bodyData[i - 1]?.[activeMetric]);
-            const hasDiff = i > 0 && !isNaN(val) && !isNaN(prevVal);
+            const newerVal = parseFloat(bodyData[i - 1]?.[activeMetric]);
+            const hasDiff = i > 0 && !isNaN(val) && !isNaN(newerVal);
+            // val is the older record; newerVal is the more-recent record
+            // val > newerVal → metric decreased from older to newer (went DOWN)
+            const wentDown = val > newerVal;
+            const isGoodChange = HIGHER_IS_BETTER.has(activeMetric) ? !wentDown : wentDown;
+            const diffColor = isGoodChange ? "#4ade80" : "#f87171";
             return (
               <div key={b.id} style={{ ...styles.workoutItem, display: "flex", justifyContent: "space-between", alignItems: "flex-start" }}>
                 <div>
@@ -216,9 +227,9 @@ export default function BodyTab({
                   <div style={{ fontSize: "12px", color: "#666" }}>{b.date}</div>
                   {i === 0 && <div style={{ fontSize: "11px", color: "#ff6a00", marginTop: "2px" }}>最新</div>}
                   {hasDiff && (
-                    <div style={{ fontSize: "13px", fontWeight: 700, color: val > prevVal ? "#4ade80" : "#f87171" }}>
-                      {val > prevVal ? "↓" : "↑"}
-                      {Math.abs(val - prevVal).toFixed(1)}{cfg.unit}
+                    <div style={{ fontSize: "13px", fontWeight: 700, color: diffColor }}>
+                      {wentDown ? "↓" : "↑"}
+                      {Math.abs(val - newerVal).toFixed(1)}{cfg.unit}
                     </div>
                   )}
                   <button
@@ -231,6 +242,20 @@ export default function BodyTab({
               </div>
             );
           })}
+          {bodyData.length > 5 && (
+            <button
+              onClick={() => setShowAllBody(v => !v)}
+              style={{
+                width: "100%", marginTop: "8px", padding: "8px",
+                background: "transparent",
+                border: "1px solid rgba(255,255,255,0.1)",
+                borderRadius: "8px", color: "#666", fontSize: "13px",
+                cursor: "pointer", fontFamily: "inherit",
+              }}
+            >
+              {showAllBody ? "收合" : `顯示全部 ${bodyData.length} 筆紀錄`}
+            </button>
+          )}
         </div>
       )}
     </div>
