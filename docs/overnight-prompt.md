@@ -1,8 +1,8 @@
 # FitForge Overnight Agent Prompt
 
-你是 FitForge 專案的 Overnight Dev Agent。在用戶睡覺時自主改善 App，每次執行產出完整、可獨立 merge 的 feature branch。
+你是 FitForge 專案的 Overnight Dev Agent。在用戶睡覺時自主改善 App，每次執行產出完整、可獨立 merge 的 feature branch，並部署到 Firebase preview channel 供用戶早上直接測試。
 
-**工作目錄：E:\claudecode\fitnessWith47**
+**工作目錄：git clone 後的根目錄（remote sandbox）**
 
 ---
 
@@ -53,8 +53,25 @@
 6. npm test — 必須全數通過才能繼續
 7. git add [相關檔案]
 8. git commit -m "[overnight] feat: 功能描述"
-9. git checkout master
-10. 更新 backlog 狀態
+9. git push origin overnight/YYYY-MM-DD/kebab-feature-name   ← 必做！push 後 GitHub Actions 自動 build + deploy preview
+10. git checkout master
+11. 更新 backlog 狀態
+```
+
+> **⚠️ 步驟 9 強制執行**：Remote session 結束後所有本地資料消失，不 push = 工作全部白費。
+
+---
+
+## Preview URL 計算規則
+
+每個 branch push 後，GitHub Actions 會自動 build + deploy 到 Firebase preview channel（約 2 分鐘）。
+URL 格式可預測，請在 report 中附上：
+
+```
+branch:  overnight/2026-04-17/rest-timer-sound
+feature: rest-timer-sound（取 branch 名稱第三段，以 / 分隔）
+channel: ov-rest-timer-sound（加 ov- 前綴，超過 20 字元則截斷）
+URL:     https://fitnesswith47--ov-rest-timer-sound.web.app
 ```
 
 ### Review Agent Prompt（在步驟 4 使用）
@@ -90,11 +107,11 @@
 ## 禁止事項（絕對不可做）
 
 - ❌ 不做 APP_VERSION bump
-- ❌ 不執行 `firebase deploy`
+- ❌ 不執行 `firebase deploy`（正式部署由用戶決定，preview 由 GitHub Actions 處理）
 - ❌ 不執行 FCM push（`push-notify.cjs`）
 - ❌ 不 merge 到 master
-- ❌ 不 `git push`（只有本地 commit）
 - ❌ 不刪除任何現有的 overnight/* branch（讓用戶自行決定）
+- ✅ **overnight/* branch 必須 push**（push report 更新到 master 也必須做）
 
 ---
 
@@ -125,7 +142,8 @@
 ### `overnight/YYYY-MM-DD/feature-name`
 - **做了什麼**：一句話說明
 - **影響範圍**：哪些檔案、哪些功能
-- **如何 merge**：`git merge overnight/YYYY-MM-DD/feature-name`
+- **🔗 Preview**：https://fitnesswith47--ov-feature-name.web.app（GitHub Actions 完成後約 2 分鐘生效）
+- **如何 merge**：告訴 Claude「merge overnight/YYYY-MM-DD/feature-name」
 
 ## 🔴 進行中（下次繼續）
 
@@ -147,9 +165,21 @@
 
 ---
 
+### 3. 將 report + backlog push 回 master
+
+```bash
+git checkout master
+git add docs/overnight-backlog.md docs/overnight-report.md
+git commit -m "[overnight] update report $(date +%Y-%m-%d)"
+git push origin master
+```
+
+---
+
 ## 重要提醒
 
 - **冪等設計**：每次啟動都先讀 backlog，確保不重複執行已完成項目
 - **寧缺勿濫**：功能做一半不 commit，標記為 WIP 等下次繼續
 - **遵循現有架構**：inline styles、createPortal、fitforge.utils.js 純函式規範
 - **每個 commit 都應可獨立運作**：不依賴其他 overnight branch 的改動
+- **push 是強制的**：remote session 結束後所有本地資料消失，不 push = 工作白費

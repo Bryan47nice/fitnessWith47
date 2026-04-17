@@ -1,0 +1,50 @@
+name: Overnight Branch Preview Deploy
+
+on:
+  push:
+    branches:
+      - 'overnight/**'
+
+jobs:
+  deploy-preview:
+    runs-on: ubuntu-latest
+    steps:
+      - name: Checkout
+        uses: actions/checkout@v4
+
+      - name: Setup Node.js
+        uses: actions/setup-node@v4
+        with:
+          node-version: '20'
+          cache: 'npm'
+
+      - name: Install dependencies
+        run: npm ci
+
+      - name: Build
+        run: npm run build
+
+      - name: Compute channel ID from branch name
+        id: channel
+        run: |
+          # overnight/2026-04-17/rest-timer-sound → ov-rest-timer-sound
+          BRANCH="${GITHUB_REF#refs/heads/}"
+          FEAT=$(echo "$BRANCH" | cut -d'/' -f3)
+          CHANNEL="ov-${FEAT:0:18}"
+          echo "name=$CHANNEL" >> $GITHUB_OUTPUT
+          echo "url=https://fitnesswith47--${CHANNEL}.web.app" >> $GITHUB_OUTPUT
+
+      - name: Deploy to Firebase preview channel
+        uses: FirebaseExtended/action-hosting-deploy@v0
+        with:
+          repoToken: ${{ secrets.GITHUB_TOKEN }}
+          firebaseServiceAccount: ${{ secrets.FIREBASE_SERVICE_ACCOUNT }}
+          projectId: fitnesswith47
+          channelId: ${{ steps.channel.outputs.name }}
+          expires: 7d
+
+      - name: Print preview URL
+        run: |
+          echo "✅ Preview deployed!"
+          echo "🔗 URL: ${{ steps.channel.outputs.url }}"
+          echo "⏱ Valid for 7 days"
