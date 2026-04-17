@@ -1,6 +1,10 @@
 import { useState } from 'react';
-import { signInWithPopup } from 'firebase/auth';
+import { signInWithPopup, signInWithEmailAndPassword } from 'firebase/auth';
 import { auth, googleProvider } from '../firebase';
+
+const IS_PREVIEW = window.location.hostname.includes('--ov-');
+const TEST_EMAIL = 'preview@fitforgetest.dev';
+const TEST_PASSWORD = 'FitForge2026Preview!';
 
 
 function isInAppBrowser() {
@@ -12,6 +16,7 @@ function isInAppBrowser() {
 
 export default function Login() {
   const [signingIn, setSigningIn] = useState(false);
+  const [testLoggingIn, setTestLoggingIn] = useState(false);
   const inApp = isInAppBrowser();
   const appUrl = 'https://fitnesswith47.web.app';
 
@@ -22,6 +27,16 @@ export default function Login() {
     } catch (err) {
       console.error(err);
       setSigningIn(false);
+    }
+  }
+
+  async function handleTestLogin() {
+    setTestLoggingIn(true);
+    try {
+      await signInWithEmailAndPassword(auth, TEST_EMAIL, TEST_PASSWORD);
+    } catch (err) {
+      alert('測試帳號登入失敗：' + err.message);
+      setTestLoggingIn(false);
     }
   }
 
@@ -175,6 +190,29 @@ export default function Login() {
         <div style={{ color: '#444', fontSize: '12px', marginTop: '24px' }}>
           登入即表示你同意我們的服務條款
         </div>
+
+        {IS_PREVIEW && (
+          <div style={{ marginTop: '32px', borderTop: '1px solid rgba(255,255,255,0.08)', paddingTop: '24px' }}>
+            <div style={{ color: '#555', fontSize: '12px', marginBottom: '12px', letterSpacing: '0.08em' }}>🧪 PREVIEW MODE</div>
+            <button
+              onClick={handleTestLogin}
+              disabled={testLoggingIn}
+              style={{
+                width: '100%', padding: '13px 24px',
+                background: 'rgba(255,215,0,0.08)',
+                border: '1px solid rgba(255,215,0,0.25)',
+                borderRadius: '12px', cursor: 'pointer',
+                fontSize: '14px', fontWeight: 700, color: '#ffd700',
+                letterSpacing: '0.04em',
+              }}
+            >
+              {testLoggingIn ? '登入中...' : '🧪 用測試帳號登入'}
+            </button>
+            <div style={{ color: '#444', fontSize: '11px', marginTop: '8px' }}>
+              預載 10 筆身材記錄、30 筆訓練資料
+            </div>
+          </div>
+        )}
       </div>
     </div>
   );
