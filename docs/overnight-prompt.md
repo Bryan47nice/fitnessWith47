@@ -110,10 +110,10 @@ URL:     https://fitnesswith47--ov-rest-timer-sound.web.app
 
 - ❌ 不做 APP_VERSION bump
 - ❌ 不執行 `firebase deploy`（生產部署）
+- ✅ 允許執行 `git push origin overnight/YYYY-MM-DD/feature-name`（強制！不 push = 工作消失）
 - ✅ 允許執行 `firebase hosting:channel:deploy <channel-id> --expires 7d`（Preview Channel，非生產）
 - ❌ 不執行 FCM push（`push-notify.cjs`）
 - ❌ 不 merge 到 master
-- ❌ 不 `git push`（只有本地 commit）
 - ❌ 不刪除任何現有的 overnight/* branch（讓用戶自行決定）
 
 ---
@@ -186,3 +186,24 @@ URL:     https://fitnesswith47--ov-rest-timer-sound.web.app
 - **寧缺勿濫**：功能做一半不 commit，標記為 WIP 等下次繼續
 - **遵循現有架構**：inline styles、createPortal、fitforge.utils.js 純函式規範
 - **每個 commit 都應可獨立運作**：不依賴其他 overnight branch 的改動
+
+---
+
+## 測試帳號架構（勿修改）
+
+- **帳號**：preview@fitforgetest.dev / FitForge2026Preview!
+- **UID**：68dA3Wzmn1WRGAnzO3Encpc7rf53
+- **Seed 指令**：`node scripts/seed-test-account.cjs`（可重複執行，每次重置資料）
+- **預載資料**：10 筆 bodyData（橫跨 3 個月）、30 筆 workouts（臥推/深蹲/硬舉/跑步）、streak 7 天
+
+### IS_PREVIEW 機制（Login.jsx）
+
+`src/components/Login.jsx` 有 preview-only 登入按鈕，只在 preview URL 顯示：
+
+```js
+const IS_PREVIEW = window.location.hostname.includes('--ov-');
+```
+
+- 生產網址（`fitnesswith47.web.app`）：只顯示 Google 登入，IS_PREVIEW 為 false
+- Preview 網址（`fitnesswith47--ov-xxx.web.app`）：額外顯示「🧪 用測試帳號登入」按鈕
+- **overnight agent 實作新功能時不需修改 Login.jsx**，此機制已永久在 master 中

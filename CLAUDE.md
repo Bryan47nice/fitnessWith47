@@ -212,8 +212,11 @@ QA Agent 測試規範：
 | `src/components/FitForge.jsx` | 主邏輯（2500+ 行，核心業務邏輯） |
 | `src/firebase.js` | Firebase 初始化（SDK config） |
 | `src/components/App.jsx` | Auth routing wrapper |
-| `src/components/Login.jsx` | 登入頁 UI |
+| `src/components/Login.jsx` | 登入頁 UI（含 IS_PREVIEW 測試帳號按鈕，只在 preview channel 顯示） |
 | `functions/index.js` | Cloud Functions（排程推播提醒） |
+| `scripts/seed-test-account.cjs` | 建立/重置測試帳號資料（preview@fitforgetest.dev，Firebase REST API） |
+| `docs/overnight-prompt.md` | Overnight Agent 執行規則（自動化開發流程） |
+| `docs/overnight-backlog.md` | Overnight 任務狀態（pending / in-progress / completed） |
 | `public/firebase-messaging-sw.js` | FCM Service Worker |
 | `firestore.rules` | Firestore 安全規則 |
 | `vite.config.js` | Vite 建構設定（含 PWA plugin） |
