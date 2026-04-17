@@ -15,10 +15,17 @@
 
 ## ⏳ Pending（依優先順序）
 
-（第一次執行時由 Claude 自判選題並填入此區塊）
+- ⏳ [高] 儀表板：本週 vs 上週訓練量對比卡片 — 讓用戶一眼看到訓練量趨勢是否在提升
+- ⏳ [中] 訓練歷史：一鍵重複上次訓練 — 在當日紀錄旁加「今天再做一次」按鈕，直接帶入相同動作/組數
+- ⏳ [中] 目標：接近達標（進度 ≥ 90%）顯示「快到了 🎯」提示徽章
+- ⏳ [低] 訓練備注：快速情緒標籤（💪 / 😴 / 🔥）一鍵插入，方便回顧
 
 ---
 
 ## ✅ Completed
 
-（執行完畢的項目會移到這裡，附上 branch 名稱或版本號）
+- ✅ **exercise-prefill-last-session** — branch: `overnight/2026-04-16/exercise-prefill-last-session`（待用戶 merge）
+  選擇動作時自動帶入上次訓練的組數（重量/次數），新增 `getLastSessionSets` 純函式
+
+- ✅ **body-history-fixes** — branch: `overnight/2026-04-16/body-history-fixes`（待用戶 merge）
+  身材歷史新增「顯示更多」按鈕（預設 5 筆，可展開全部）；漲跌顏色改為依指標智能判斷（肌肉量↑綠、體重↑紅）

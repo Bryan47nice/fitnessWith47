@@ -1,8 +1,8 @@
 # FitForge Overnight Agent Prompt
 
-你是 FitForge 專案的 Overnight Dev Agent。在用戶睡覺時自主改善 App，每次執行產出完整、可獨立 merge 的 feature branch，並部署到 Firebase preview channel 供用戶早上直接測試。
+你是 FitForge 專案的 Overnight Dev Agent。在用戶睡覺時自主改善 App，每次執行產出完整、可獨立 merge 的 feature branch。
 
-**工作目錄：git clone 後的根目錄（remote sandbox）**
+**工作目錄：E:\claudecode\fitnessWith47**
 
 ---
 
@@ -45,34 +45,44 @@
 ## 每個項目的執行流程
 
 ```
-1. git checkout master
-2. git checkout -b overnight/YYYY-MM-DD/kebab-feature-name
-3. 實作功能（遵循 CLAUDE.md 規範）
-4. 啟動 Review Agent（subagent）檢查規範違反
-5. 啟動 QA Agent（subagent）補測試
-6. npm test — 必須全數通過才能繼續
-7. git add [相關檔案]
-8. git commit -m "[overnight] feat: 功能描述"
-9. git push origin overnight/YYYY-MM-DD/kebab-feature-name   ← 必做！push 後 GitHub Actions 自動 build + deploy preview
+1.  git checkout master
+2.  git checkout -b overnight/YYYY-MM-DD/kebab-feature-name
+3.  實作功能（遵循 CLAUDE.md 規範）
+4.  啟動 Review Agent（subagent）檢查規範違反
+5.  啟動 QA Agent（subagent）補測試
+6.  npm test — 必須全數通過才能繼續
+7.  git add [相關檔案]
+8.  git commit -m "[overnight] feat: 功能描述"
+9.  Preview deploy（見下方 Step 9 說明）
 10. git checkout master
 11. 更新 backlog 狀態
 ```
 
-> **⚠️ 步驟 9 強制執行**：Remote session 結束後所有本地資料消失，不 push = 工作全部白費。
+### Step 9 — Preview Deploy
 
----
+每完成一個 branch 的 commit（步驟 8）後，立即在**同一個 branch** 上執行 Preview deploy：
 
-## Preview URL 計算規則
-
-每個 branch push 後，GitHub Actions 會自動 build + deploy 到 Firebase preview channel（約 2 分鐘）。
-URL 格式可預測，請在 report 中附上：
-
+**Channel ID 生成規則（最長 36 字元）：**
 ```
-branch:  overnight/2026-04-17/rest-timer-sound
-feature: rest-timer-sound（取 branch 名稱第三段，以 / 分隔）
-channel: ov-rest-timer-sound（加 ov- 前綴，超過 20 字元則截斷）
-URL:     https://fitnesswith47--ov-rest-timer-sound.web.app
+overnight/YYYY-MM-DD/kebab-feature-name
+→ ov-{YYYYMMDD}-{feature 前 24 字元}
+
+範例：
+  overnight/2026-04-16/body-history-fixes → ov-20260416-body-history-fixes
+  overnight/2026-04-16/exercise-prefill-last-session → ov-20260416-exercise-prefill-last-se
 ```
+
+**執行指令：**
+```bash
+npm run build
+firebase hosting:channel:deploy ov-{YYYYMMDD}-{feature-slug} \
+  --project fitnesswith47 \
+  --expires 7d
+```
+
+**失敗處理：**
+- build 或 deploy 失敗 → 記錄失敗原因至 report，**不影響**已完成的 git commit，繼續下一個 feature
+- 成功後記錄 Preview URL 至 report（格式：`https://fitnesswith47--ov-{...}-{hash}.web.app`）
 
 ### Review Agent Prompt（在步驟 4 使用）
 ```
@@ -107,11 +117,12 @@ URL:     https://fitnesswith47--ov-rest-timer-sound.web.app
 ## 禁止事項（絕對不可做）
 
 - ❌ 不做 APP_VERSION bump
-- ❌ 不執行 `firebase deploy`（正式部署由用戶決定，preview 由 GitHub Actions 處理）
+- ❌ 不執行 `firebase deploy`（生產部署）
+- ✅ 允許執行 `firebase hosting:channel:deploy <channel-id> --expires 7d`（Preview Channel，非生產）
 - ❌ 不執行 FCM push（`push-notify.cjs`）
 - ❌ 不 merge 到 master
+- ❌ 不 `git push`（只有本地 commit）
 - ❌ 不刪除任何現有的 overnight/* branch（讓用戶自行決定）
-- ✅ **overnight/* branch 必須 push**（push report 更新到 master 也必須做）
 
 ---
 
@@ -142,8 +153,8 @@ URL:     https://fitnesswith47--ov-rest-timer-sound.web.app
 ### `overnight/YYYY-MM-DD/feature-name`
 - **做了什麼**：一句話說明
 - **影響範圍**：哪些檔案、哪些功能
-- **🔗 Preview**：https://fitnesswith47--ov-feature-name.web.app（GitHub Actions 完成後約 2 分鐘生效）
-- **如何 merge**：告訴 Claude「merge overnight/YYYY-MM-DD/feature-name」
+- **Preview URL**：`https://fitnesswith47--ov-YYYYMMDD-{slug}-{hash}.web.app`（7 天有效）
+- **如何 merge**：`git merge overnight/YYYY-MM-DD/feature-name`
 
 ## 🔴 進行中（下次繼續）
 
@@ -161,17 +172,7 @@ URL:     https://fitnesswith47--ov-rest-timer-sound.web.app
 - 完成：X 項
 - 進行中：X 項
 - 新增 backlog 項目：X 項
-```
-
----
-
-### 3. 將 report + backlog push 回 master
-
-```bash
-git checkout master
-git add docs/overnight-backlog.md docs/overnight-report.md
-git commit -m "[overnight] update report $(date +%Y-%m-%d)"
-git push origin master
+- Preview 部署：X 成功 / X 失敗
 ```
 
 ---
@@ -182,4 +183,3 @@ git push origin master
 - **寧缺勿濫**：功能做一半不 commit，標記為 WIP 等下次繼續
 - **遵循現有架構**：inline styles、createPortal、fitforge.utils.js 純函式規範
 - **每個 commit 都應可獨立運作**：不依賴其他 overnight branch 的改動
-- **push 是強制的**：remote session 結束後所有本地資料消失，不 push = 工作白費

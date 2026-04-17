@@ -16,6 +16,7 @@ build
 .env.*
 .firebase/
 .claude/
+!.claude/commands/
 
 # Editor directories and files
 .vscode/*
