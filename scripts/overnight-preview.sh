@@ -133,17 +133,6 @@ deploy_branch_preview() {
     preview_url="（請至 Firebase Console → Hosting → Preview Channels 查詢）"
   fi
 
-  # Step 4: 自動將 Preview URL 加入 Firebase Auth 授權網域
-  if [[ "$preview_url" == https://* ]]; then
-    local domain="${preview_url#https://}"
-    log_info "加入 Firebase Auth 授權網域：$domain"
-    if node "$PROJECT_ROOT/scripts/add-auth-domain.cjs" "$domain" 2>&1; then
-      log_ok "Auth 授權網域已更新"
-    else
-      log_warn "Auth 授權網域更新失敗（可手動至 Firebase Console 新增）"
-    fi
-  fi
-
   log_ok "Preview URL: $preview_url"
   RESULTS+=("OK|$branch|$channel_id|$preview_url")
 }
@@ -178,6 +167,27 @@ main() {
     deploy_branch_preview "$branch" || true
     echo
   done
+
+  # 所有 branch 處理完後，切回原本 branch，統一更新 Firebase Auth 授權網域
+  git -C "$PROJECT_ROOT" checkout "$ORIGINAL_BRANCH" --quiet 2>/dev/null || true
+
+  local new_domains=()
+  for result in "${RESULTS[@]}"; do
+    IFS='|' read -r status _ _ url_or_msg <<< "$result"
+    if [[ "$status" == "OK" && "$url_or_msg" == https://* ]]; then
+      new_domains+=("${url_or_msg#https://}")
+    fi
+  done
+
+  if [[ ${#new_domains[@]} -gt 0 ]]; then
+    log_info "更新 Firebase Auth 授權網域（共 ${#new_domains[@]} 個）..."
+    if node "$PROJECT_ROOT/scripts/add-auth-domain.cjs" "${new_domains[@]}" 2>&1; then
+      log_ok "Auth 授權網域更新完成"
+    else
+      log_warn "Auth 授權網域更新失敗（可手動至 Firebase Console → Authentication → Settings 新增）"
+    fi
+    echo
+  fi
 
   # ── 匯總報告 ─────────────────────────────────────────────────────────────
   log_info "══════════════ 部署結果 ══════════════"
