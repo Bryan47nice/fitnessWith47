@@ -146,7 +146,9 @@ URL:     https://fitnesswith47--ov-rest-timer-sound.web.app
 - **做了什麼**：一句話說明
 - **影響範圍**：哪些檔案、哪些功能
 - **🔗 Preview**：https://fitnesswith47--ov-feature-name.web.app（GitHub Actions 完成後約 2 分鐘生效，7 天有效）
+- **🧪 測試帳號**：preview@fitforgetest.dev / FitForge2026Preview!（已預載 10 筆身材記錄、30 筆訓練）
 - **如何 merge**：告訴 Claude「merge overnight/YYYY-MM-DD/feature-name」
+  （merge 後可繼續 merge 其他 branch，全部選好後再做 version bump，product.md 會在那時一起更新）
 
 **驗收步驟（對著手機點一遍）：**
 ```
