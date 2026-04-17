@@ -24,8 +24,8 @@
 
 ## ✅ Completed
 
-- ✅ **exercise-prefill-last-session** — branch: `overnight/2026-04-16/exercise-prefill-last-session`（待用戶 merge）
+- ✅ **exercise-prefill-last-session** — merged into master → v1.14.0（2026-04-18）
   選擇動作時自動帶入上次訓練的組數（重量/次數），新增 `getLastSessionSets` 純函式
 
-- ✅ **body-history-fixes** — branch: `overnight/2026-04-16/body-history-fixes`（待用戶 merge）
+- ✅ **body-history-fixes** — merged into master → v1.14.0（2026-04-18）
   身材歷史新增「顯示更多」按鈕（預設 5 筆，可展開全部）；漲跌顏色改為依指標智能判斷（肌肉量↑綠、體重↑紅）
