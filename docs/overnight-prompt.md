@@ -53,36 +53,28 @@
 6.  npm test — 必須全數通過才能繼續
 7.  git add [相關檔案]
 8.  git commit -m "[overnight] feat: 功能描述"
-9.  Preview deploy（見下方 Step 9 說明）
+9.  git push origin overnight/YYYY-MM-DD/kebab-feature-name   ← 強制！
 10. git checkout master
 11. 更新 backlog 狀態
 ```
 
-### Step 9 — Preview Deploy
+> **⚠️ 步驟 9 強制執行**：Remote session 結束後所有本地資料消失，不 push = 工作全部白費。
+> Push 後 GitHub Actions 自動 build + deploy 到 Firebase preview channel（約 2 分鐘，無需額外操作）。
 
-每完成一個 branch 的 commit（步驟 8）後，立即在**同一個 branch** 上執行 Preview deploy：
+---
 
-**Channel ID 生成規則（最長 36 字元）：**
+## Preview URL 計算規則
+
+每個 branch push 後，`.github/workflows/overnight-preview.yml` 自動觸發：
+
 ```
-overnight/YYYY-MM-DD/kebab-feature-name
-→ ov-{YYYYMMDD}-{feature 前 24 字元}
-
-範例：
-  overnight/2026-04-16/body-history-fixes → ov-20260416-body-history-fixes
-  overnight/2026-04-16/exercise-prefill-last-session → ov-20260416-exercise-prefill-last-se
-```
-
-**執行指令：**
-```bash
-npm run build
-firebase hosting:channel:deploy ov-{YYYYMMDD}-{feature-slug} \
-  --project fitnesswith47 \
-  --expires 7d
+branch:  overnight/2026-04-17/rest-timer-sound
+feature: rest-timer-sound（取 branch 第三段）
+channel: ov-rest-timer-sound（加 ov- 前綴，超過 20 字元則截斷）
+URL:     https://fitnesswith47--ov-rest-timer-sound.web.app
 ```
 
-**失敗處理：**
-- build 或 deploy 失敗 → 記錄失敗原因至 report，**不影響**已完成的 git commit，繼續下一個 feature
-- 成功後記錄 Preview URL 至 report（格式：`https://fitnesswith47--ov-{...}-{hash}.web.app`）
+在 report 中附上此 URL，GitHub Actions 完成後約 2 分鐘生效。
 
 ### Review Agent Prompt（在步驟 4 使用）
 ```
@@ -153,8 +145,8 @@ firebase hosting:channel:deploy ov-{YYYYMMDD}-{feature-slug} \
 ### `overnight/YYYY-MM-DD/feature-name`
 - **做了什麼**：一句話說明
 - **影響範圍**：哪些檔案、哪些功能
-- **Preview URL**：`https://fitnesswith47--ov-YYYYMMDD-{slug}-{hash}.web.app`（7 天有效）
-- **如何 merge**：`git merge overnight/YYYY-MM-DD/feature-name`
+- **🔗 Preview**：https://fitnesswith47--ov-feature-name.web.app（GitHub Actions 完成後約 2 分鐘生效，7 天有效）
+- **如何 merge**：告訴 Claude「merge overnight/YYYY-MM-DD/feature-name」
 
 ## 🔴 進行中（下次繼續）
 
