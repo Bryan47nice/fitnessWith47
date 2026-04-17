@@ -27,6 +27,7 @@
 | `getNextClass(upcomingClasses)` | 回傳最近一筆即將到來的課程，無則回傳 null | 無 |
 | `getNeglectedExercises(workouts, thresholdDays, limit)` | 回傳超過門檻天數未練的動作清單，依最久未練排序 | 無 |
 | `formatRestTime(seconds)` | 將秒數格式化為 "m:ss" 字串（例：90 → "1:30"） | 無 |
+| `getLastSessionSets(exercise, workouts)` | 回傳該動作最近一次訓練的 sets 副本，無紀錄時回傳 null | 無 |
 
 > 所有函式從 `FitForge.jsx` 抽取後，`FitForge.jsx` 改為 import 使用，行為不變。
 
@@ -430,6 +431,45 @@
 - Given：`seconds = 65`
 - When：呼叫 `formatRestTime(65)`
 - Then：回傳 `"1:05"`（秒數不足兩位數時補零）
+
+---
+
+### 十二、`getLastSessionSets(exercise, workouts)` — 上次訓練組數查詢
+
+**TC-LS1 有歷史紀錄時回傳最新一次的 sets 副本**
+- Given：workouts 含兩筆「深蹲」，日期分別為 2026-03-01 與 2026-04-10
+- When：呼叫 `getLastSessionSets("深蹲", workouts)`
+- Then：回傳 2026-04-10 的 sets（較新的那筆），長度為 2
+
+**TC-LS2 回傳的是副本，修改不影響原始資料**
+- Given：workouts 含一筆「臥推」，sets 有一組 `{ reps: "8", weight: "70" }`
+- When：取得結果後將 `result[0].weight` 改為 `"999"`
+- Then：原始 sets 物件的 weight 仍為 `"70"`（回傳的是淺拷貝）
+
+**TC-LS3 找不到該動作的歷史紀錄時回傳 null**
+- Given：workouts 僅含「深蹲」，查詢「硬舉」
+- When：呼叫 `getLastSessionSets("硬舉", workouts)`
+- Then：回傳 `null`
+
+**TC-LS4 空 workouts 陣列時回傳 null**
+- Given：`workouts = []`
+- When：呼叫 `getLastSessionSets("深蹲", [])`
+- Then：回傳 `null`
+
+**TC-LS5 exercise 為空字串時回傳 null**
+- Given：`exercise = ""`，workouts 有有效紀錄
+- When：呼叫 `getLastSessionSets("", workouts)`
+- Then：回傳 `null`（空字串 guard）
+
+**TC-LS6 workouts 非陣列時回傳 null**
+- Given：`workouts = null`
+- When：呼叫 `getLastSessionSets("深蹲", null)`
+- Then：回傳 `null`
+
+**TC-LS7 符合動作但 sets 為空陣列的紀錄被略過**
+- Given：workouts 含兩筆「深蹲」，2026-04-12 的 sets 為空，2026-04-10 有有效 sets
+- When：呼叫 `getLastSessionSets("深蹲", workouts)`
+- Then：回傳 2026-04-10 的 sets（空 sets 紀錄被略過）
 
 ---
 

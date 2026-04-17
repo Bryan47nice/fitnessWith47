@@ -2,7 +2,7 @@ import { useState, useEffect } from "react";
 import { LineChart, Line, XAxis, YAxis, Tooltip, ResponsiveContainer } from "recharts";
 import { getApp } from "firebase/app";
 import { getFunctions, httpsCallable } from "firebase/functions";
-import { getWeekStart, canSaveWorkout } from "../../utils/fitforge.utils.js";
+import { getWeekStart, canSaveWorkout, getLastSessionSets } from "../../utils/fitforge.utils.js";
 import { exerciseCategories, INCLINE_EXERCISES } from "../../constants/fitforge.constants.js";
 import styles from "../../styles/fitforge.styles.js";
 
@@ -474,9 +474,15 @@ export default function WorkoutTab({
                 <button key={ex.name} onClick={() => {
                   const newIsCardio = getCategoryForExercise(ex.name, customExercises) === "有氧";
                   const curIsCardio = getCategoryForExercise(wExercise, customExercises) === "有氧";
+                  let nextSets = wSets;
                   if (newIsCardio !== curIsCardio) {
-                    setWSets(newIsCardio ? [{ duration: "", distance: "", speed: "", incline: "" }] : []);
+                    nextSets = newIsCardio ? [{ duration: "", distance: "", speed: "", incline: "" }] : [];
                   }
+                  if (nextSets.length === 0) {
+                    const lastSets = getLastSessionSets(ex.name, workouts);
+                    if (lastSets) nextSets = lastSets;
+                  }
+                  setWSets(nextSets);
                   setWExercise(ex.name);
                   setExPickerExpanded(false);
                   setExSearchQuery("");

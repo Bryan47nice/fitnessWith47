@@ -226,6 +226,24 @@ export function getNeglectedExercises(workouts, thresholdDays = 14, limit = 10) 
 }
 
 /**
+ * Returns a copy of the sets from the user's most recent workout of the given exercise,
+ * or null if no previous workout exists.
+ * Used to pre-fill the workout form when the user selects an exercise.
+ *
+ * @param {string} exercise  - exercise name
+ * @param {Array}  workouts  - array of workout documents { exercise, date, sets[] }
+ * @returns {Array|null} copied sets array, or null
+ */
+export function getLastSessionSets(exercise, workouts) {
+  if (!exercise || !Array.isArray(workouts)) return null;
+  const match = workouts
+    .filter(w => w.exercise === exercise && Array.isArray(w.sets) && w.sets.length > 0)
+    .sort((a, b) => b.date.localeCompare(a.date))[0];
+  if (!match) return null;
+  return match.sets.map(s => ({ ...s }));
+}
+
+/**
  * Formats a duration in seconds as "m:ss" for rest timer display.
  * e.g. 90 → "1:30", 65 → "1:05", 0 → "0:00"
  *
