@@ -45,17 +45,44 @@
 ## 每個項目的執行流程
 
 ```
-1. git checkout master
-2. git checkout -b overnight/YYYY-MM-DD/kebab-feature-name
-3. 實作功能（遵循 CLAUDE.md 規範）
-4. 啟動 Review Agent（subagent）檢查規範違反
-5. 啟動 QA Agent（subagent）補測試
-6. npm test — 必須全數通過才能繼續
-7. git add [相關檔案]
-8. git commit -m "[overnight] feat: 功能描述"
-9. git checkout master
-10. 更新 backlog 狀態
+1.  git checkout master
+2.  git checkout -b overnight/YYYY-MM-DD/kebab-feature-name
+3.  實作功能（遵循 CLAUDE.md 規範）
+4.  啟動 Review Agent（subagent）檢查規範違反
+5.  啟動 QA Agent（subagent）補測試
+6.  npm test — 必須全數通過才能繼續
+7.  git add [相關檔案]
+8.  git commit -m "[overnight] feat: 功能描述"
+9.  Preview deploy（見下方 Step 9 說明）
+10. git checkout master
+11. 更新 backlog 狀態
 ```
+
+### Step 9 — Preview Deploy
+
+每完成一個 branch 的 commit（步驟 8）後，立即在**同一個 branch** 上執行 Preview deploy：
+
+**Channel ID 生成規則（最長 36 字元）：**
+```
+overnight/YYYY-MM-DD/kebab-feature-name
+→ ov-{YYYYMMDD}-{feature 前 24 字元}
+
+範例：
+  overnight/2026-04-16/body-history-fixes → ov-20260416-body-history-fixes
+  overnight/2026-04-16/exercise-prefill-last-session → ov-20260416-exercise-prefill-last-se
+```
+
+**執行指令：**
+```bash
+npm run build
+firebase hosting:channel:deploy ov-{YYYYMMDD}-{feature-slug} \
+  --project fitnesswith47 \
+  --expires 7d
+```
+
+**失敗處理：**
+- build 或 deploy 失敗 → 記錄失敗原因至 report，**不影響**已完成的 git commit，繼續下一個 feature
+- 成功後記錄 Preview URL 至 report（格式：`https://fitnesswith47--ov-{...}-{hash}.web.app`）
 
 ### Review Agent Prompt（在步驟 4 使用）
 ```
@@ -90,7 +117,8 @@
 ## 禁止事項（絕對不可做）
 
 - ❌ 不做 APP_VERSION bump
-- ❌ 不執行 `firebase deploy`
+- ❌ 不執行 `firebase deploy`（生產部署）
+- ✅ 允許執行 `firebase hosting:channel:deploy <channel-id> --expires 7d`（Preview Channel，非生產）
 - ❌ 不執行 FCM push（`push-notify.cjs`）
 - ❌ 不 merge 到 master
 - ❌ 不 `git push`（只有本地 commit）
@@ -125,6 +153,7 @@
 ### `overnight/YYYY-MM-DD/feature-name`
 - **做了什麼**：一句話說明
 - **影響範圍**：哪些檔案、哪些功能
+- **Preview URL**：`https://fitnesswith47--ov-YYYYMMDD-{slug}-{hash}.web.app`（7 天有效）
 - **如何 merge**：`git merge overnight/YYYY-MM-DD/feature-name`
 
 ## 🔴 進行中（下次繼續）
@@ -143,6 +172,7 @@
 - 完成：X 項
 - 進行中：X 項
 - 新增 backlog 項目：X 項
+- Preview 部署：X 成功 / X 失敗
 ```
 
 ---
