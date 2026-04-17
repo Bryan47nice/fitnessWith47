@@ -121,14 +121,27 @@ deploy_branch_preview() {
     return 1
   fi
 
-  # 從輸出擷取 Preview URL
+  # 從 channel:list 取得正確的 Preview URL（deploy 輸出只含 live URL）
   local preview_url
-  preview_url=$(printf '%s' "$deploy_output" \
+  preview_url=$(firebase hosting:channel:list \
+      --project "$FIREBASE_PROJECT" 2>/dev/null \
+    | grep "$channel_id" \
     | grep -oE 'https://[a-zA-Z0-9._-]+\.web\.app' \
     | head -1)
 
   if [[ -z "$preview_url" ]]; then
     preview_url="（請至 Firebase Console → Hosting → Preview Channels 查詢）"
+  fi
+
+  # Step 4: 自動將 Preview URL 加入 Firebase Auth 授權網域
+  if [[ "$preview_url" == https://* ]]; then
+    local domain="${preview_url#https://}"
+    log_info "加入 Firebase Auth 授權網域：$domain"
+    if node "$PROJECT_ROOT/scripts/add-auth-domain.cjs" "$domain" 2>&1; then
+      log_ok "Auth 授權網域已更新"
+    else
+      log_warn "Auth 授權網域更新失敗（可手動至 Firebase Console 新增）"
+    fi
   fi
 
   log_ok "Preview URL: $preview_url"
