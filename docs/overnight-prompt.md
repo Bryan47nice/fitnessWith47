@@ -148,6 +148,15 @@ URL:     https://fitnesswith47--ov-rest-timer-sound.web.app
 - **🔗 Preview**：https://fitnesswith47--ov-feature-name.web.app（GitHub Actions 完成後約 2 分鐘生效，7 天有效）
 - **如何 merge**：告訴 Claude「merge overnight/YYYY-MM-DD/feature-name」
 
+**驗收步驟（對著手機點一遍）：**
+```
+1. 進入 XXX Tab
+2. 執行 XXX 操作
+   ✅ 預期：看到 XXX
+3. 再試 XXX 邊際情況
+   ✅ 預期：XXX 不應該發生
+```
+
 ## 🔴 進行中（下次繼續）
 
 ### `overnight/YYYY-MM-DD/feature-name-wip`
