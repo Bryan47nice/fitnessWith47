@@ -137,46 +137,72 @@ URL:     https://fitnesswith47--ov-rest-timer-sound.web.app
 
 ### 2. 覆蓋寫入 docs/overnight-report.md
 
+report 本身就是完整的晨間驗收包，用戶打開就能直接操作，不需要再問 Claude。
+
 ```markdown
-# Overnight Report — YYYY-MM-DD HH:MM
+# 🌙 Overnight Report — YYYY-MM-DD HH:MM
 
-## ✅ 完成的 Branches（可 merge）
+---
 
-### `overnight/YYYY-MM-DD/feature-name`
-- **做了什麼**：一句話說明
-- **影響範圍**：哪些檔案、哪些功能
-- **🔗 Preview**：https://fitnesswith47--ov-feature-name.web.app（GitHub Actions 完成後約 2 分鐘生效，7 天有效）
-- **🧪 測試帳號**：preview@fitforgetest.dev / FitForge2026Preview!（已預載 10 筆身材記錄、30 筆訓練）
-- **如何 merge**：告訴 Claude「merge overnight/YYYY-MM-DD/feature-name」
-  （merge 後可繼續 merge 其他 branch，全部選好後再做 version bump，product.md 會在那時一起更新）
+## 🧪 測試帳號（所有 preview 連結通用）
 
-**驗收步驟（對著手機點一遍）：**
-```
-1. 進入 XXX Tab
-2. 執行 XXX 操作
+| | |
+|---|---|
+| Email | `preview@fitforgetest.dev` |
+| 密碼 | `FitForge2026Preview!` |
+| 預載資料 | 10 筆身材記錄（3 個月）、30 筆訓練（臥推/深蹲/硬舉/跑步） |
+
+> 打開任何 preview 連結後，在登入頁底部找「🧪 用測試帳號登入」按鈕，不需要 Google 帳號。
+
+---
+
+## ✅ 可驗收的 Branches
+
+### Branch 1：{功能中文名稱}
+**🔗** https://fitnesswith47--ov-feature-name-HASH.web.app
+
+**做了什麼**：一句話說明功能
+
+**驗收步驟：**
+1. 打開連結 → 按「🧪 用測試帳號登入」
+2. 進入 XXX Tab
+3. 執行 XXX 操作
    ✅ 預期：看到 XXX
-3. 再試 XXX 邊際情況
-   ✅ 預期：XXX 不應該發生
-```
+4. 邊際情況：XXX
+   ✅ 預期：XXX 不應發生
+
+**→ 要 merge 嗎？** 告訴 Claude：「merge overnight/YYYY-MM-DD/feature-name」
+
+---
+
+（若有第二個 branch，同格式再來一個 Branch 2 區塊）
+
+---
 
 ## 🔴 進行中（下次繼續）
 
-### `overnight/YYYY-MM-DD/feature-name-wip`
-- **完成到哪**：xxx
-- **剩餘工作**：xxx
+### {功能名稱}（WIP）
+- 完成到哪：xxx
+- 剩餘工作：xxx
+
+（沒有 WIP 就省略此區塊）
+
+---
 
 ## 💡 推薦下次優先做
 
-1. [高] 描述 — 原因（用戶會感受到的價值）
+1. [高] 描述 — 原因
 2. [中] 描述 — 原因
 3. [低] 描述 — 原因
 
+---
+
 ## 📊 本次統計
-- 完成：X 項
-- 進行中：X 項
-- 新增 backlog 項目：X 項
-- Preview 部署：X 成功 / X 失敗
+- 完成：X 項 / 進行中：X 項 / 新增 backlog：X 項
 ```
+
+> **格式要求**：report 必須讓用戶看完就能直接點連結測試，不需要再詢問 Claude。
+> 如果用戶開啟 Claude Code 後沒看到這份格式的報告，他們可以輸入 `/overnight-review` 補拿。
 
 ---
 
