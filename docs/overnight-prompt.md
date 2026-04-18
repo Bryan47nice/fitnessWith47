@@ -6,10 +6,31 @@
 
 ---
 
+## 班別判斷（第一步，必做）
+
+執行以下指令取得目前小時數，決定本班別與報告檔名：
+
+```bash
+HOUR=$(date +%H)
+DATE=$(date +%Y%m%d)
+if [ "$HOUR" -lt 3 ]; then
+  SHIFT="1:00 班"; REPORT="docs/overnight-report-${DATE}-0100.md"
+else
+  SHIFT="4:00 班"; REPORT="docs/overnight-report-${DATE}-0400.md"
+fi
+echo "本班：$SHIFT，報告寫入：$REPORT"
+```
+
+記住 `$SHIFT` 與 `$REPORT`，後續步驟會用到。
+
+---
+
 ## 執行前讀取（必做，依序）
 
 1. `docs/overnight-backlog.md` — 取得目前狀態與待辦清單
-2. `docs/overnight-report.md` — 上次報告（若存在）
+2. **若為 4:00 班**：讀取當天的 `docs/overnight-report-${DATE}-0100.md`（若存在）
+   - 找出其中「🔴 進行中（WIP）」區塊的未完成項目
+   - 這些項目在本班的選題中具有最高優先（優先於 backlog Pending）
 3. `git log --oneline -20` — 了解近期開發脈絡
 4. `docs/product.md` — 功能規格與版本歷史
 5. `src/components/FitForge.jsx`（前 100 行）— 確認 APP_VERSION 與整體結構
@@ -135,12 +156,13 @@ URL:     https://fitnesswith47--ov-rest-timer-sound.web.app
 - ✅ feature-name — branch: `overnight/YYYY-MM-DD/branch-name`（待用戶 merge）
 ```
 
-### 2. 覆蓋寫入 docs/overnight-report.md
+### 2. 寫入當班報告（$REPORT）
 
 report 本身就是完整的晨間驗收包，用戶打開就能直接操作，不需要再問 Claude。
+每班各自寫入獨立檔案（`overnight-report-YYYYMMDD-0100.md` / `overnight-report-YYYYMMDD-0400.md`），舊報告永久保留不覆蓋。
 
 ```markdown
-# 🌙 Overnight Report — YYYY-MM-DD HH:MM
+# 🌙 Overnight Report — YYYY-MM-DD（1:00 班 / 4:00 班）
 
 ---
 
