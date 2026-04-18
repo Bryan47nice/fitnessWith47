@@ -8,11 +8,11 @@
 
 ```bash
 # 找最新一份報告（依修改時間排序，取第一個）
-ls -t docs/overnight-report-????????-0*.md 2>/dev/null | head -1 | xargs cat
+ls -t docs/overnight-report-????????-0[12].md 2>/dev/null | head -1 | xargs cat
 cat docs/overnight-backlog.md
 ```
 
-若找到的是 0400 班報告，順帶告知用戶：「同日還有 0100 班報告，可執行 `cat docs/overnight-report-YYYYMMDD-0100.md` 查看」（將 YYYYMMDD 替換為實際日期）。
+若找到的是 02 班報告，順帶告知用戶：「同日還有 01 班報告，可執行 `cat docs/overnight-report-YYYYMMDD-01.md` 查看」（將 YYYYMMDD 替換為實際日期）。
 若想查看所有歷史報告，可執行 `ls docs/overnight-report-*.md`。
 
 ### Step 2 — 整理輸出
