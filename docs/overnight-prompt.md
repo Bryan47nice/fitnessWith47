@@ -28,7 +28,7 @@ echo "本班：$SHIFT，報告寫入：$REPORT"
 ## 執行前讀取（必做，依序）
 
 1. `docs/overnight-backlog.md` — 取得目前狀態與待辦清單
-2. **若為 4:00 班**：讀取當天的 `docs/overnight-report-${DATE}-0100.md`（若存在）
+2. **若為 02班**：讀取當天的 `docs/overnight-report-${DATE}-01.md`（若存在）
    - 找出其中「🔴 進行中（WIP）」區塊的未完成項目
    - 這些項目在本班的選題中具有最高優先（優先於 backlog Pending）
 3. `git log --oneline -20` — 了解近期開發脈絡
