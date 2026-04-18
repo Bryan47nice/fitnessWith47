@@ -15,6 +15,7 @@ import {
   filterCalendarEvents, getNextClass,
   formatRestTime,
   getNeglectedExercises,
+  paceFromTimeDist,
 } from "../utils/fitforge.utils.js";
 import styles from "../styles/fitforge.styles.js";
 import DashboardTab from "./tabs/DashboardTab.jsx";
@@ -22,7 +23,7 @@ import WorkoutTab from "./tabs/WorkoutTab.jsx";
 import BodyTab from "./tabs/BodyTab.jsx";
 import GoalsTab from "./tabs/GoalsTab.jsx";
 
-const APP_VERSION = "1.14.0";
+const APP_VERSION = "1.14.1";
 const toLocalDateStr = (d = new Date()) =>
   `${d.getFullYear()}-${String(d.getMonth() + 1).padStart(2, "0")}-${String(d.getDate()).padStart(2, "0")}`;
 
@@ -37,6 +38,7 @@ const exerciseCategories = [
 ];
 
 const INCLINE_EXERCISES = ["跑步機", "慢跑", "室內健走", "橢圓機"];
+const RUNNING_EXERCISES = ["跑步機", "慢跑", "室內健走"];
 
 export default function FitForge({ user }) {
   const [tab, setTab] = useState("dashboard");
@@ -676,7 +678,7 @@ export default function FitForge({ user }) {
       localStorage.removeItem(`ai_fitness_comment_${toLocalDateStr()}`);
       setAiRefreshKey(k => k + 1);
     }
-    setWSets(isCardio(name) ? [{ duration: "", distance: "", speed: "", incline: "" }] : []);
+    setWSets(isCardio(name) ? [{ duration: "", duration_sec: "", distance: "", speed: "", incline: "" }] : []);
     setWNote("");
     setWCalories("");
     setSavedAnim(true);
@@ -969,13 +971,14 @@ export default function FitForge({ user }) {
 
   const isCardio = (name) => getCategoryForExercise(name) === "有氧";
   const showIncline = (name) => INCLINE_EXERCISES.includes(name);
+  const isRunning = (name) => RUNNING_EXERCISES.includes(name);
 
   function toMinPerKm(kmh) {
     if (!kmh || isNaN(kmh)) return null;
     const total = 60 / parseFloat(kmh);
     const min = Math.floor(total);
     const sec = Math.round((total - min) * 60);
-    return `${min}:${String(sec).padStart(2, "0")} /km`;
+    return `${String(min).padStart(2, "0")}:${String(sec).padStart(2, "0")} /km`;
   }
 
   const recentExercises = (() => {
@@ -1996,15 +1999,31 @@ export default function FitForge({ user }) {
               版本更新記錄
             </div>
 
-            {/* v1.14.0 */}
+            {/* v1.14.1 */}
             <div style={{ marginBottom: "24px" }}>
               <div style={{ display: "flex", alignItems: "center", gap: "10px", marginBottom: "10px" }}>
-                <span style={{ fontSize: "17px", fontWeight: 900, color: "#ffd700" }}>v1.14.0</span>
+                <span style={{ fontSize: "17px", fontWeight: 900, color: "#ffd700" }}>v1.14.1</span>
                 <span style={{
                   fontSize: "11px", fontWeight: 800, color: "#ff6a00",
                   background: "rgba(255,106,0,0.15)", border: "1px solid rgba(255,106,0,0.3)",
                   borderRadius: "6px", padding: "2px 7px", letterSpacing: "0.05em",
                 }}>最新</span>
+                <span style={{ fontSize: "12px", color: "#555", marginLeft: "auto" }}>2026-04-18</span>
+              </div>
+              <div style={{ display: "flex", flexDirection: "column", gap: "7px" }}>
+                <div style={{ fontSize: "14px", color: "#c8c4bc", display: "flex", gap: "8px" }}>
+                  <span style={{ color: "#ffd700", flexShrink: 0 }}>✨</span>
+                  <span>跑步機記錄重新設計：分秒輸入取代速度欄位，自動計算並顯示配速（05:43 /km 格式）</span>
+                </div>
+              </div>
+            </div>
+
+            <div style={{ height: "1px", background: "rgba(255,255,255,0.07)", marginBottom: "20px" }} />
+
+            {/* v1.14.0 */}
+            <div style={{ marginBottom: "24px" }}>
+              <div style={{ display: "flex", alignItems: "center", gap: "10px", marginBottom: "10px" }}>
+                <span style={{ fontSize: "17px", fontWeight: 900, color: "#e8e4dc" }}>v1.14.0</span>
                 <span style={{ fontSize: "12px", color: "#555", marginLeft: "auto" }}>2026-04-18</span>
               </div>
               <div style={{ display: "flex", flexDirection: "column", gap: "7px" }}>
@@ -2978,17 +2997,41 @@ export default function FitForge({ user }) {
                   <div style={{ flex: 1, display: "flex", flexDirection: "column", gap: "4px" }}>
                     {isCardio(ewExercise) ? (
                       <>
-                        <input type="number" placeholder="時間 (分鐘)" value={s.duration || ""}
-                          onChange={e => ewUpdateSet(i, "duration", e.target.value)}
-                          style={{ width: "100%", background: "rgba(255,255,255,0.05)", border: "1px solid rgba(255,255,255,0.1)", borderRadius: "8px", padding: "8px 12px", color: "#e8e4dc", fontSize: "15px", outline: "none", fontFamily: "inherit", boxSizing: "border-box" }}
-                        />
+                        {/* 時間（分 + 秒） */}
+                        <div style={{ display: "flex", gap: "6px", alignItems: "center" }}>
+                          <input type="number" min={0} placeholder="分" value={s.duration || ""}
+                            onChange={e => ewUpdateSet(i, "duration", e.target.value)}
+                            style={{ flex: 1, background: "rgba(255,255,255,0.05)", border: "1px solid rgba(255,255,255,0.1)", borderRadius: "8px", padding: "8px 12px", color: "#e8e4dc", fontSize: "15px", outline: "none", fontFamily: "inherit", boxSizing: "border-box", textAlign: "center" }}
+                          />
+                          <span style={{ color: "#aaa", fontSize: "12px", flexShrink: 0 }}>分</span>
+                          <input type="number" min={0} max={59} placeholder="秒" value={s.duration_sec || ""}
+                            onChange={e => ewUpdateSet(i, "duration_sec", e.target.value)}
+                            style={{ flex: 1, background: "rgba(255,255,255,0.05)", border: "1px solid rgba(255,255,255,0.1)", borderRadius: "8px", padding: "8px 12px", color: "#e8e4dc", fontSize: "15px", outline: "none", fontFamily: "inherit", boxSizing: "border-box", textAlign: "center" }}
+                          />
+                          <span style={{ color: "#aaa", fontSize: "12px", flexShrink: 0 }}>秒</span>
+                        </div>
+                        {/* 距離 + 自動配速 */}
                         <div>
-                          <input type="number" placeholder="速度 (km/h)" value={s.speed || ""}
-                            onChange={e => ewUpdateSet(i, "speed", e.target.value)}
+                          <input type="number" placeholder="距離 (km)" value={s.distance || ""}
+                            onChange={e => ewUpdateSet(i, "distance", e.target.value)}
                             style={{ width: "100%", background: "rgba(255,255,255,0.05)", border: "1px solid rgba(255,255,255,0.1)", borderRadius: "8px", padding: "8px 12px", color: "#e8e4dc", fontSize: "15px", outline: "none", fontFamily: "inherit", boxSizing: "border-box" }}
                           />
-                          {s.speed && <div style={{ fontSize: "10px", color: "#ff6a00", marginTop: "2px", paddingLeft: "2px" }}>→ {toMinPerKm(s.speed)}</div>}
+                          {isRunning(ewExercise) && s.duration && s.distance && (
+                            <div style={{ fontSize: "11px", color: "#ff6a00", marginTop: "4px", paddingLeft: "2px" }}>
+                              ⚡ 配速 {paceFromTimeDist(s.duration, s.duration_sec, s.distance)}
+                            </div>
+                          )}
                         </div>
+                        {/* 速度（非跑步有氧才顯示） */}
+                        {!isRunning(ewExercise) && (
+                          <div>
+                            <input type="number" placeholder="速度 (km/h)" value={s.speed || ""}
+                              onChange={e => ewUpdateSet(i, "speed", e.target.value)}
+                              style={{ width: "100%", background: "rgba(255,255,255,0.05)", border: "1px solid rgba(255,255,255,0.1)", borderRadius: "8px", padding: "8px 12px", color: "#e8e4dc", fontSize: "15px", outline: "none", fontFamily: "inherit", boxSizing: "border-box" }}
+                            />
+                            {s.speed && <div style={{ fontSize: "10px", color: "#ff6a00", marginTop: "2px", paddingLeft: "2px" }}>→ {toMinPerKm(s.speed)}</div>}
+                          </div>
+                        )}
                         {showIncline(ewExercise) && (
                           <input type="number" placeholder="坡度 (%)" value={s.incline || ""}
                             onChange={e => ewUpdateSet(i, "incline", e.target.value)}

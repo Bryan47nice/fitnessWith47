@@ -2,8 +2,8 @@ import { useState, useEffect } from "react";
 import { LineChart, Line, XAxis, YAxis, Tooltip, ResponsiveContainer } from "recharts";
 import { getApp } from "firebase/app";
 import { getFunctions, httpsCallable } from "firebase/functions";
-import { getWeekStart, canSaveWorkout, getLastSessionSets } from "../../utils/fitforge.utils.js";
-import { exerciseCategories, INCLINE_EXERCISES } from "../../constants/fitforge.constants.js";
+import { getWeekStart, canSaveWorkout, getLastSessionSets, paceFromTimeDist } from "../../utils/fitforge.utils.js";
+import { exerciseCategories, INCLINE_EXERCISES, RUNNING_EXERCISES } from "../../constants/fitforge.constants.js";
 import styles from "../../styles/fitforge.styles.js";
 
 function getCategoryForExercise(name, customExercises) {
@@ -23,12 +23,16 @@ function showIncline(name) {
   return INCLINE_EXERCISES.includes(name);
 }
 
+function isRunning(name) {
+  return RUNNING_EXERCISES.includes(name);
+}
+
 function toMinPerKm(kmh) {
   if (!kmh || isNaN(kmh)) return null;
   const total = 60 / parseFloat(kmh);
   const min = Math.floor(total);
   const sec = Math.round((total - min) * 60);
-  return `${min}:${String(sec).padStart(2, "0")} /km`;
+  return `${String(min).padStart(2, "0")}:${String(sec).padStart(2, "0")} /km`;
 }
 
 export default function WorkoutTab({
@@ -299,10 +303,15 @@ export default function WorkoutTab({
               <div style={{ display: "flex", gap: 6, flexWrap: "wrap" }}>
                 {w.sets?.map((s, idx) => {
                   if (s.duration !== undefined) {
+                    const durationLabel = s.duration
+                      ? `${s.duration}分${String(parseInt(s.duration_sec || 0)).padStart(2, "0")}秒`
+                      : null;
+                    const paceLabel = paceFromTimeDist(s.duration, s.duration_sec, s.distance)
+                      || (s.speed ? toMinPerKm(s.speed) : null);
                     const parts = [
-                      s.duration && `${s.duration}分鐘`,
+                      durationLabel,
                       s.distance && `${s.distance} km`,
-                      s.speed && `${s.speed} km/h`,
+                      paceLabel,
                       s.incline && `坡度${s.incline}%`,
                     ].filter(Boolean);
                     return <span key={idx} style={styles.tag}>{parts.join(" · ") || "—"}</span>;
@@ -476,7 +485,7 @@ export default function WorkoutTab({
                   const curIsCardio = getCategoryForExercise(wExercise, customExercises) === "有氧";
                   let nextSets = wSets;
                   if (newIsCardio !== curIsCardio) {
-                    nextSets = newIsCardio ? [{ duration: "", distance: "", speed: "", incline: "" }] : [];
+                    nextSets = newIsCardio ? [{ duration: "", duration_sec: "", distance: "", speed: "", incline: "" }] : [];
                   }
                   if (nextSets.length === 0) {
                     const lastSets = getLastSessionSets(ex.name, workouts);
@@ -719,16 +728,29 @@ export default function WorkoutTab({
           {/* 有氧模式：單次平面表單 */}
           {cardio(wExercise) ? (
             <div style={{ display: "flex", flexDirection: "column", gap: "8px" }}>
-              <div>
-                <input type="number" style={styles.setInput} placeholder="時間（分鐘）*" value={wSets[0]?.duration || ""} onChange={e => updateSet(0, "duration", e.target.value)} />
+              {/* 時間（分 + 秒） */}
+              <div style={{ display: "flex", gap: "6px", alignItems: "center" }}>
+                <input type="number" min={0} style={{ ...styles.setInput, flex: 1, textAlign: "center" }} placeholder="分" value={wSets[0]?.duration || ""} onChange={e => updateSet(0, "duration", e.target.value)} />
+                <span style={{ color: "#888", fontSize: "13px", flexShrink: 0 }}>分</span>
+                <input type="number" min={0} max={59} style={{ ...styles.setInput, flex: 1, textAlign: "center" }} placeholder="秒" value={wSets[0]?.duration_sec || ""} onChange={e => updateSet(0, "duration_sec", e.target.value)} />
+                <span style={{ color: "#888", fontSize: "13px", flexShrink: 0 }}>秒</span>
               </div>
+              {/* 距離 + 自動配速 */}
               <div>
                 <input type="number" style={styles.setInput} placeholder="距離（km）" value={wSets[0]?.distance || ""} onChange={e => updateSet(0, "distance", e.target.value)} />
+                {isRunning(wExercise) && wSets[0]?.duration && wSets[0]?.distance && (
+                  <div style={{ fontSize: "11px", color: "#ff6a00", marginTop: "4px", paddingLeft: "2px" }}>
+                    ⚡ 配速 {paceFromTimeDist(wSets[0].duration, wSets[0].duration_sec, wSets[0].distance)}
+                  </div>
+                )}
               </div>
-              <div>
-                <input type="number" style={styles.setInput} placeholder="速度（km/h）" value={wSets[0]?.speed || ""} onChange={e => updateSet(0, "speed", e.target.value)} />
-                {wSets[0]?.speed && <div style={{ fontSize: "10px", color: "#ff6a00", marginTop: "2px", paddingLeft: "2px" }}>→ {toMinPerKm(wSets[0].speed)}</div>}
-              </div>
+              {/* 速度（非跑步有氧才顯示） */}
+              {!isRunning(wExercise) && (
+                <div>
+                  <input type="number" style={styles.setInput} placeholder="速度（km/h）" value={wSets[0]?.speed || ""} onChange={e => updateSet(0, "speed", e.target.value)} />
+                  {wSets[0]?.speed && <div style={{ fontSize: "10px", color: "#ff6a00", marginTop: "2px", paddingLeft: "2px" }}>→ {toMinPerKm(wSets[0].speed)}</div>}
+                </div>
+              )}
               {showIncline(wExercise) && (
                 <div>
                   <input type="number" style={styles.setInput} placeholder="坡度（%）" value={wSets[0]?.incline || ""} onChange={e => updateSet(0, "incline", e.target.value)} />
@@ -1112,10 +1134,15 @@ export default function WorkoutTab({
                           <div style={{ display: "flex", gap: "6px", flexWrap: "wrap", marginBottom: w.note ? "8px" : 0 }}>
                             {w.sets?.map((s, i) => {
                               if (s.duration !== undefined) {
+                                const durationLabel = s.duration
+                                  ? `${s.duration}分${String(parseInt(s.duration_sec || 0)).padStart(2, "0")}秒`
+                                  : null;
+                                const paceLabel = paceFromTimeDist(s.duration, s.duration_sec, s.distance)
+                                  || (s.speed ? toMinPerKm(s.speed) : null);
                                 const parts = [
-                                  s.duration && `${s.duration}分鐘`,
+                                  durationLabel,
                                   s.distance && `${s.distance} km`,
-                                  s.speed && `${s.speed} km/h`,
+                                  paceLabel,
                                   s.incline && `坡度${s.incline}%`,
                                 ].filter(Boolean);
                                 return <span key={i} style={styles.tag}>{parts.join(" · ") || "—"}</span>;

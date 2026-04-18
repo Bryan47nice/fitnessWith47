@@ -255,3 +255,12 @@ export function formatRestTime(seconds) {
   const s = seconds % 60;
   return `${m}:${s.toString().padStart(2, '0')}`;
 }
+
+export function paceFromTimeDist(durationMin, durationSec, distanceKm) {
+  const totalMin = parseFloat(durationMin || 0) + parseFloat(durationSec || 0) / 60;
+  if (!totalMin || !distanceKm || isNaN(distanceKm) || parseFloat(distanceKm) <= 0) return null;
+  const pace = totalMin / parseFloat(distanceKm);
+  const min = Math.floor(pace);
+  const sec = Math.round((pace - min) * 60);
+  return `${String(min).padStart(2, "0")}:${String(sec).padStart(2, "0")} /km`;
+}

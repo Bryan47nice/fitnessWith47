@@ -9,3 +9,4 @@ export const exerciseCategories = [
 ];
 
 export const INCLINE_EXERCISES = ["跑步機", "慢跑", "室內健走", "橢圓機"];
+export const RUNNING_EXERCISES = ["跑步機", "慢跑", "室內健走"];

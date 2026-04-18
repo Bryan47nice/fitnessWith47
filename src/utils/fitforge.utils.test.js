@@ -20,6 +20,7 @@ import {
   formatRestTime,
   getNeglectedExercises,
   getLastSessionSets,
+  paceFromTimeDist,
 } from "./fitforge.utils.js";
 
 // ─── 一、getWeekStart ──────────────────────────────────────────────────────
@@ -843,5 +844,56 @@ describe("getLastSessionSets()", () => {
     // Then: empty-sets record is skipped; valid sets from 2026-04-10 are returned
     expect(result).toHaveLength(1);
     expect(result[0]).toEqual({ reps: "5", weight: "90" });
+  });
+});
+
+// ─── 十三、paceFromTimeDist ───────────────────────────────────────────────
+describe("paceFromTimeDist()", () => {
+  test("TC-PC1 標準配速計算：20分0秒跑3.39km", () => {
+    // Given: 20分鐘整，3.39km
+    // When:
+    const result = paceFromTimeDist("20", "0", "3.39");
+    // Then: pace = 20/3.39 ≈ 5.90 min/km = 5分54秒
+    expect(result).toBe("05:54 /km");
+  });
+
+  test("TC-PC2 含秒數配速計算：20分30秒跑3.5km", () => {
+    // Given: 20分30秒，3.5km
+    // When:
+    const result = paceFromTimeDist("20", "30", "3.5");
+    // Then: total = 20.5 min, pace = 20.5/3.5 ≈ 5.857 min/km = 5分51秒
+    expect(result).toBe("05:51 /km");
+  });
+
+  test("TC-PC3 分鐘數為個位數時補前導零", () => {
+    // Given: 5分鐘，1km（配速剛好5:00）
+    // When:
+    const result = paceFromTimeDist("5", "0", "1");
+    // Then: 格式含前導零
+    expect(result).toBe("05:00 /km");
+  });
+
+  test("TC-PC4 距離為 0 時回傳 null", () => {
+    // Given: distance = 0
+    // When:
+    const result = paceFromTimeDist("20", "0", "0");
+    // Then: 無法計算，回傳 null
+    expect(result).toBeNull();
+  });
+
+  test("TC-PC5 時間為空時回傳 null", () => {
+    // Given: no duration provided
+    // When:
+    const result = paceFromTimeDist("", "", "3.5");
+    // Then: 無法計算，回傳 null
+    expect(result).toBeNull();
+  });
+
+  test("TC-PC6 duration_sec 為 undefined 時預設 0 秒", () => {
+    // Given: duration_sec not provided (old data)
+    // When:
+    const result = paceFromTimeDist("10", undefined, "2");
+    // Then: treats as 10 min, pace = 10/2 = 5 min/km = 05:00
+    expect(result).toBe("05:00 /km");
   });
 });

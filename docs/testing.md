@@ -28,6 +28,7 @@
 | `getNeglectedExercises(workouts, thresholdDays, limit)` | 回傳超過門檻天數未練的動作清單，依最久未練排序 | 無 |
 | `formatRestTime(seconds)` | 將秒數格式化為 "m:ss" 字串（例：90 → "1:30"） | 無 |
 | `getLastSessionSets(exercise, workouts)` | 回傳該動作最近一次訓練的 sets 副本，無紀錄時回傳 null | 無 |
+| `paceFromTimeDist(durationMin, durationSec, distanceKm)` | 由時間（分+秒）與距離計算配速字串（"MM:SS /km"），無效時回傳 null | 無 |
 
 > 所有函式從 `FitForge.jsx` 抽取後，`FitForge.jsx` 改為 import 使用，行為不變。
 
@@ -470,6 +471,40 @@
 - Given：workouts 含兩筆「深蹲」，2026-04-12 的 sets 為空，2026-04-10 有有效 sets
 - When：呼叫 `getLastSessionSets("深蹲", workouts)`
 - Then：回傳 2026-04-10 的 sets（空 sets 紀錄被略過）
+
+---
+
+### 十三、`paceFromTimeDist(durationMin, durationSec, distanceKm)` — 配速計算
+
+**TC-PC1 標準配速計算：20分0秒跑3.39km**
+- Given：`durationMin = "20"`，`durationSec = "0"`，`distanceKm = "3.39"`
+- When：呼叫 `paceFromTimeDist("20", "0", "3.39")`
+- Then：回傳 `"05:54 /km"`（20 ÷ 3.39 ≈ 5.90 min/km）
+
+**TC-PC2 含秒數配速計算：20分30秒跑3.5km**
+- Given：`durationMin = "20"`，`durationSec = "30"`，`distanceKm = "3.5"`
+- When：呼叫 `paceFromTimeDist("20", "30", "3.5")`
+- Then：回傳 `"05:51 /km"`（20.5 ÷ 3.5 ≈ 5.857 min/km）
+
+**TC-PC3 分鐘數為個位數時補前導零**
+- Given：`durationMin = "5"`，`durationSec = "0"`，`distanceKm = "1"`
+- When：呼叫 `paceFromTimeDist("5", "0", "1")`
+- Then：回傳 `"05:00 /km"`（分鐘數補前導零）
+
+**TC-PC4 距離為 0 時回傳 null**
+- Given：`distanceKm = "0"`
+- When：呼叫 `paceFromTimeDist("20", "0", "0")`
+- Then：回傳 `null`（無法計算配速）
+
+**TC-PC5 時間為空時回傳 null**
+- Given：`durationMin = ""`，`durationSec = ""`
+- When：呼叫 `paceFromTimeDist("", "", "3.5")`
+- Then：回傳 `null`（無時間無法計算）
+
+**TC-PC6 duration_sec 為 undefined 時預設 0 秒**
+- Given：`durationMin = "10"`，`durationSec = undefined`，`distanceKm = "2"`
+- When：呼叫 `paceFromTimeDist("10", undefined, "2")`
+- Then：回傳 `"05:00 /km"`（undefined 視為 0 秒，10 ÷ 2 = 5 min/km）
 
 ---
 
