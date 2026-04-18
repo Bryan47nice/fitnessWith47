@@ -55,7 +55,7 @@
 3. Review Agent（subagent）→ 規範審查
 4. QA Agent（subagent）→ 跑測試 + 補 GWT
 5. Version bump（/version-bump skill）
-6. Commit + push
+6. Commit + push（**先跑 `git status` 確認無漏掉的 modified 檔案，再 stage + commit**）
 7. 輸出三組文案選項（Changelog / RC / FCM）
 8. 用戶選完 → Deploy Agent
 ```
