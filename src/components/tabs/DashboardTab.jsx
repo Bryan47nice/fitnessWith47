@@ -2,6 +2,7 @@ import { useState } from "react";
 import { createPortal } from "react-dom";
 import { ResponsiveContainer, LineChart, Line, XAxis, YAxis, Tooltip } from "recharts";
 import { getWeekStart } from "../../utils/fitforge.utils.js";
+import { exerciseCategories } from "../../constants/fitforge.constants.js";
 import styles from "../../styles/fitforge.styles.js";
 
 function getBmiColor(b) {
@@ -48,6 +49,7 @@ function daysUntilClass(startDateTime) {
 export default function DashboardTab({ workouts, bodyData, prMap, volumePeriod, setVolumePeriod, streak, nextClass, calendarConnected, calendarKeyword, onConnectCalendar, onSyncCalendar, onDisconnectCalendar, onSaveCalendarKeyword, coachDays = [], coachQuota = { total: 24 } }) {
   const [prFullView, setPrFullView] = useState(false);
   const [selectedPrExercise, setSelectedPrExercise] = useState(null);
+  const [prFilterTag, setPrFilterTag] = useState("全部");
   const [editingKeyword, setEditingKeyword] = useState(false);
   const [keywordInput, setKeywordInput] = useState("");
   const [coachHistoryOpen, setCoachHistoryOpen] = useState(false);
@@ -455,12 +457,21 @@ export default function DashboardTab({ workouts, bodyData, prMap, volumePeriod, 
 
       {/* 全螢幕 PR 頁 */}
       {prFullView && createPortal(
+        (() => {
+          const prTags = ["全部", ...exerciseCategories.map(c => c.label)];
+          const filteredPRs = prFilterTag === "全部"
+            ? allPRsSortedByDate
+            : allPRsSortedByDate.filter(([exercise]) => {
+                const cat = exerciseCategories.find(c => c.exercises.includes(exercise));
+                return cat ? cat.label === prFilterTag : false;
+              });
+          return (
         <div style={{
           position: "fixed", top: 0, left: 0, right: 0, bottom: 0,
           background: "rgba(10,10,18,0.98)",
           backdropFilter: "blur(12px)",
           zIndex: 9999,
-          overflowY: "auto",
+          overflowY: "hidden",
           display: "flex", flexDirection: "column",
         }}>
           {/* 頂部返回列 */}
@@ -468,23 +479,43 @@ export default function DashboardTab({ workouts, bodyData, prMap, volumePeriod, 
             display: "flex", alignItems: "center", gap: 12,
             padding: "16px 20px",
             borderBottom: "1px solid rgba(255,255,255,0.08)",
-            position: "sticky", top: 0,
             background: "rgba(10,10,18,0.98)",
             backdropFilter: "blur(12px)",
+            flexShrink: 0,
           }}>
             <button
-              onClick={() => { setPrFullView(false); setSelectedPrExercise(null); }}
+              onClick={() => { setPrFullView(false); setSelectedPrExercise(null); setPrFilterTag("全部"); }}
               style={{ background: "none", border: "none", color: "#e8e4dc", fontSize: 22, cursor: "pointer", padding: 0, lineHeight: 1 }}
             >←</button>
             <div style={{ fontSize: 16, fontWeight: 700, color: "#e8e4dc" }}>個人最佳 PR</div>
             <div style={{ marginLeft: "auto", fontSize: 12, color: "#555" }}>
-              共 {allPRsSortedByDate.length} 個動作
+              {prFilterTag === "全部" ? `共 ${allPRsSortedByDate.length} 個動作` : `${filteredPRs.length} / ${allPRsSortedByDate.length} 個動作`}
             </div>
           </div>
 
+          {/* 部位篩選 tabs */}
+          <div style={{ display: "flex", gap: "8px", padding: "10px 16px", overflowX: "auto", flexShrink: 0, borderBottom: "1px solid rgba(255,255,255,0.05)" }}>
+            {prTags.map(tag => (
+              <button
+                key={tag}
+                onClick={() => { setPrFilterTag(tag); setSelectedPrExercise(null); }}
+                style={{
+                  flexShrink: 0, padding: "5px 14px", borderRadius: "20px", border: "none",
+                  background: prFilterTag === tag ? "#ffd700" : "rgba(255,255,255,0.07)",
+                  color: prFilterTag === tag ? "#111" : "#aaa",
+                  fontSize: "13px", fontWeight: prFilterTag === tag ? 700 : 400,
+                  cursor: "pointer", fontFamily: "inherit",
+                  transition: "background 0.15s, color 0.15s",
+                }}
+              >{tag}</button>
+            ))}
+          </div>
+
           {/* PR 列表 */}
-          <div style={{ padding: "12px 16px", flex: 1 }}>
-            {allPRsSortedByDate.map(([exercise, { weight, date }]) => {
+          <div style={{ padding: "12px 16px", flex: 1, overflowY: "auto" }}>
+            {filteredPRs.length === 0 ? (
+              <div style={{ textAlign: "center", padding: "48px 20px", color: "#666", fontSize: 14 }}>此部位尚無 PR 記錄</div>
+            ) : filteredPRs.map(([exercise, { weight, date }]) => {
               const isSelected = selectedPrExercise === exercise;
               const trendData = isSelected ? prTrendData : [];
               return (
@@ -554,7 +585,9 @@ export default function DashboardTab({ workouts, bodyData, prMap, volumePeriod, 
               );
             })}
           </div>
-        </div>,
+        </div>
+          );
+        })(),
         document.body
       )}
 
