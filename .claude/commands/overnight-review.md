@@ -17,6 +17,33 @@ firebase hosting:channel:list 2>/dev/null
 若找到的是 02 班報告，順帶告知用戶：「同日還有 01 班報告，可執行 `cat docs/overnight-report-YYYYMMDD-01.md` 查看」（將 YYYYMMDD 替換為實際日期）。
 若想查看所有歷史報告，可執行 `ls docs/overnight-report-*.md`。
 
+### Step 1.5 — 檢查規劃待核准
+
+讀取 `docs/overnight-backlog.md`，若有 `📝 [規劃完成]` 項目，讀取對應的 `docs/plans/` 文件，在輸出中加入「規劃待核准」區塊（位於驗收 branches 之前）：
+
+```
+## 📋 規劃待核准
+
+### {功能名稱}
+目標：{一句話}
+影響範圍：{檔案列表}
+分階段建議：{如有}
+📄 完整規劃：docs/plans/YYYY-MM-DD-feature-name.md
+
+→ 核准：「approve {feature-name}」
+→ 退回：「reject {feature-name}」或「reject {feature-name} {修改意見}」
+```
+
+**收到 approve 指令時：**
+在 `docs/overnight-backlog.md` 將對應的 `📝 [規劃完成]` 改為 `✅ [用戶核准]`，回報「✅ 已核准，下次 overnight 將按規劃實作」
+
+**收到 reject 指令時：**
+1. 刪除對應 `docs/plans/` 規劃文件
+2. 在 backlog 將項目改回 `📋 [需規劃]`，並在後面加上用戶的修改意見
+3. 回報「已退回，overnight agent 下次重新規劃時會參考意見」
+
+---
+
 ### Step 2 — 整理輸出
 
 以下列格式輸出今日驗收包（不要輸出原始 markdown，重新整理成易讀格式）：
