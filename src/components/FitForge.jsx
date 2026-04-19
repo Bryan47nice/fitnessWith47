@@ -1637,7 +1637,7 @@ export default function FitForge({ user }) {
                 {["全部", ...exerciseCategories.map(c => c.label)].map(tag => (
                   <button
                     key={tag}
-                    onClick={() => { setPlanFilterTag(tag); setPlanChecked({}); }}
+                    onClick={() => setPlanFilterTag(tag)}
                     style={{
                       flexShrink: 0, padding: "5px 14px", borderRadius: "20px", border: "none",
                       background: planFilterTag === tag ? "#ff6a00" : "rgba(255,255,255,0.07)",
