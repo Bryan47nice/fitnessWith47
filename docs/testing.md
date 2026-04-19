@@ -29,6 +29,7 @@
 | `formatRestTime(seconds)` | 將秒數格式化為 "m:ss" 字串（例：90 → "1:30"） | 無 |
 | `getLastSessionSets(exercise, workouts)` | 回傳該動作最近一次訓練的 sets 副本，無紀錄時回傳 null | 無 |
 | `paceFromTimeDist(durationMin, durationSec, distanceKm)` | 由時間（分+秒）與距離計算配速字串（"MM:SS /km"），無效時回傳 null | 無 |
+| `toMinPerKm(kmh)` | 將 km/h 速度轉換為配速字串（"MM:SS /km"），無效時回傳 null | 無 |
 
 > 所有函式從 `FitForge.jsx` 抽取後，`FitForge.jsx` 改為 import 使用，行為不變。
 
@@ -474,7 +475,41 @@
 
 ---
 
-### 十三、`paceFromTimeDist(durationMin, durationSec, distanceKm)` — 配速計算
+### 十三、`toMinPerKm(kmh)` — 速度轉配速
+
+**TC-M1 標準速度 10 km/h 轉為配速 06:00 /km**
+- Given：`kmh = 10`
+- When：呼叫 `toMinPerKm(10)`
+- Then：回傳 `"06:00 /km"`（60 ÷ 10 = 6 分鐘/km）
+
+**TC-M2 速度 12 km/h 轉為配速 05:00 /km**
+- Given：`kmh = 12`
+- When：呼叫 `toMinPerKm(12)`
+- Then：回傳 `"05:00 /km"`（60 ÷ 12 = 5 分鐘/km）
+
+**TC-M3 非整除速度產生正確秒數（8 km/h → 07:30 /km）**
+- Given：`kmh = 8`
+- When：呼叫 `toMinPerKm(8)`
+- Then：回傳 `"07:30 /km"`（60 ÷ 8 = 7.5 min/km = 7分30秒）
+
+**TC-M4 速度為 0 時回傳 null**
+- Given：`kmh = 0`（無效輸入）
+- When：呼叫 `toMinPerKm(0)`
+- Then：回傳 `null`（falsy guard）
+
+**TC-M5 速度為 null 時回傳 null**
+- Given：`kmh = null`
+- When：呼叫 `toMinPerKm(null)`
+- Then：回傳 `null`
+
+**TC-M6 速度為字串數字時仍正確計算（'10' → 06:00 /km）**
+- Given：`kmh = "10"`（字串形式，來自表單輸入）
+- When：呼叫 `toMinPerKm("10")`
+- Then：回傳 `"06:00 /km"`（parseFloat 自動轉換）
+
+---
+
+### 十五、`paceFromTimeDist(durationMin, durationSec, distanceKm)` — 配速計算
 
 **TC-PC1 標準配速計算：20分0秒跑3.39km**
 - Given：`durationMin = "20"`，`durationSec = "0"`，`distanceKm = "3.39"`

@@ -21,6 +21,7 @@ import {
   getNeglectedExercises,
   getLastSessionSets,
   paceFromTimeDist,
+  toMinPerKm,
 } from "./fitforge.utils.js";
 
 // ─── 一、getWeekStart ──────────────────────────────────────────────────────
@@ -847,7 +848,58 @@ describe("getLastSessionSets()", () => {
   });
 });
 
-// ─── 十三、paceFromTimeDist ───────────────────────────────────────────────
+// ─── 十三、toMinPerKm ────────────────────────────────────────────────────
+describe("toMinPerKm()", () => {
+  test("TC-M1 標準速度 10 km/h 轉為配速 06:00 /km", () => {
+    // Given: speed = 10 km/h
+    // When: 60 / 10 = 6.0 min/km → 6分0秒
+    const result = toMinPerKm(10);
+    // Then:
+    expect(result).toBe("06:00 /km");
+  });
+
+  test("TC-M2 速度 12 km/h 轉為配速 05:00 /km", () => {
+    // Given: speed = 12 km/h
+    // When: 60 / 12 = 5.0 min/km → 5分0秒
+    const result = toMinPerKm(12);
+    // Then:
+    expect(result).toBe("05:00 /km");
+  });
+
+  test("TC-M3 非整除速度產生正確秒數（8 km/h → 07:30 /km）", () => {
+    // Given: speed = 8 km/h
+    // When: 60 / 8 = 7.5 min/km → 7分30秒
+    const result = toMinPerKm(8);
+    // Then:
+    expect(result).toBe("07:30 /km");
+  });
+
+  test("TC-M4 速度為 0 時回傳 null", () => {
+    // Given: speed = 0（無效輸入）
+    // When:
+    const result = toMinPerKm(0);
+    // Then: 無法計算，回傳 null
+    expect(result).toBeNull();
+  });
+
+  test("TC-M5 速度為 null 時回傳 null", () => {
+    // Given: speed = null
+    // When:
+    const result = toMinPerKm(null);
+    // Then: 無法計算，回傳 null
+    expect(result).toBeNull();
+  });
+
+  test("TC-M6 速度為字串數字時仍正確計算（'10' → 06:00 /km）", () => {
+    // Given: speed = "10"（字串形式，來自表單輸入）
+    // When: parseFloat("10") = 10，60 / 10 = 6.0
+    const result = toMinPerKm("10");
+    // Then:
+    expect(result).toBe("06:00 /km");
+  });
+});
+
+// ─── 十四、paceFromTimeDist ───────────────────────────────────────────────
 describe("paceFromTimeDist()", () => {
   test("TC-PC1 標準配速計算：20分0秒跑3.39km", () => {
     // Given: 20分鐘整，3.39km

@@ -256,6 +256,14 @@ export function formatRestTime(seconds) {
   return `${m}:${s.toString().padStart(2, '0')}`;
 }
 
+export function toMinPerKm(kmh) {
+  if (!kmh || isNaN(kmh)) return null;
+  const total = 60 / parseFloat(kmh);
+  const min = Math.floor(total);
+  const sec = Math.round((total - min) * 60);
+  return `${String(min).padStart(2, "0")}:${String(sec).padStart(2, "0")} /km`;
+}
+
 export function paceFromTimeDist(durationMin, durationSec, distanceKm) {
   const totalMin = parseFloat(durationMin || 0) + parseFloat(durationSec || 0) / 60;
   if (!totalMin || !distanceKm || isNaN(distanceKm) || parseFloat(distanceKm) <= 0) return null;

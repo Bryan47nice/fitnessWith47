@@ -2,7 +2,7 @@ import { useState, useEffect } from "react";
 import { LineChart, Line, XAxis, YAxis, Tooltip, ResponsiveContainer } from "recharts";
 import { getApp } from "firebase/app";
 import { getFunctions, httpsCallable } from "firebase/functions";
-import { getWeekStart, canSaveWorkout, getLastSessionSets, paceFromTimeDist } from "../../utils/fitforge.utils.js";
+import { getWeekStart, canSaveWorkout, getLastSessionSets, paceFromTimeDist, toMinPerKm } from "../../utils/fitforge.utils.js";
 import { exerciseCategories, INCLINE_EXERCISES, RUNNING_EXERCISES } from "../../constants/fitforge.constants.js";
 import styles from "../../styles/fitforge.styles.js";
 
@@ -27,13 +27,6 @@ function isRunning(name) {
   return RUNNING_EXERCISES.includes(name);
 }
 
-function toMinPerKm(kmh) {
-  if (!kmh || isNaN(kmh)) return null;
-  const total = 60 / parseFloat(kmh);
-  const min = Math.floor(total);
-  const sec = Math.round((total - min) * 60);
-  return `${String(min).padStart(2, "0")}:${String(sec).padStart(2, "0")} /km`;
-}
 
 export default function WorkoutTab({
   // Data

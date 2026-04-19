@@ -1,7 +1,7 @@
 import { useState } from "react";
 import { createPortal } from "react-dom";
 import { ResponsiveContainer, LineChart, Line, XAxis, YAxis, Tooltip } from "recharts";
-import { getWeekStart } from "../../utils/fitforge.utils.js";
+import { getWeekStart, paceFromTimeDist, toMinPerKm } from "../../utils/fitforge.utils.js";
 import { exerciseCategories } from "../../constants/fitforge.constants.js";
 import styles from "../../styles/fitforge.styles.js";
 
@@ -764,11 +764,27 @@ export default function DashboardTab({ workouts, bodyData, prMap, volumePeriod, 
               <span style={{ fontSize: "12px", color: "#666" }}>{w.date}</span>
             </div>
             <div style={{ marginTop: "6px", display: "flex", gap: "6px", flexWrap: "wrap" }}>
-              {w.sets?.map((s, i) => (
-                <span key={i} style={styles.tag}>
-                  {s.reps ? `${s.reps}下` : ""}{s.weight ? ` × ${s.weight}kg` : ""}
-                </span>
-              ))}
+              {w.sets?.map((s, i) => {
+                if (s.duration !== undefined) {
+                  const durationLabel = s.duration
+                    ? `${s.duration}分${String(parseInt(s.duration_sec || 0)).padStart(2, "0")}秒`
+                    : null;
+                  const paceLabel = paceFromTimeDist(s.duration, s.duration_sec, s.distance)
+                    || (s.speed ? toMinPerKm(s.speed) : null);
+                  const parts = [
+                    durationLabel,
+                    s.distance && `${s.distance} km`,
+                    paceLabel,
+                    s.incline && `坡度${s.incline}%`,
+                  ].filter(Boolean);
+                  return <span key={i} style={styles.tag}>{parts.join(" · ") || "—"}</span>;
+                }
+                return (
+                  <span key={i} style={styles.tag}>
+                    {s.reps ? `${s.reps}下` : ""}{s.weight ? ` × ${s.weight}kg` : ""}
+                  </span>
+                );
+              })}
             </div>
           </div>
         ))}
