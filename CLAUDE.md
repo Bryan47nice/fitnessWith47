@@ -1,28 +1,8 @@
 # FitForge — 專案規範
 
-## Versioning Rules（版號迭代規則）
+## Versioning Rules
 
-採用 Semantic Versioning（X.Y.Z）：
-
-- **X（Major）**：核心邏輯變更（例：從純 Local 轉為 Firebase 雲端、UI 框架大翻新）
-- **Y（Minor）**：新增模組（例：新增 AI 覆盤分析、新增歷史記錄視圖、新增音樂播放器）
-- **Z（Patch）**：細微調整（例：修復 CSS 跑版、優化現有功能行為、文字修正、bug fix）
-
-## Changelog 同步規則（強制）
-
-**每次修改 `APP_VERSION` 時，必須同步更新 App 內的 Changelog modal。**
-
-- Changelog modal 位於 `src/components/FitForge.jsx`，搜尋 `showChangelog` 可定位
-- 新版本條目加在最頂端，標上「最新」badge，舊的「最新」badge 一併移除
-- 格式參考既有條目（版號、日期、✨ 或 • 條列說明）
-- 版號、日期、說明文字需與 `docs/product.md` 第八節版本歷史一致
-
-## APP_VERSION 更新四步驟（強制）
-
-1. 修改 `FitForge.jsx` 頂部的 `APP_VERSION` 常數
-2. 更新同檔案內的 Changelog modal（搜尋 `showChangelog` 定位）
-3. 在 `docs/product.md` 第八節版本歷史最頂端新增一行（含版號、日期、說明）
-4. 更新 `MEMORY.md` 的版本記錄區塊（本機 Claude context 用）
+> 詳細版號規則、Changelog 同步、APP_VERSION 四步驟見 `.claude/rules/versioning.md`（碰到 `FitForge.jsx` / `docs/product.md` 時自動載入）。
 
 ---
 
@@ -163,19 +143,7 @@ firebase deploy --only functions     # 部署 Cloud Functions
 
 ## Firestore 資料結構
 
-```
-users/{userId}/
-  ├── workouts/{id}           → { date, exercise, sets, note, createdAt }
-  ├── bodyData/{date}         → { weight, height, waist, hip, bodyfat, muscle_mass, visceral_fat, createdAt }
-  │                              ↑ date 字串為 doc ID（v1.2.2 起，同日覆蓋機制）
-  │                              ↑ v1.8.1：移除 chest/arm/thigh，新增 bodyfat/muscle_mass/visceral_fat
-  ├── customExercises/{id}    → { name, createdAt }
-  ├── meta/streak             → { count, lastDate }
-  ├── coachDays/{YYYY-MM-DD}  → { date, createdAt }
-  └── meta/coachQuota         → { total: 24 }
-
-userPushTokens/{userId}       → { fcmToken, lastActiveAt, lastNotifiedAt }
-```
+> 完整 schema 與安全規範見 `.claude/rules/firestore.md`（碰到 `firestore.rules` / `src/firebase.js` / `functions/index.js` 時自動載入）。
 
 ---
 
@@ -211,17 +179,8 @@ userPushTokens/{userId}       → { fcmToken, lastActiveAt, lastNotifiedAt }
 
 ## 測試規範
 
-- 執行：`npm test`（Vitest，不需 build）
-- 純函式與布林判斷邏輯必須放在 `src/utils/fitforge.utils.js`，並補對應測試
-- 新增測試案例時，同步更新 `docs/testing.md` 的 GWT 表格
-- UI 互動與 Firestore 操作目前不在測試範圍
-
----
+> 完整測試規範、Test ID 格式、GWT 寫法見 `.claude/rules/testing.md`（碰到 `src/utils/**` 時自動載入）。
 
 ## 程式碼風格規範
 
-- **樣式**：全部使用 inline styles，禁止新增 CSS 檔案或 class-based 樣式
-- **設計語言**：Glassmorphism（`backdrop-filter: blur(10px)`、rgba 色彩）
-- **彈窗**：用 `createPortal` 渲染，避免 z-index 問題
-- **破壞性操作**：必須走 `confirmDialog` 確認流程（刪除 workout、刪除 body record 等）
-- **PR 偵測動畫**：新增訓練時偵測最大重量是否破紀錄，觸發 `prAnim` 金色動畫
+> 樣式、彈窗、破壞性操作、PR 動畫規範見 `.claude/rules/style.md`（碰到 `src/components/**` 時自動載入）。

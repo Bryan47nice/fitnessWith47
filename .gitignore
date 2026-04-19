@@ -18,6 +18,8 @@ build
 .claude/
 !.claude/commands/
 !.claude/agents/
+!.claude/rules/
+!.claude/settings.json
 
 # Editor directories and files
 .vscode/*
