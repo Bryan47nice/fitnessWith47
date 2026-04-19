@@ -69,18 +69,39 @@ firebase hosting:channel:list 2>/dev/null
 等用戶逐一說「merge X」或「跳過 X」。
 
 **收到 merge 指令時：**
+
+1. 先執行 `/pre-merge-check {branch-name}`
+   - 若結論為 ⚠️：列出疑問，詢問用戶「確認繼續 merge 嗎？」，等待確認後才繼續
+   - 若結論為 ✅：直接進行下一步
+
+2. 執行 merge：
 ```bash
 git checkout master
 git merge {branch-name} --no-ff -m "merge: {branch-name}"
-git push origin master
 ```
-merge 完後回報：
-```
-✅ Merged {branch-name}
 
-還有其他要 merge 的嗎？
-全部選好後告訴我，我們一起做 version bump + deploy。
+   **若發生 merge 衝突：**
+   ```bash
+   git merge --abort
+   ```
+   接著在 `docs/overnight-backlog.md` 的 Pending 區新增一筆：
+   ```
+   - ⏳ {功能名稱} — 與 {衝突的已合入 branch} 衝突，需在新 master 上重做 | branch: {branch-name}
+   ```
+   回報用戶：「⚠️ merge 衝突已中止。`{branch-name}` 已記回 backlog，overnight agent 下次會在新 master 上重做。」
+
+   **若 merge 成功：**
+   ```bash
+   git push origin master
+   ```
+   回報：「✅ Merged {branch-name}」
+
+3. 所有 branch 都處理完後（merge 或跳過），執行整合測試：
+```bash
+npm test
 ```
+   - ✅ 全數通過：回報「✅ 整合測試通過，可進行 version bump」
+   - ⚠️ 有失敗：回報失敗的測試案例，等待用戶指示
 
 **收到跳過指令時：**
 只回報「⏭ 跳過 {branch-name}，branch 保留在本地（不刪除）」，不做任何 git 操作。
