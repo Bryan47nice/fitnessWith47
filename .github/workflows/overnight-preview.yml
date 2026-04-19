@@ -40,6 +40,7 @@ jobs:
           echo "url=https://fitnesswith47--${CHANNEL}.web.app" >> $GITHUB_OUTPUT
 
       - name: Deploy to Firebase preview channel
+        id: deploy
         uses: FirebaseExtended/action-hosting-deploy@v0
         with:
           repoToken: ${{ secrets.GITHUB_TOKEN }}
@@ -52,11 +53,11 @@ jobs:
         env:
           FIREBASE_SERVICE_ACCOUNT_JSON: ${{ secrets.FIREBASE_SERVICE_ACCOUNT }}
         run: |
-          DOMAIN=$(echo "${{ steps.channel.outputs.url }}" | sed 's|https://||')
+          DOMAIN=$(echo "${{ steps.deploy.outputs.details_url }}" | sed 's|https://||')
           node scripts/add-auth-domain.cjs "$DOMAIN"
 
       - name: Print preview URL
         run: |
           echo "✅ Preview deployed!"
-          echo "🔗 URL: ${{ steps.channel.outputs.url }}"
+          echo "🔗 URL: ${{ steps.deploy.outputs.details_url }}"
           echo "⏱ Valid for 7 days"

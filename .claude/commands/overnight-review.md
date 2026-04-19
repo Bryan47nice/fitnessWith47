@@ -10,6 +10,8 @@
 # 找最新一份報告（依修改時間排序，取第一個）
 ls -t docs/overnight-report-????????-0[12].md 2>/dev/null | head -1 | xargs cat
 cat docs/overnight-backlog.md
+# 取得所有 preview channel 的真實 URL（含 hash）
+firebase hosting:channel:list 2>/dev/null
 ```
 
 若找到的是 02 班報告，順帶告知用戶：「同日還有 01 班報告，可執行 `cat docs/overnight-report-YYYYMMDD-01.md` 查看」（將 YYYYMMDD 替換為實際日期）。
@@ -34,8 +36,9 @@ cat docs/overnight-backlog.md
 對每個完成的 branch，輸出一個區塊：
 
 ### ✅ Branch {N}：{功能名稱}
-**🔗 測試連結**：{preview URL}
+**🔗 測試連結**：{從 firebase hosting:channel:list 取得的真實 URL，格式為 https://fitnesswith47--ov-{feature}-{hash}.web.app}
 > 在連結頁面底部找「🧪 用測試帳號登入」按鈕直接進入，不需要 Google 帳號
+> ⚠️ 若開啟後為黑畫面：請用無痕視窗（Ctrl+Shift+N）開啟；若無痕也黑畫面請等 2 分鐘讓 GitHub Actions 部署完成後再試
 
 **驗收步驟：**
 （從 report 取得，或根據功能自動推導）
@@ -86,9 +89,9 @@ merge 完後回報：
 
 ## 注意事項
 
-- Preview URL 格式：`https://fitnesswith47--ov-{feature-name}-{hash}.web.app`
+- Preview URL 由 `firebase hosting:channel:list` 取得，格式為 `https://fitnessWith47--ov-{feature}-{hash}.web.app`
 - URL 在 GitHub Actions 完成後約 2 分鐘生效（push 後觸發）
 - 每個 preview channel 有效期 7 天
-- 如果連結打開是全黑頁面，可能是 Firebase Authentication Authorized Domains 沒加該網域
+- **黑畫面處理**：先用無痕視窗（Ctrl+Shift+N）開啟；若無痕正常但一般瀏覽器黑畫面 → DevTools → Application → Service Workers → Unregister → 重整
 - 測試帳號登入按鈕只出現在包含 `--ov-` 的 preview URL，生產環境不會顯示
 - merge 完所有想要的 branch 後，才做 version bump（product.md 在那時一次更新）
