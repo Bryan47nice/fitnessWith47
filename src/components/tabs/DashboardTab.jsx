@@ -46,7 +46,7 @@ function daysUntilClass(startDateTime) {
   return `${diff} 天後`;
 }
 
-export default function DashboardTab({ workouts, bodyData, prMap, volumePeriod, setVolumePeriod, streak, nextClass, calendarConnected, calendarKeyword, onConnectCalendar, onSyncCalendar, onDisconnectCalendar, onSaveCalendarKeyword, coachDays = [], coachQuota = { total: 24 } }) {
+export default function DashboardTab({ workouts, bodyData, prMap, volumePeriod, setVolumePeriod, streak, nextClass, calendarConnected, calendarKeyword, onConnectCalendar, onSyncCalendar, onDisconnectCalendar, onSaveCalendarKeyword, coachDays = [], coachQuota = { total: 24 }, customExercises = [] }) {
   const [prFullView, setPrFullView] = useState(false);
   const [selectedPrExercise, setSelectedPrExercise] = useState(null);
   const [prFilterTag, setPrFilterTag] = useState("全部");
@@ -463,7 +463,9 @@ export default function DashboardTab({ workouts, bodyData, prMap, volumePeriod, 
             ? allPRsSortedByDate
             : allPRsSortedByDate.filter(([exercise]) => {
                 const cat = exerciseCategories.find(c => c.exercises.includes(exercise));
-                return cat ? cat.label === prFilterTag : false;
+                if (cat) return cat.label === prFilterTag;
+                const custom = customExercises.find(e => e.name === exercise);
+                return custom ? custom.category === prFilterTag : false;
               });
           return (
         <div style={{
