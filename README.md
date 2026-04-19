@@ -2,7 +2,7 @@
 
 > 個人健身記錄、體態追蹤、目標管理，All-in-One 漸進式網頁應用程式。
 
-[![Version](https://img.shields.io/badge/version-v1.9.4-ffd700?style=flat-square)](https://fitnesswith47.web.app)
+[![Version](https://img.shields.io/badge/version-v1.15.0-ffd700?style=flat-square)](https://fitnesswith47.web.app)
 [![Firebase](https://img.shields.io/badge/Firebase-Hosting%20%7C%20Firestore%20%7C%20FCM-orange?style=flat-square&logo=firebase)](https://firebase.google.com)
 [![React](https://img.shields.io/badge/React-19-61dafb?style=flat-square&logo=react)](https://react.dev)
 [![PWA](https://img.shields.io/badge/PWA-Installable-5a0fc8?style=flat-square)](https://web.dev/progressive-web-apps/)
@@ -17,9 +17,11 @@
 - 記錄每組訓練（動作、組數、重量、次數、備註）
 - 依部位分類：胸 / 背 / 肩 / 腿 / 手臂 / 核心 / 有氧
 - 自訂動作並指定分類
+- 新增訓練時自動帶入上次的組數與重量
 - 動作歷史趨勢圖（最大重量 / 訓練量折線圖）
-- 破 PR 偵測，觸發金色動畫慶祝
+- 破 PR 偵測，觸發金色動畫慶祝；Dashboard PR 卡片可展開重量趨勢圖
 - 日誌折疊收合，快速瀏覽長記錄
+- 跑步機記錄：分秒輸入自動計算配速（05:43 /km 格式）
 
 ### 🤖 AI 教練回饋
 - 依訓練動作與歷史數據產生個人化評語
@@ -48,6 +50,16 @@
 ### 🔥 連續訓練天數
 - 自動計算訓練連續天數，Header badge 即時顯示
 - 支援手動重置（帳號設定）
+
+### 📋 今日訓練建議
+- 依部位分析久未訓練的動作，提供均衡訓練建議
+- 可依部位篩選，一鍵加入今日計畫
+- FAB 速撥選單快速進入
+
+### 🎓 教練課記錄
+- 標記每次訓練為教練課，Dashboard 追蹤扣打用量
+- 動作庫瀏覽所有教練課動作與學習筆記
+- 課堂記錄依日期展開每堂內容
 
 ### 📱 PWA + 推播通知
 - 可安裝至手機主畫面，全螢幕運行
@@ -158,6 +170,13 @@ userPushTokens/{userId}     → { fcmToken, lastActiveAt }
 
 | 版號 | 日期 | 主要內容 |
 |------|------|---------|
+| v1.15.0 | 2026-04-19 | 今日訓練建議部位篩選；個人最佳 PR 部位分類篩選 |
+| v1.14.1 | 2026-04-18 | 跑步機記錄重設計：分秒輸入 + 自動計算配速 |
+| v1.14.0 | 2026-04-18 | 新增訓練自動帶入上次組數與重量；身材歷史超過 5 筆自動折疊 |
+| v1.13.0 | 2026-04-10 | FAB 速撥選單 + 今日訓練建議（久未訓練動作一鍵加入計畫） |
+| v1.12.0 | 2026-04-08 | 教練課學習記錄：動作庫瀏覽、課堂記錄依日期展開 |
+| v1.11.0 | 2026-04-08 | Dashboard PR 卡片重設計：最新 3 筆破紀錄 + 全螢幕 PR 頁 + 趨勢圖 |
+| v1.10.0 | 2026-04-07 | 教練課標記功能：訓練日誌標記教練課、Dashboard 扣打進度條 |
 | v1.9.4 | 2026-04-04 | 帳號設定新增連續天數重置按鈕 |
 | v1.9.0 | 2026-04-02 | 組間計時器：儲存後自動倒數，可調整休息時間 |
 | v1.8.1 | 2026-03-29 | 新增體脂率、骨骼肌肉量、內臟脂肪等級指標 |
