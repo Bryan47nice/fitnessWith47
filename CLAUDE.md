@@ -1,5 +1,11 @@
 # FitForge — 專案規範
 
+## Idea / Bug 捕捉
+
+對話中若偵測到功能想法、bug 描述、或改善建議（「我想要」「可以加」「這個壞了」「排夜行做」等），主動詢問「要加進 backlog 嗎？」，用戶確認後直接執行 `/capture` 流程。
+
+---
+
 ## Versioning Rules
 
 > 詳細版號規則、Changelog 同步、APP_VERSION 四步驟見 `.claude/rules/versioning.md`（碰到 `FitForge.jsx` / `docs/product.md` 時自動載入）。
