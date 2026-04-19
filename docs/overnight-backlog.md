@@ -26,11 +26,11 @@
 
 ## ✅ Completed
 
-- ✅ **plan-sheet-category-filter** — 已 commit 到本地 `overnight/2026-04-18/plan-sheet-category-filter`（⚠️ push 失敗，需手動推送）
-  今日訓練建議加入部位篩選 tabs（全部/胸/背/肩/腿/手臂/核心/有氧），詳見 2026-04-18 02班報告
+- ✅ **plan-sheet-category-filter** — merged into master → v1.15.0（2026-04-19）
+  今日訓練建議加入部位篩選 tabs（全部/胸/背/肩/腿/手臂/核心/有氧）
 
-- ✅ **pr-category-filter** — 已 commit 到本地 `overnight/2026-04-18/pr-category-filter`（⚠️ push 失敗，需手動推送）
-  個人最佳 PR 加入部位分類篩選 tabs，詳見 2026-04-18 02班報告
+- ✅ **pr-category-filter** — merged into master → v1.15.0（2026-04-19）
+  個人最佳 PR 加入部位分類篩選 tabs
 
 - ✅ **exercise-prefill-last-session** — merged into master → v1.14.0（2026-04-18）
   選擇動作時自動帶入上次訓練的組數（重量/次數），新增 `getLastSessionSets` 純函式
