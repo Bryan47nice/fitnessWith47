@@ -43,6 +43,13 @@ jobs:
           channelId: ${{ steps.channel.outputs.name }}
           expires: 7d
 
+      - name: Add preview domain to Firebase Auth
+        env:
+          FIREBASE_SERVICE_ACCOUNT_JSON: ${{ secrets.FIREBASE_SERVICE_ACCOUNT }}
+        run: |
+          DOMAIN=$(echo "${{ steps.channel.outputs.url }}" | sed 's|https://||')
+          node scripts/add-auth-domain.cjs "$DOMAIN"
+
       - name: Print preview URL
         run: |
           echo "✅ Preview deployed!"

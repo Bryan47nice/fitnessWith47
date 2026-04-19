@@ -1,13 +1,12 @@
 #!/usr/bin/env node
 // add-auth-domain.cjs — 自動將 Firebase Hosting Preview 網域加入 Firebase Auth 授權清單
 // 用法：node scripts/add-auth-domain.cjs <domain> [<domain2> ...]
-// 環境變數：FIREBASE_TOKEN（firebase login:ci 產生的 refresh token）
+// 環境變數：FIREBASE_SERVICE_ACCOUNT_JSON（service account JSON 字串）
 
 const https = require("https");
+const crypto = require("crypto");
 
 const PROJECT_ID = "fitnesswith47";
-const CLIENT_ID = "563584335869-fgrhgmd47bqnekij5i8b5pr03ho849e6.apps.googleusercontent.com";
-const CLIENT_SECRET = "j9iVZfS8kkCEFUPaAeJV0sAi";
 
 function request(options, body = null) {
   return new Promise((resolve, reject) => {
@@ -25,12 +24,30 @@ function request(options, body = null) {
   });
 }
 
-async function getAccessToken(refreshToken) {
+function base64url(buf) {
+  return Buffer.from(buf).toString("base64")
+    .replace(/\+/g, "-").replace(/\//g, "_").replace(/=/g, "");
+}
+
+async function getAccessTokenFromServiceAccount(sa) {
+  const now = Math.floor(Date.now() / 1000);
+  const header = base64url(JSON.stringify({ alg: "RS256", typ: "JWT" }));
+  const payload = base64url(JSON.stringify({
+    iss: sa.client_email,
+    scope: "https://www.googleapis.com/auth/cloud-platform",
+    aud: "https://oauth2.googleapis.com/token",
+    iat: now,
+    exp: now + 3600,
+  }));
+
+  const sign = crypto.createSign("RSA-SHA256");
+  sign.update(`${header}.${payload}`);
+  const signature = base64url(sign.sign(sa.private_key));
+  const jwt = `${header}.${payload}.${signature}`;
+
   const body = new URLSearchParams({
-    client_id: CLIENT_ID,
-    client_secret: CLIENT_SECRET,
-    refresh_token: refreshToken,
-    grant_type: "refresh_token",
+    grant_type: "urn:ietf:params:oauth:grant-type:jwt-bearer",
+    assertion: jwt,
   }).toString();
 
   const res = await request({
@@ -77,13 +94,14 @@ async function main() {
     process.exit(1);
   }
 
-  const refreshToken = process.env.FIREBASE_TOKEN;
-  if (!refreshToken) {
-    console.error("❌ 環境變數 FIREBASE_TOKEN 未設定");
+  const saJson = process.env.FIREBASE_SERVICE_ACCOUNT_JSON;
+  if (!saJson) {
+    console.error("❌ 環境變數 FIREBASE_SERVICE_ACCOUNT_JSON 未設定");
     process.exit(1);
   }
 
-  const accessToken = await getAccessToken(refreshToken);
+  const sa = JSON.parse(saJson);
+  const accessToken = await getAccessTokenFromServiceAccount(sa);
   const current = await getAuthorizedDomains(accessToken);
 
   const toAdd = newDomains.filter(d => !current.includes(d));
