@@ -73,77 +73,18 @@
 
 ### Review Agent 啟動時機（強制）
 
-**每次 Dev 完成後（Full Mode 步驟 2、Quick Mode 步驟 1），主對話必須以 `Agent tool, subagent_type: general-purpose` 啟動 Review Agent。**
+**每次 Dev 完成後（Full Mode 步驟 2、Quick Mode 步驟 1），主對話必須啟動 Review Agent（`.claude/agents/review.md`）。**
 
-Review Agent 固定任務（依序執行）：
-1. 執行 `git diff HEAD`，取得本次所有變更
-2. 逐一檢查以下規範：
-   - **LocalStorage**：新增 localStorage key 是否已登記至 `CLAUDE.md` 的 LocalStorage Keys 登記表
-   - **樣式規範**：是否有新增 CSS 檔案或 class-based 樣式（違反 inline styles 規範）
-   - **破壞性操作**：刪除資料的操作是否有走 `confirmDialog` 流程
-   - **彈窗渲染**：新增彈窗是否使用 `createPortal`
-   - **純函式**：新增的純函式是否已放入 `fitforge.utils.js`（而非寫在元件內）
-   - **安全性**：是否有未驗證的用戶輸入直接寫入 Firestore
-3. 回報：「✅ Review 通過，無規範違反」或列出問題清單（需 Dev 修正後重新 Review）
-
-### Review Agent Prompt 範本
-
-啟動 Review Agent 時使用以下 prompt：
-
-```
-你是 FitForge 專案的 Review Agent。請依序完成以下審查：
-
-1. 執行 `git diff HEAD`，取得本次所有變更內容。
-2. 逐一檢查以下規範是否有違反：
-   - LocalStorage：新增的 localStorage key 是否已登記至 CLAUDE.md 的「LocalStorage Keys 登記表」
-   - 樣式規範：是否有新增 CSS 檔案或 className（規範要求全部 inline styles）
-   - 破壞性操作：刪除資料的操作是否有走 confirmDialog 流程
-   - 彈窗渲染：新增彈窗是否使用 createPortal
-   - 純函式位置：新增的純函式是否已放入 src/utils/fitforge.utils.js
-   - 安全性：是否有未驗證的用戶輸入直接寫入 Firestore
-3. 輸出結果：「✅ Review 通過，無規範違反」或條列問題清單。
-```
-
+> Review Agent 定義與完整 prompt 見 `.claude/agents/review.md`。
 > **不得**在 Review Agent 回報通過前啟動 QA Agent。
 
 ---
 
 ### QA Agent 啟動時機（強制）
 
-**每次 Review Agent 通過後（Full Mode 步驟 3 → 4、Quick Mode 步驟 2 → 3），主對話必須以 `Agent tool, subagent_type: general-purpose` 啟動 QA Agent。**
+**每次 Review Agent 通過後（Full Mode 步驟 3 → 4、Quick Mode 步驟 2 → 3），主對話必須啟動 QA Agent（`.claude/agents/qa.md`）。**
 
-QA Agent 固定任務（依序執行）：
-1. 執行 `npm test`，確認現有測試全數通過
-2. 讀取 `src/utils/fitforge.utils.js`（全部匯出函式）與 `src/utils/fitforge.utils.test.js`（現有測試）
-3. 找出**沒有對應測試的純函式**
-4. 若有未覆蓋函式：在 `fitforge.utils.test.js` 補寫 GWT 測試，同步更新 `docs/testing.md`
-5. 補完後再跑一次 `npm test` 確認通過
-6. 回報：「✅ QA 完成：共 X 個測試，新增 Y 個案例」或「⚠️ 測試失敗：[錯誤描述]」
-
-QA Agent 測試規範：
-- Test ID 格式：`TC-{字母}{數字}`（W=getWeekStart, G=getGoalProgress, T=getGoalTitle, P=detectNewPR, B=calcBMI, V=canSave*）
-- 每個 test 必須有 `// Given:` / `// When:` / `// Then:` 三段註解
-- 只測純函式；UI 互動與 Firestore 不在範圍
-- `docs/testing.md` 格式：`**TC-XN**` 標題 + 中文 Given/When/Then 條列
-
-### QA Agent Prompt 範本
-
-啟動 QA Agent 時使用以下 prompt（貼入 Agent tool 的 prompt 欄位）：
-
-```
-你是 FitForge 專案的 QA Agent。請依序完成以下任務：
-
-1. 執行 `npm test`，確認所有測試通過。
-2. 讀取 `src/utils/fitforge.utils.js`（全部匯出函式）與 `src/utils/fitforge.utils.test.js`（現有測試）。
-3. 找出有哪些匯出的純函式尚未有對應的測試 describe block。
-4. 若有未覆蓋的函式，依照現有 GWT 格式補寫測試：
-   - Test ID 接續現有最大編號
-   - 每個 test 含 // Given: / // When: / // Then: 註解
-   - 同步更新 docs/testing.md 的對應 GWT 表格
-5. 補完後再執行一次 `npm test`，確認全數通過。
-6. 最後輸出：「✅ QA 完成：共 X 個測試，新增 Y 個案例」或「⚠️ 測試失敗：[錯誤描述]」
-```
-
+> QA Agent 定義與完整 prompt 見 `.claude/agents/qa.md`。
 > **不得**在 QA Agent 回報通過前進行 version bump。
 
 ---
@@ -166,42 +107,9 @@ QA Agent 測試規範：
 
 ### Deploy Agent 啟動時機（強制）
 
-**步驟 7 文案選定後，主對話必須以 `Agent tool, subagent_type: general-purpose` 啟動 Deploy Agent。**
+**步驟 7 文案選定後，主對話必須啟動 Deploy Agent（`.claude/agents/deploy.md`），並在 prompt 中帶入 `{RC_TITLE}` / `{RC_BODY}` / `{RC_BUTTON}` / `{FCM_TITLE}` / `{FCM_BODY}` / `{VERSION}`。**
 
-### Deploy Agent 執行步驟（依序，Build / Deploy 失敗即停止）
-
-| 步驟 | 指令 | 失敗處理 |
-|------|------|---------|
-| 1. Build | `npm run build` | 立即停止，不繼續部署 |
-| 2. Deploy Hosting | `firebase deploy --only hosting` | 立即停止，不執行 RC / FCM |
-| 3. Remote Config 更新 | `node scripts/rc-update.cjs "{RC_TITLE}" "{RC_BODY}" "{RC_BUTTON}"` | 警告但繼續 FCM |
-| 4. FCM 推播 | `node scripts/push-notify.cjs "<title>" "<body>"` | 警告回報，不影響已部署版本 |
-
-### 回報格式
-
-```
-✅ Build 完成
-✅ Hosting 部署完成（vX.Y.Z）
-✅ Remote Config 更新完成
-✅ FCM 推播完成（已送出 X 則）
----
-🚀 vX.Y.Z 部署完成！
-```
-
-### Deploy Agent Prompt 範本
-
-啟動 Deploy Agent 時使用以下 prompt（貼入 Agent tool 的 prompt 欄位，替換大括號內容）：
-
-```
-你是 FitForge 專案的 Deploy Agent。請依序執行以下部署步驟，Build 或 Deploy 失敗時立即停止並回報錯誤，不繼續執行後續步驟。所有指令都在 E:\claudecode\fitnessWith47 目錄下執行。不需要讀取任何程式碼或設定檔，直接依序執行以下指令即可。
-
-步驟：
-1. `npm run build` — 若失敗，立即停止。
-2. `firebase deploy --only hosting` — 若失敗，立即停止。
-3. `node scripts/rc-update.cjs "{RC_TITLE}" "{RC_BODY}" "{RC_BUTTON}"` — 若失敗，輸出警告並繼續。
-4. `node scripts/push-notify.cjs "{FCM_TITLE}" "{FCM_BODY}"` — 若失敗，輸出警告。
-5. 輸出每步驟結果（✅/⚠️），最後一行輸出「🚀 {VERSION} 部署完成！」
-```
+> Deploy Agent 定義、執行步驟與回報格式見 `.claude/agents/deploy.md`。
 
 ---
 
