@@ -124,7 +124,7 @@ function generateWorkouts() {
 
   return dates.map((date, i) => {
     const ex = exercises[i % exercises.length];
-    const setsVal = ex.sets.map(([kg, reps]) => map({ kg: num(kg), reps: num(reps) }));
+    const setsVal = ex.sets.map(([kg, reps]) => map({ weight: num(kg), reps: num(reps) }));
     return {
       fields: {
         date: str(date),
