@@ -178,6 +178,7 @@ export default function FitForge({ user }) {
   const [showFabMenu, setShowFabMenu] = useState(false);
   const [showPlanSheet, setShowPlanSheet] = useState(false);
   const [planChecked, setPlanChecked] = useState({}); // { [exerciseName]: boolean }
+  const [planFilterTag, setPlanFilterTag] = useState("全部");
 
   const today = toLocalDateStr();
   const todayWorked = workouts.some(w => w.date === today);
@@ -1627,12 +1628,37 @@ export default function FitForge({ user }) {
           <div style={{ position: "fixed", inset: 0, zIndex: 9998, background: "rgba(10,10,18,0.98)", backdropFilter: "blur(12px)", display: "flex", flexDirection: "column" }}>
             {/* Header */}
             <div style={{ display: "flex", alignItems: "center", gap: "12px", padding: "16px 20px 12px", borderBottom: "1px solid rgba(255,255,255,0.07)", flexShrink: 0 }}>
-              <button onClick={() => setShowPlanSheet(false)} style={{ background: "none", border: "none", color: "#888", fontSize: "22px", cursor: "pointer", padding: "4px 8px 4px 0", fontFamily: "inherit" }}>←</button>
+              <button onClick={() => { setShowPlanSheet(false); setPlanFilterTag("全部"); }} style={{ background: "none", border: "none", color: "#888", fontSize: "22px", cursor: "pointer", padding: "4px 8px 4px 0", fontFamily: "inherit" }}>←</button>
               <div style={{ fontSize: "17px", fontWeight: 800, color: "#e8e4dc" }}>今日訓練建議</div>
             </div>
+            {/* 部位篩選 tabs */}
+            {neglected.length > 0 && (
+              <div style={{ display: "flex", gap: "8px", padding: "10px 16px", overflowX: "auto", flexShrink: 0, borderBottom: "1px solid rgba(255,255,255,0.05)" }}>
+                {["全部", ...exerciseCategories.map(c => c.label)].map(tag => (
+                  <button
+                    key={tag}
+                    onClick={() => setPlanFilterTag(tag)}
+                    style={{
+                      flexShrink: 0, padding: "5px 14px", borderRadius: "20px", border: "none",
+                      background: planFilterTag === tag ? "#ff6a00" : "rgba(255,255,255,0.07)",
+                      color: planFilterTag === tag ? "#fff" : "#aaa",
+                      fontSize: "13px", fontWeight: planFilterTag === tag ? 700 : 400,
+                      cursor: "pointer", fontFamily: "inherit",
+                    }}
+                  >{tag}</button>
+                ))}
+              </div>
+            )}
             {/* Content */}
             <div style={{ flex: 1, overflowY: "auto", padding: "16px 20px" }}>
-              {neglected.length === 0 ? (
+              {(() => {
+                const filtered = planFilterTag === "全部"
+                  ? neglected
+                  : neglected.filter(ex => {
+                      const cat = exerciseCategories.find(c => c.exercises.includes(ex.name));
+                      return cat ? cat.label === planFilterTag : false;
+                    });
+                if (neglected.length === 0) return (
                 <div style={{ textAlign: "center", padding: "48px 20px", color: "#888" }}>
                   <div style={{ fontSize: "40px", marginBottom: "16px" }}>✅</div>
                   <div style={{ fontSize: "16px", fontWeight: 700, color: "#e8e4dc", marginBottom: "8px" }}>訓練很均衡！</div>
@@ -1642,10 +1668,16 @@ export default function FitForge({ user }) {
                     style={{ marginTop: "24px", padding: "12px 28px", borderRadius: "12px", border: "none", background: "linear-gradient(135deg,#ff6a00,#ff9500)", color: "#fff", fontSize: "15px", fontWeight: 700, cursor: "pointer", fontFamily: "inherit" }}
                   >直接記錄訓練</button>
                 </div>
-              ) : (
+                );
+                if (filtered.length === 0) return (
+                  <div style={{ textAlign: "center", padding: "48px 20px", color: "#888", fontSize: "14px" }}>
+                    此部位近期都練過了 💪
+                  </div>
+                );
+                return (
                 <>
                   <div style={{ fontSize: "12px", color: "#666", marginBottom: "14px" }}>勾選想練的動作，加入今日計畫</div>
-                  {neglected.map(ex => {
+                  {filtered.map(ex => {
                     const checked = !!planChecked[ex.name];
                     const urgent = ex.daysAgo >= 30;
                     return (
@@ -1661,7 +1693,6 @@ export default function FitForge({ user }) {
                           transition: "background 0.15s, border-color 0.15s",
                         }}
                       >
-                        {/* Checkbox */}
                         <div style={{
                           width: "22px", height: "22px", borderRadius: "6px", flexShrink: 0,
                           background: checked ? "#ff6a00" : "transparent",
@@ -1671,12 +1702,10 @@ export default function FitForge({ user }) {
                         }}>
                           {checked && <span style={{ color: "#fff", fontSize: "13px", fontWeight: 900 }}>✓</span>}
                         </div>
-                        {/* Exercise info */}
                         <div style={{ flex: 1 }}>
                           <div style={{ fontSize: "15px", fontWeight: 700, color: "#e8e4dc" }}>{ex.name}</div>
                           <div style={{ fontSize: "12px", color: "#666", marginTop: "2px" }}>上次：{ex.lastDate}</div>
                         </div>
-                        {/* Days count */}
                         <div style={{ textAlign: "right", flexShrink: 0 }}>
                           <div style={{ fontSize: "20px", fontWeight: 900, color: urgent ? "#ff6a00" : "#ffd700" }}>{ex.daysAgo}</div>
                           <div style={{ fontSize: "11px", color: "#666" }}>天未練</div>
@@ -1685,7 +1714,8 @@ export default function FitForge({ user }) {
                     );
                   })}
                 </>
-              )}
+                );
+              })()}
             </div>
             {/* Footer button */}
             {neglected.length > 0 && (
