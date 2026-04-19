@@ -22,7 +22,9 @@ jobs:
         run: npm ci
 
       - name: Create .env file
-        run: echo "${{ secrets.FIREBASE_ENV }}" > .env
+        env:
+          FIREBASE_ENV: ${{ secrets.FIREBASE_ENV }}
+        run: printf '%s' "$FIREBASE_ENV" > .env
 
       - name: Build
         run: npm run build
