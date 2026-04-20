@@ -137,6 +137,59 @@ function generateWorkouts() {
   });
 }
 
+function generateGoals() {
+  // 最新體重 72.4kg，腰圍 77cm，深蹲 PR 100kg（來自 workouts seed 資料）
+  return [
+    // 體重減重：start 75.2 → target 72.3，current 72.4 → 進度 ~96.6%（接近達標）
+    {
+      docId: "test-goal-001",
+      fields: {
+        type: str("weight"),
+        startValue: num(75.2),
+        targetValue: num(72.3),
+        goalDirection: str("decrease"),
+        deadline: str("2026-05-31"),
+        note: str("春季減重計畫"),
+        celebrated: { booleanValue: false },
+        completedAt: { nullValue: null },
+        createdAt: ts(),
+      }
+    },
+    // 深蹲 PR：start 90 → target 101，current PR 100kg → 進度 ~90.9%（接近達標）
+    {
+      docId: "test-goal-002",
+      fields: {
+        type: str("exercise_pr"),
+        startValue: num(90),
+        targetValue: num(101),
+        goalDirection: str("increase"),
+        targetExercise: str("深蹲"),
+        deadline: str("2026-06-30"),
+        note: str("突破深蹲 100kg"),
+        celebrated: { booleanValue: false },
+        completedAt: { nullValue: null },
+        createdAt: ts(),
+      }
+    },
+    // 訓練頻率：每週 4 天目標（進行中，非接近達標，用於對比）
+    {
+      docId: "test-goal-003",
+      fields: {
+        type: str("frequency"),
+        startValue: num(0),
+        targetValue: num(4),
+        goalDirection: str("increase"),
+        frequencyMode: str("weekly"),
+        deadline: str("2026-12-31"),
+        note: str(""),
+        celebrated: { booleanValue: false },
+        completedAt: { nullValue: null },
+        createdAt: ts(),
+      }
+    },
+  ];
+}
+
 // ── 主流程 ───────────────────────────────────────────────────────────────────
 
 async function main() {
@@ -228,6 +281,16 @@ async function main() {
   await firestorePut(idToken, `${base}/meta/coachQuota`, { total: num(18) });
   console.log("✅");
 
+  // Step 7: goals（含兩個接近達標的目標，用於驗收「快到了 🎯」徽章）
+  console.log("🎯 寫入目標記錄（3 筆）...");
+  const goals = generateGoals();
+  for (const goal of goals) {
+    const res = await firestorePut(idToken, `${base}/goals/${goal.docId}`, goal.fields);
+    if (res.status !== 200) console.warn(`  ⚠️ goals/${goal.docId} 失敗：`, res.body?.error?.message);
+    else process.stdout.write(".");
+  }
+  console.log(" ✅");
+
   // 完成
   console.log(`
 ━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━
@@ -243,6 +306,7 @@ async function main() {
    - streak: 7 天
    - 2 customExercises
    - 3 coachDays
+   - 3 goals（體重減重 ~97%、深蹲 PR ~91%、訓練頻率進行中）
 ━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━
 `);
 }

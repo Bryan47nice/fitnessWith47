@@ -90,12 +90,25 @@ export default function GoalsTab({
         const isExpired = !isComplete && goal.deadline < today;
         const daysLeft = Math.ceil((new Date(goal.deadline) - new Date(today)) / 86400000);
         const isUrgent = !isComplete && !isExpired && daysLeft <= 7;
+        const isNearComplete = !isComplete && !isExpired && progress >= 90;
         const barColor = isComplete ? "#4ade80" : isExpired ? "#555" : isUrgent ? "#f87171" : "#ff6a00";
         return (
           <div key={goal.id} style={{ ...styles.card, marginBottom: "12px" }}>
             <div style={{ display: "flex", justifyContent: "space-between", alignItems: "flex-start", marginBottom: "10px" }}>
-              <div style={{ fontSize: "15px", fontWeight: 700, color: isComplete ? "#4ade80" : "#e8e4dc", flex: 1, paddingRight: "8px" }}>
-                {getGoalTitle(goal)}
+              <div style={{ flex: 1, paddingRight: "8px" }}>
+                <div style={{ fontSize: "15px", fontWeight: 700, color: isComplete ? "#4ade80" : "#e8e4dc" }}>
+                  {getGoalTitle(goal)}
+                </div>
+                {isNearComplete && (
+                  <div style={{
+                    display: "inline-flex", alignItems: "center", gap: "4px",
+                    marginTop: "5px", padding: "2px 8px", borderRadius: "12px",
+                    background: "rgba(255,149,0,0.15)", border: "1px solid rgba(255,149,0,0.3)",
+                    fontSize: "11px", fontWeight: 700, color: "#ff9500", letterSpacing: "0.03em",
+                  }}>
+                    快到了 🎯
+                  </div>
+                )}
               </div>
               <div style={{ display: "flex", gap: "6px", flexShrink: 0 }}>
                 <button
