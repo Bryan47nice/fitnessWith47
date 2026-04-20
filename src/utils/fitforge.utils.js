@@ -272,3 +272,8 @@ export function paceFromTimeDist(durationMin, durationSec, distanceKm) {
   const sec = Math.round((pace - min) * 60);
   return `${String(min).padStart(2, "0")}:${String(sec).padStart(2, "0")} /km`;
 }
+
+export function calcWeekTrendPct(currentWeekSets, lastWeekSets) {
+  if (lastWeekSets <= 0) return null;
+  return Math.round(((currentWeekSets - lastWeekSets) / lastWeekSets) * 100);
+}
