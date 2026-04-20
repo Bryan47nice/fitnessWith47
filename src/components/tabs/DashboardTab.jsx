@@ -1,7 +1,7 @@
 import { useState } from "react";
 import { createPortal } from "react-dom";
 import { ResponsiveContainer, LineChart, Line, XAxis, YAxis, Tooltip } from "recharts";
-import { getWeekStart, paceFromTimeDist, toMinPerKm } from "../../utils/fitforge.utils.js";
+import { getWeekStart, paceFromTimeDist, toMinPerKm, calcWeekTrendPct } from "../../utils/fitforge.utils.js";
 import { exerciseCategories } from "../../constants/fitforge.constants.js";
 import styles from "../../styles/fitforge.styles.js";
 
@@ -166,6 +166,11 @@ export default function DashboardTab({ workouts, bodyData, prMap, volumePeriod, 
     : volumePeriod === "month" ? monthlyPoints
     : weeklyPoints;
 
+  const currentWeekSets = weeklyPoints[7]?.sets || 0;
+  const lastWeekSets = weeklyPoints[6]?.sets || 0;
+  const weekDiff = currentWeekSets - lastWeekSets;
+  const weekTrendPct = calcWeekTrendPct(currentWeekSets, lastWeekSets);
+
   return (
     <div>
       {/* 下次上課卡片 */}
@@ -315,6 +320,53 @@ export default function DashboardTab({ workouts, bodyData, prMap, volumePeriod, 
           <div style={{ ...styles.statNum, color: "#ffd700" }}>{coachRemaining}</div>
           <div style={styles.statLabel}>教練課剩餘</div>
           <div style={{ fontSize: "11px", color: "#555", marginTop: "1px" }}>堂</div>
+        </div>
+      </div>
+
+      {/* 本週 vs 上週訓練量對比 */}
+      <div style={styles.card}>
+        <div style={{ display: "flex", justifyContent: "space-between", alignItems: "center", marginBottom: 8 }}>
+          <div style={styles.sectionTitle}>本週 vs 上週</div>
+          {weekTrendPct !== null ? (
+            <div style={{
+              display: "inline-flex", alignItems: "center", gap: "4px",
+              padding: "3px 10px", borderRadius: "14px",
+              background: weekTrendPct >= 0 ? "rgba(74,222,128,0.15)" : "rgba(255,80,80,0.15)",
+              border: `1px solid ${weekTrendPct >= 0 ? "rgba(74,222,128,0.3)" : "rgba(255,80,80,0.3)"}`,
+              fontSize: "12px", fontWeight: 700,
+              color: weekTrendPct >= 0 ? "#4ade80" : "#ff5050",
+            }}>
+              {weekTrendPct >= 0 ? "↑" : "↓"} {Math.abs(weekTrendPct)}%
+            </div>
+          ) : (
+            <div style={{
+              padding: "3px 10px", borderRadius: "14px",
+              background: "rgba(255,255,255,0.06)", border: "1px solid rgba(255,255,255,0.1)",
+              fontSize: "12px", color: "#666",
+            }}>
+              首週資料
+            </div>
+          )}
+        </div>
+        <div style={{ display: "flex", alignItems: "flex-end", gap: 20 }}>
+          <div>
+            <div style={{ fontSize: "32px", fontWeight: 800, color: "#ff6a00", lineHeight: 1 }}>
+              {currentWeekSets}
+            </div>
+            <div style={{ fontSize: "11px", color: "#888", marginTop: 4 }}>本週組數</div>
+          </div>
+          <div style={{ fontSize: "20px", color: "#333", marginBottom: 4 }}>vs</div>
+          <div>
+            <div style={{ fontSize: "24px", fontWeight: 700, color: "#555", lineHeight: 1 }}>
+              {lastWeekSets}
+            </div>
+            <div style={{ fontSize: "11px", color: "#888", marginTop: 4 }}>上週組數</div>
+          </div>
+          {weekTrendPct !== null && weekDiff !== 0 && (
+            <div style={{ marginBottom: 4, fontSize: "13px", color: "#666" }}>
+              ({weekDiff > 0 ? "+" : ""}{weekDiff} 組)
+            </div>
+          )}
         </div>
       </div>
 

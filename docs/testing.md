@@ -543,6 +543,47 @@
 
 ---
 
+## `calcWeekTrendPct(currentWeekSets, lastWeekSets)` — 週訓練量變化百分比
+
+計算本週相較上週組數的增減百分比（四捨五入整數）。上週為 0 時回傳 null（首週無法比較）。
+
+**TC-WK1 本週多於上週 → 正百分比**
+- Given：上週 10 組，本週 12 組
+- When：呼叫 `calcWeekTrendPct(12, 10)`
+- Then：回傳 `20`（漲幅 20%）
+
+**TC-WK2 本週少於上週 → 負百分比**
+- Given：上週 10 組，本週 7 組
+- When：呼叫 `calcWeekTrendPct(7, 10)`
+- Then：回傳 `-30`（降幅 30%）
+
+**TC-WK3 本週與上週相同 → 0**
+- Given：上週 8 組，本週 8 組
+- When：呼叫 `calcWeekTrendPct(8, 8)`
+- Then：回傳 `0`
+
+**TC-WK4 上週為 0（首週）→ 回傳 null**
+- Given：`lastWeekSets = 0`
+- When：呼叫 `calcWeekTrendPct(5, 0)`
+- Then：回傳 `null`（無法計算百分比）
+
+**TC-WK5 小數四捨五入**
+- Given：上週 3 組，本週 4 組（漲幅 33.333...%）
+- When：呼叫 `calcWeekTrendPct(4, 3)`
+- Then：回傳 `33`（四捨五入）
+
+**TC-WK6 本週為 0 → -100%**
+- Given：上週 10 組，本週 0 組
+- When：呼叫 `calcWeekTrendPct(0, 10)`
+- Then：回傳 `-100`
+
+**TC-WK7 上週為負數（異常資料）→ 回傳 null**
+- Given：`lastWeekSets = -1`（資料異常，guard 條件為 `<= 0`）
+- When：呼叫 `calcWeekTrendPct(5, -1)`
+- Then：回傳 `null`（負數亦被 guard 擋下，行為與 0 相同）
+
+---
+
 ## 新增測試的標準流程
 
 新增業務邏輯時，若符合以下條件，須同步補測試：

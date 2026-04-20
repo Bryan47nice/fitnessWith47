@@ -949,3 +949,57 @@ describe("paceFromTimeDist()", () => {
     expect(result).toBe("05:00 /km");
   });
 });
+
+// ─── calcWeekTrendPct ─────────────────────────────────────────
+import { calcWeekTrendPct } from "./fitforge.utils.js";
+
+describe("calcWeekTrendPct", () => {
+  test("TC-WK1 本週多於上週 → 正百分比", () => {
+    // Given: 上週 10 組，本週 12 組
+    // When: calcWeekTrendPct(12, 10)
+    // Then: 回傳 20
+    expect(calcWeekTrendPct(12, 10)).toBe(20);
+  });
+
+  test("TC-WK2 本週少於上週 → 負百分比", () => {
+    // Given: 上週 10 組，本週 7 組
+    // When: calcWeekTrendPct(7, 10)
+    // Then: 回傳 -30
+    expect(calcWeekTrendPct(7, 10)).toBe(-30);
+  });
+
+  test("TC-WK3 本週與上週相同 → 0", () => {
+    // Given: 上週 8 組，本週 8 組
+    // When: calcWeekTrendPct(8, 8)
+    // Then: 回傳 0
+    expect(calcWeekTrendPct(8, 8)).toBe(0);
+  });
+
+  test("TC-WK4 上週為 0（首週）→ 回傳 null", () => {
+    // Given: 上週無訓練記錄（lastWeekSets = 0）
+    // When: calcWeekTrendPct(5, 0)
+    // Then: 無法計算百分比，回傳 null
+    expect(calcWeekTrendPct(5, 0)).toBeNull();
+  });
+
+  test("TC-WK5 小數四捨五入", () => {
+    // Given: 上週 3 組，本週 4 組（漲幅 33.333...%）
+    // When: calcWeekTrendPct(4, 3)
+    // Then: 四捨五入為 33
+    expect(calcWeekTrendPct(4, 3)).toBe(33);
+  });
+
+  test("TC-WK6 本週為 0 → -100%", () => {
+    // Given: 上週 10 組，本週 0 組
+    // When: calcWeekTrendPct(0, 10)
+    // Then: 回傳 -100
+    expect(calcWeekTrendPct(0, 10)).toBe(-100);
+  });
+
+  test("TC-WK7 上週為負數（異常資料）→ 回傳 null", () => {
+    // Given: lastWeekSets 為負數（資料異常，不應出現但函式需保護）
+    // When: calcWeekTrendPct(5, -1)
+    // Then: guard 條件 <= 0 覆蓋負數，回傳 null
+    expect(calcWeekTrendPct(5, -1)).toBeNull();
+  });
+});
