@@ -23,7 +23,7 @@ import WorkoutTab from "./tabs/WorkoutTab.jsx";
 import BodyTab from "./tabs/BodyTab.jsx";
 import GoalsTab from "./tabs/GoalsTab.jsx";
 
-const APP_VERSION = "1.17.0";
+const APP_VERSION = "1.18.0";
 const toLocalDateStr = (d = new Date()) =>
   `${d.getFullYear()}-${String(d.getMonth() + 1).padStart(2, "0")}-${String(d.getDate()).padStart(2, "0")}`;
 
@@ -671,7 +671,7 @@ export default function FitForge({ user }) {
   async function saveWorkout() {
     const name = wExercise;
     const isNewPR = !isCardio(name) && detectNewPR(name, wSets, prMap);
-    const docData = { date: wDate, exercise: name, sets: wSets, note: wNote, createdAt: serverTimestamp() };
+    const docData = { date: wDate, exercise: name, sets: wSets, note: wNote, isCoach: coachDays.includes(wDate), createdAt: serverTimestamp() };
     if (wCalories !== "") docData.calories = parseFloat(wCalories);
     await addDoc(collection(db, "users", user.uid, "workouts"), docData);
     setDoc(doc(db, "userPushTokens", user.uid), { lastWorkoutDate: wDate }, { merge: true }).catch(() => {});
@@ -756,17 +756,33 @@ export default function FitForge({ user }) {
 
   async function toggleCoachDay(date) {
     const docRef = doc(db, "users", user.uid, "coachDays", date);
+    const dayWorkouts = workouts.filter(w => w.date === date);
     if (coachDays.includes(date)) {
       setConfirmDialog({
-        message: "確認取消此教練課標記？",
+        message: "確認取消此教練課標記？同日所有訓練項目也會取消教練課標記。",
         onConfirm: async () => {
           await deleteDoc(docRef);
+          const batch = writeBatch(db);
+          dayWorkouts.forEach(w =>
+            batch.update(doc(db, "users", user.uid, "workouts", w.id), { isCoach: false })
+          );
+          await batch.commit();
           setConfirmDialog(null);
         },
       });
     } else {
       await setDoc(docRef, { date, createdAt: serverTimestamp() });
+      const batch = writeBatch(db);
+      dayWorkouts.forEach(w =>
+        batch.update(doc(db, "users", user.uid, "workouts", w.id), { isCoach: true })
+      );
+      await batch.commit();
     }
+  }
+
+  async function toggleWorkoutCoach(workoutId, current) {
+    const ref = doc(db, "users", user.uid, "workouts", workoutId);
+    await updateDoc(ref, { isCoach: !current });
   }
 
   async function saveCoachQuota(total) {
@@ -1330,6 +1346,7 @@ export default function FitForge({ user }) {
             aiRefreshKey={aiRefreshKey}
             coachDays={coachDays}
             toggleCoachDay={toggleCoachDay}
+            toggleWorkoutCoach={toggleWorkoutCoach}
             todayPlan={todayPlan}
             setTodayPlan={setTodayPlan}
           />
@@ -2030,15 +2047,29 @@ export default function FitForge({ user }) {
               版本更新記錄
             </div>
 
-            {/* v1.17.0 */}
+            {/* v1.18.0 */}
             <div style={{ marginBottom: "24px" }}>
               <div style={{ display: "flex", alignItems: "center", gap: "10px", marginBottom: "10px" }}>
-                <span style={{ fontSize: "17px", fontWeight: 900, color: "#ffd700" }}>v1.17.0</span>
+                <span style={{ fontSize: "17px", fontWeight: 900, color: "#ffd700" }}>v1.18.0</span>
                 <span style={{
                   fontSize: "11px", fontWeight: 800, color: "#ff6a00",
                   background: "rgba(255,106,0,0.15)", border: "1px solid rgba(255,106,0,0.3)",
                   borderRadius: "6px", padding: "2px 7px", letterSpacing: "0.05em",
                 }}>最新</span>
+                <span style={{ fontSize: "12px", color: "#555", marginLeft: "auto" }}>2026-04-24</span>
+              </div>
+              <div style={{ display: "flex", flexDirection: "column", gap: "7px" }}>
+                <div style={{ fontSize: "14px", color: "#c8c4bc", display: "flex", gap: "8px" }}>
+                  <span style={{ color: "#ffd700", flexShrink: 0 }}>✨</span>
+                  <span>教練課當天每筆訓練可個別標記是否為上課內容，點擊 🏅 切換；取消整天標記時自動清除所有項目的教練課狀態</span>
+                </div>
+              </div>
+            </div>
+
+            {/* v1.17.0 */}
+            <div style={{ marginBottom: "24px" }}>
+              <div style={{ display: "flex", alignItems: "center", gap: "10px", marginBottom: "10px" }}>
+                <span style={{ fontSize: "17px", fontWeight: 900, color: "#e8e4dc" }}>v1.17.0</span>
                 <span style={{ fontSize: "12px", color: "#555", marginLeft: "auto" }}>2026-04-24</span>
               </div>
               <div style={{ display: "flex", flexDirection: "column", gap: "7px" }}>

@@ -62,7 +62,7 @@ export default function WorkoutTab({
   // AI refresh
   aiRefreshKey,
   // Coach days
-  coachDays, toggleCoachDay,
+  coachDays, toggleCoachDay, toggleWorkoutCoach,
   // Today's plan
   todayPlan, setTodayPlan,
 }) {
@@ -1119,7 +1119,19 @@ export default function WorkoutTab({
                         <div key={w.id} style={{ ...styles.workoutItem, marginBottom: "8px" }}>
                           <div style={{ display: "flex", justifyContent: "space-between", alignItems: "center", marginBottom: "8px" }}>
                             <div style={{ fontSize: "17px", fontWeight: 700 }}>{w.exercise}</div>
-                            <div style={{ display: "flex", gap: "6px" }}>
+                            <div style={{ display: "flex", gap: "6px", alignItems: "center" }}>
+                              {coachDays?.includes(day.date) && (
+                                <button
+                                  onClick={e => { e.stopPropagation(); toggleWorkoutCoach?.(w.id, w.isCoach ?? true); }}
+                                  title={(w.isCoach ?? true) ? "教練課內容（點擊標為自主練習）" : "自主練習（點擊標為教練課）"}
+                                  style={{
+                                    background: "none", border: "none", cursor: "pointer",
+                                    padding: "2px 4px", fontSize: 14, lineHeight: 1,
+                                    opacity: (w.isCoach ?? true) ? 1 : 0.3,
+                                    transition: "opacity 0.15s",
+                                  }}
+                                >🏅</button>
+                              )}
                               <button style={styles.historyActionBtn} onClick={() => openEditWorkout(w)}>編輯</button>
                               <button style={styles.historyDeleteBtn} onClick={() => deleteWorkout(w.id)}>刪除</button>
                             </div>

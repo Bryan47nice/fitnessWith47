@@ -69,8 +69,11 @@ export default function DashboardTab({ workouts, bodyData, prMap, volumePeriod, 
   const coachRemaining = Math.max(0, coachQuotaTotal - coachTotal);
   const coachProgressPct = Math.min(100, (coachTotal / coachQuotaTotal) * 100);
 
-  // Coach history data
-  const coachWorkouts = workouts.filter(w => coachDays.includes(w.date));
+  // Coach history data（含舊資料 fallback：isCoach 未定義時以 coachDays 判斷）
+  const coachWorkouts = workouts.filter(w =>
+    w.isCoach === true ||
+    (w.isCoach === undefined && coachDays.includes(w.date))
+  );
   const exerciseMap = {};
   coachWorkouts.forEach(w => {
     if (!exerciseMap[w.exercise]) exerciseMap[w.exercise] = { count: 0, lastDate: "", sessions: [] };
@@ -79,9 +82,8 @@ export default function DashboardTab({ workouts, bodyData, prMap, volumePeriod, 
     if (w.note) exerciseMap[w.exercise].sessions.push({ date: w.date, note: w.note });
   });
   const exerciseList = Object.entries(exerciseMap).sort(([, a], [, b]) => b.count - a.count);
-  const coachDaysSorted = [...coachDays].sort((a, b) => b.localeCompare(a));
+  const coachDaysSorted = [...new Set(coachWorkouts.map(w => w.date))].sort((a, b) => b.localeCompare(a));
   const sessionsByDate = coachDaysSorted
-    .filter(d => coachWorkouts.some(w => w.date === d))
     .map(date => ({ date, items: coachWorkouts.filter(w => w.date === date) }));
 
   // 依部位分類聚合
