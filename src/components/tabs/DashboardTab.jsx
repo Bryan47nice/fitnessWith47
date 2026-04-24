@@ -55,6 +55,8 @@ export default function DashboardTab({ workouts, bodyData, prMap, volumePeriod, 
   const [coachHistoryOpen, setCoachHistoryOpen] = useState(false);
   const [coachHistoryTab, setCoachHistoryTab] = useState("exercises");
   const [selectedCoachExercise, setSelectedCoachExercise] = useState(null);
+  const [coachExerciseViewMode, setCoachExerciseViewMode] = useState("list"); // "list" | "byDate" | "byPart"
+  const [selectedCoachPart, setSelectedCoachPart] = useState("全部");
 
   const workoutDays = new Set(workouts.map(w => w.date)).size;
   const latestBody  = bodyData[0];
@@ -81,6 +83,15 @@ export default function DashboardTab({ workouts, bodyData, prMap, volumePeriod, 
   const sessionsByDate = coachDaysSorted
     .filter(d => coachWorkouts.some(w => w.date === d))
     .map(date => ({ date, items: coachWorkouts.filter(w => w.date === date) }));
+
+  // 依部位分類聚合
+  const exercisesByPart = {};
+  exerciseList.forEach(([exercise, data]) => {
+    const cat = exerciseCategories.find(c => c.exercises.includes(exercise));
+    const partLabel = cat ? cat.label : "其他";
+    if (!exercisesByPart[partLabel]) exercisesByPart[partLabel] = [];
+    exercisesByPart[partLabel].push([exercise, data]);
+  });
 
   // This week's training days (Mon–Sun)
   const toLocalDateStr = (d = new Date()) =>
@@ -665,7 +676,7 @@ export default function DashboardTab({ workouts, bodyData, prMap, volumePeriod, 
             flexShrink: 0,
           }}>
             <button
-              onClick={() => { setCoachHistoryOpen(false); setSelectedCoachExercise(null); setCoachHistoryTab("exercises"); }}
+              onClick={() => { setCoachHistoryOpen(false); setSelectedCoachExercise(null); setCoachHistoryTab("exercises"); setCoachExerciseViewMode("list"); setSelectedCoachPart("全部"); }}
               style={{ background: "none", border: "none", color: "#e8e4dc", fontSize: 22, cursor: "pointer", padding: 0, lineHeight: 1 }}
             >←</button>
             <div style={{ fontSize: 16, fontWeight: 700, color: "#e8e4dc" }}>🏅 教練課記錄</div>
@@ -701,54 +712,205 @@ export default function DashboardTab({ workouts, bodyData, prMap, volumePeriod, 
               </div>
             ) : coachHistoryTab === "exercises" ? (
               <div>
+                {/* 瀏覽模式 sub-tabs */}
+                {exerciseList.length > 0 && (
+                  <div style={{ display: "flex", gap: 6, marginBottom: 14, overflowX: "auto", paddingBottom: 2 }}>
+                    {[["list", "全部動作"], ["byDate", "依課程時間"], ["byPart", "依部位分類"]].map(([key, label]) => (
+                      <button
+                        key={key}
+                        onClick={() => { setCoachExerciseViewMode(key); setSelectedCoachExercise(null); setSelectedCoachPart("全部"); }}
+                        style={{
+                          flexShrink: 0, padding: "5px 14px", borderRadius: 20, cursor: "pointer",
+                          background: coachExerciseViewMode === key ? "rgba(255,215,0,0.18)" : "rgba(255,255,255,0.06)",
+                          color: coachExerciseViewMode === key ? "#ffd700" : "#888",
+                          border: coachExerciseViewMode === key ? "1px solid rgba(255,215,0,0.4)" : "1px solid rgba(255,255,255,0.08)",
+                          fontSize: 12, fontWeight: coachExerciseViewMode === key ? 700 : 400,
+                          fontFamily: "'Barlow Condensed','Noto Sans TC',sans-serif",
+                          transition: "all 0.15s",
+                        }}
+                      >{label}</button>
+                    ))}
+                  </div>
+                )}
+
                 <div style={{ fontSize: 12, color: "#555", marginBottom: 16 }}>
                   共學 <span style={{ color: "#ffd700", fontWeight: 700 }}>{exerciseList.length}</span> 個動作，橫跨 <span style={{ color: "#ffd700", fontWeight: 700 }}>{coachTotal}</span> 堂課
                 </div>
+
                 {exerciseList.length === 0 ? (
                   <div style={{ textAlign: "center", padding: "40px 0", color: "#555", fontSize: 14 }}>
                     教練課日期沒有對應的訓練記錄
                   </div>
-                ) : exerciseList.map(([exercise, { count, lastDate, sessions }]) => {
-                  const isExpanded = selectedCoachExercise === exercise;
-                  return (
-                    <div
-                      key={exercise}
-                      onClick={() => setSelectedCoachExercise(prev => prev === exercise ? null : exercise)}
-                      style={{
-                        background: isExpanded ? "rgba(255,215,0,0.05)" : "rgba(255,255,255,0.03)",
-                        border: isExpanded ? "1px solid rgba(255,215,0,0.25)" : "1px solid rgba(255,255,255,0.07)",
-                        borderRadius: 10, padding: "12px 14px", marginBottom: 8, cursor: "pointer",
-                        transition: "border-color 0.15s",
-                      }}
-                    >
-                      <div style={{ display: "flex", justifyContent: "space-between", alignItems: "center" }}>
-                        <div>
-                          <div style={{ fontWeight: 700, fontSize: 15, color: "#e8e4dc" }}>{exercise}</div>
-                          <div style={{ fontSize: 11, color: "#666", marginTop: 2 }}>最後練習：{lastDate.slice(5)}</div>
+
+                ) : coachExerciseViewMode === "list" ? (
+                  /* ── 全部動作（原有邏輯） ── */
+                  exerciseList.map(([exercise, { count, lastDate, sessions }]) => {
+                    const isExpanded = selectedCoachExercise === exercise;
+                    return (
+                      <div
+                        key={exercise}
+                        onClick={() => setSelectedCoachExercise(prev => prev === exercise ? null : exercise)}
+                        style={{
+                          background: isExpanded ? "rgba(255,215,0,0.05)" : "rgba(255,255,255,0.03)",
+                          border: isExpanded ? "1px solid rgba(255,215,0,0.25)" : "1px solid rgba(255,255,255,0.07)",
+                          borderRadius: 10, padding: "12px 14px", marginBottom: 8, cursor: "pointer",
+                          transition: "border-color 0.15s",
+                        }}
+                      >
+                        <div style={{ display: "flex", justifyContent: "space-between", alignItems: "center" }}>
+                          <div>
+                            <div style={{ fontWeight: 700, fontSize: 15, color: "#e8e4dc" }}>{exercise}</div>
+                            <div style={{ fontSize: 11, color: "#666", marginTop: 2 }}>最後練習：{lastDate.slice(5)}</div>
+                          </div>
+                          <div style={{ display: "flex", alignItems: "center", gap: 8 }}>
+                            <div style={{
+                              background: "rgba(255,215,0,0.12)", border: "1px solid rgba(255,215,0,0.2)",
+                              borderRadius: 20, padding: "3px 10px", fontSize: 12, fontWeight: 700, color: "#ffd700",
+                            }}>{count} 次</div>
+                            <div style={{ fontSize: 14, color: "#555" }}>{isExpanded ? "∨" : "›"}</div>
+                          </div>
                         </div>
-                        <div style={{ display: "flex", alignItems: "center", gap: 8 }}>
-                          <div style={{
-                            background: "rgba(255,215,0,0.12)", border: "1px solid rgba(255,215,0,0.2)",
-                            borderRadius: 20, padding: "3px 10px", fontSize: 12, fontWeight: 700, color: "#ffd700",
-                          }}>{count} 次</div>
-                          <div style={{ fontSize: 14, color: "#555" }}>{isExpanded ? "∨" : "›"}</div>
-                        </div>
+                        {isExpanded && (
+                          <div style={{ marginTop: 10, paddingTop: 10, borderTop: "1px solid rgba(255,215,0,0.12)" }}>
+                            {sessions.length === 0 ? (
+                              <div style={{ fontSize: 12, color: "#555", textAlign: "center", padding: "8px 0" }}>這個動作目前沒有筆記</div>
+                            ) : [...sessions].sort((a, b) => b.date.localeCompare(a.date)).map((s, i) => (
+                              <div key={i} style={{ marginBottom: i < sessions.length - 1 ? 8 : 0 }}>
+                                <div style={{ fontSize: 11, color: "#ffd700", fontWeight: 700, marginBottom: 2 }}>{s.date.slice(5)}</div>
+                                <div style={{ fontSize: 13, color: "#c8c4bc", lineHeight: 1.5 }}>{s.note}</div>
+                              </div>
+                            ))}
+                          </div>
+                        )}
                       </div>
-                      {isExpanded && (
-                        <div style={{ marginTop: 10, paddingTop: 10, borderTop: "1px solid rgba(255,215,0,0.12)" }}>
-                          {sessions.length === 0 ? (
-                            <div style={{ fontSize: 12, color: "#555", textAlign: "center", padding: "8px 0" }}>這個動作目前沒有筆記</div>
-                          ) : [...sessions].sort((a, b) => b.date.localeCompare(a.date)).map((s, i) => (
-                            <div key={i} style={{ marginBottom: i < sessions.length - 1 ? 8 : 0 }}>
-                              <div style={{ fontSize: 11, color: "#ffd700", fontWeight: 700, marginBottom: 2 }}>{s.date.slice(5)}</div>
-                              <div style={{ fontSize: 13, color: "#c8c4bc", lineHeight: 1.5 }}>{s.note}</div>
-                            </div>
-                          ))}
-                        </div>
-                      )}
+                    );
+                  })
+
+                ) : coachExerciseViewMode === "byDate" ? (
+                  /* ── 依課程時間（筆記為主） ── */
+                  sessionsByDate.length === 0 ? (
+                    <div style={{ textAlign: "center", padding: "40px 0", color: "#555", fontSize: 14 }}>
+                      教練課日期沒有對應的訓練記錄
                     </div>
-                  );
-                })}
+                  ) : sessionsByDate.map(({ date, items }) => {
+                    const sessionIndex = coachDaysSorted.indexOf(date);
+                    const sessionNum = coachDaysSorted.length - sessionIndex;
+                    const withNote = items.filter(w => w.note);
+                    const withoutNote = items.filter(w => !w.note);
+                    return (
+                      <div key={date} style={{ marginBottom: 20 }}>
+                        <div style={{
+                          fontSize: 11, fontWeight: 700, color: "#ffd700",
+                          letterSpacing: "0.08em",
+                          marginBottom: 8, display: "flex", alignItems: "center", gap: 8,
+                        }}>
+                          <span>{date}</span>
+                          <span style={{ color: "#555" }}>·</span>
+                          <span style={{ color: "#888" }}>第 {sessionNum} 堂</span>
+                          {withNote.length > 0 && (
+                            <span style={{
+                              background: "rgba(255,215,0,0.1)", border: "1px solid rgba(255,215,0,0.2)",
+                              borderRadius: 20, padding: "1px 8px", fontSize: 10, color: "#ffd700",
+                            }}>{withNote.length} 筆筆記</span>
+                          )}
+                        </div>
+                        {/* 有筆記的動作 */}
+                        {withNote.map((w, i) => (
+                          <div key={`note-${i}`} style={{
+                            background: "rgba(255,215,0,0.04)",
+                            border: "1px solid rgba(255,215,0,0.15)",
+                            borderRadius: 8, padding: "10px 14px", marginBottom: 6,
+                          }}>
+                            <div style={{ fontWeight: 700, fontSize: 14, color: "#e8e4dc", marginBottom: 6 }}>{w.exercise}</div>
+                            <div style={{ fontSize: 13, color: "#c8c4bc", lineHeight: 1.5 }}>{w.note}</div>
+                          </div>
+                        ))}
+                        {/* 無筆記的動作 */}
+                        {withoutNote.length > 0 && (
+                          <div style={{
+                            display: "flex", flexWrap: "wrap", gap: 6, marginTop: withNote.length > 0 ? 6 : 0,
+                          }}>
+                            {withoutNote.map((w, i) => (
+                              <div key={`nonote-${i}`} style={{
+                                background: "rgba(255,255,255,0.03)",
+                                border: "1px solid rgba(255,255,255,0.07)",
+                                borderRadius: 6, padding: "5px 10px",
+                                fontSize: 12, color: "#666",
+                              }}>
+                                {w.exercise} <span style={{ color: "#444" }}>· 無筆記</span>
+                              </div>
+                            ))}
+                          </div>
+                        )}
+                      </div>
+                    );
+                  })
+
+                ) : (
+                  /* ── 依部位分類 ── */
+                  <div>
+                    {/* 部位 chips */}
+                    <div style={{ display: "flex", gap: 6, marginBottom: 16, overflowX: "auto", paddingBottom: 2 }}>
+                      {["全部", ...Object.keys(exercisesByPart)].map(part => (
+                        <button
+                          key={part}
+                          onClick={() => { setSelectedCoachPart(part); setSelectedCoachExercise(null); }}
+                          style={{
+                            flexShrink: 0, padding: "5px 14px", borderRadius: 20, cursor: "pointer",
+                            background: selectedCoachPart === part ? "rgba(255,215,0,0.18)" : "rgba(255,255,255,0.05)",
+                            color: selectedCoachPart === part ? "#ffd700" : "#777",
+                            border: selectedCoachPart === part ? "1px solid rgba(255,215,0,0.4)" : "1px solid rgba(255,255,255,0.07)",
+                            fontSize: 12, fontWeight: selectedCoachPart === part ? 700 : 400,
+                            fontFamily: "'Barlow Condensed','Noto Sans TC',sans-serif",
+                            transition: "all 0.15s",
+                          }}
+                        >{part}</button>
+                      ))}
+                    </div>
+                    {/* 動作列表（複用 list 模式卡片） */}
+                    {(selectedCoachPart === "全部" ? exerciseList : (exercisesByPart[selectedCoachPart] || [])).map(([exercise, { count, lastDate, sessions }]) => {
+                      const isExpanded = selectedCoachExercise === exercise;
+                      return (
+                        <div
+                          key={exercise}
+                          onClick={() => setSelectedCoachExercise(prev => prev === exercise ? null : exercise)}
+                          style={{
+                            background: isExpanded ? "rgba(255,215,0,0.05)" : "rgba(255,255,255,0.03)",
+                            border: isExpanded ? "1px solid rgba(255,215,0,0.25)" : "1px solid rgba(255,255,255,0.07)",
+                            borderRadius: 10, padding: "12px 14px", marginBottom: 8, cursor: "pointer",
+                            transition: "border-color 0.15s",
+                          }}
+                        >
+                          <div style={{ display: "flex", justifyContent: "space-between", alignItems: "center" }}>
+                            <div>
+                              <div style={{ fontWeight: 700, fontSize: 15, color: "#e8e4dc" }}>{exercise}</div>
+                              <div style={{ fontSize: 11, color: "#666", marginTop: 2 }}>最後練習：{lastDate.slice(5)}</div>
+                            </div>
+                            <div style={{ display: "flex", alignItems: "center", gap: 8 }}>
+                              <div style={{
+                                background: "rgba(255,215,0,0.12)", border: "1px solid rgba(255,215,0,0.2)",
+                                borderRadius: 20, padding: "3px 10px", fontSize: 12, fontWeight: 700, color: "#ffd700",
+                              }}>{count} 次</div>
+                              <div style={{ fontSize: 14, color: "#555" }}>{isExpanded ? "∨" : "›"}</div>
+                            </div>
+                          </div>
+                          {isExpanded && (
+                            <div style={{ marginTop: 10, paddingTop: 10, borderTop: "1px solid rgba(255,215,0,0.12)" }}>
+                              {sessions.length === 0 ? (
+                                <div style={{ fontSize: 12, color: "#555", textAlign: "center", padding: "8px 0" }}>這個動作目前沒有筆記</div>
+                              ) : [...sessions].sort((a, b) => b.date.localeCompare(a.date)).map((s, i) => (
+                                <div key={i} style={{ marginBottom: i < sessions.length - 1 ? 8 : 0 }}>
+                                  <div style={{ fontSize: 11, color: "#ffd700", fontWeight: 700, marginBottom: 2 }}>{s.date.slice(5)}</div>
+                                  <div style={{ fontSize: 13, color: "#c8c4bc", lineHeight: 1.5 }}>{s.note}</div>
+                                </div>
+                              ))}
+                            </div>
+                          )}
+                        </div>
+                      );
+                    })}
+                  </div>
+                )}
               </div>
             ) : (
               <div>
