@@ -1,4 +1,5 @@
-import { useState, useEffect } from "react";
+import { useState, useEffect, useRef } from "react";
+import { createPortal } from "react-dom";
 import { LineChart, Line, XAxis, YAxis, Tooltip, ResponsiveContainer } from "recharts";
 import { getApp } from "firebase/app";
 import { getFunctions, httpsCallable } from "firebase/functions";
@@ -92,6 +93,8 @@ export default function WorkoutTab({
   // ── Exercise AI comment state ──
   const [exAiComment, setExAiComment] = useState(null);
   const [exAiLoading, setExAiLoading] = useState(false);
+  const [coachToast, setCoachToast] = useState(null); // toast message string
+  const coachToastTimer = useRef(null);
 
   // Calendar computation
   const { year, month } = calMonth;
@@ -202,6 +205,7 @@ export default function WorkoutTab({
   const cardio = (name) => isCardio(name, customExercises);
 
   return (
+    <>
     <div>
       {/* ── 訓練日曆（Google Calendar 風格）── */}
       <div style={styles.card}>
@@ -1120,18 +1124,34 @@ export default function WorkoutTab({
                           <div style={{ display: "flex", justifyContent: "space-between", alignItems: "center", marginBottom: "8px" }}>
                             <div style={{ fontSize: "17px", fontWeight: 700 }}>{w.exercise}</div>
                             <div style={{ display: "flex", gap: "6px", alignItems: "center" }}>
-                              {coachDays?.includes(day.date) && (
-                                <button
-                                  onClick={e => { e.stopPropagation(); toggleWorkoutCoach?.(w.id, w.isCoach ?? true); }}
-                                  title={(w.isCoach ?? true) ? "教練課內容（點擊標為自主練習）" : "自主練習（點擊標為教練課）"}
-                                  style={{
-                                    background: "none", border: "none", cursor: "pointer",
-                                    padding: "2px 4px", fontSize: 14, lineHeight: 1,
-                                    opacity: (w.isCoach ?? true) ? 1 : 0.3,
-                                    transition: "opacity 0.15s",
-                                  }}
-                                >🏅</button>
-                              )}
+                              {coachDays?.includes(day.date) && (() => {
+                                const isCoach = w.isCoach ?? true;
+                                return (
+                                  <button
+                                    onClick={e => {
+                                      e.stopPropagation();
+                                      toggleWorkoutCoach?.(w.id, isCoach);
+                                      const msg = isCoach ? "💪 已標記為自主練習" : "🏅 已標記為教練課內容";
+                                      setCoachToast(msg);
+                                      clearTimeout(coachToastTimer.current);
+                                      coachToastTimer.current = setTimeout(() => setCoachToast(null), 1800);
+                                    }}
+                                    style={{
+                                      display: "flex", alignItems: "center", gap: 4,
+                                      padding: "3px 9px", borderRadius: 20, cursor: "pointer",
+                                      border: isCoach ? "1px solid rgba(255,215,0,0.35)" : "1px solid rgba(255,255,255,0.12)",
+                                      background: isCoach ? "rgba(255,215,0,0.12)" : "rgba(255,255,255,0.05)",
+                                      color: isCoach ? "#ffd700" : "#888",
+                                      fontSize: 12, fontWeight: 700, lineHeight: 1,
+                                      fontFamily: "'Barlow Condensed','Noto Sans TC',sans-serif",
+                                      transition: "all 0.15s",
+                                    }}
+                                  >
+                                    <span>{isCoach ? "🏅" : "💪"}</span>
+                                    <span>{isCoach ? "上課" : "自練"}</span>
+                                  </button>
+                                );
+                              })()}
                               <button style={styles.historyActionBtn} onClick={() => openEditWorkout(w)}>編輯</button>
                               <button style={styles.historyDeleteBtn} onClick={() => deleteWorkout(w.id)}>刪除</button>
                             </div>
@@ -1171,5 +1191,23 @@ export default function WorkoutTab({
         })()}
       </div>
     </div>
+
+    {/* Coach toggle toast */}
+    {coachToast && createPortal(
+      <div style={{
+        position: "fixed", bottom: "90px", left: "50%", transform: "translateX(-50%)",
+        background: "rgba(30,30,46,0.96)", backdropFilter: "blur(10px)",
+        border: "1px solid rgba(255,255,255,0.1)",
+        color: "#e8e4dc", padding: "10px 22px", borderRadius: "24px",
+        fontWeight: 700, fontSize: "14px",
+        zIndex: 400, boxShadow: "0 4px 20px rgba(0,0,0,0.4)",
+        pointerEvents: "none", whiteSpace: "nowrap",
+        fontFamily: "'Barlow Condensed','Noto Sans TC',sans-serif",
+      }}>
+        {coachToast}
+      </div>,
+      document.body
+    )}
+    </>
   );
 }
