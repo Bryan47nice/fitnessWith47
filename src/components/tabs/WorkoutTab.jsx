@@ -95,6 +95,7 @@ export default function WorkoutTab({
   const [exAiLoading, setExAiLoading] = useState(false);
   const [coachToast, setCoachToast] = useState(null); // toast message string
   const coachToastTimer = useRef(null);
+  const historyRef = useRef(null);
 
   // Calendar computation
   const { year, month } = calMonth;
@@ -119,8 +120,6 @@ export default function WorkoutTab({
     calGrid.push({ day: d, dateStr, hasWorkout: workoutDateSet.has(dateStr), isToday: dateStr === todayStr });
   }
   while (calGrid.length % 7 !== 0) calGrid.push(null);
-
-  const selectedDayWorkouts = selectedCalDate ? workouts.filter(w => w.date === selectedCalDate) : [];
 
   const prevMonth = () => setCalMonth(({ year, month }) =>
     month === 0 ? { year: year - 1, month: 11 } : { year, month: month - 1 }
@@ -253,7 +252,11 @@ export default function WorkoutTab({
             return (
               <div
                 key={dateStr}
-                onClick={() => setSelectedCalDate(prev => prev === dateStr ? null : dateStr)}
+                onClick={() => {
+                  const next = selectedCalDate === dateStr ? null : dateStr;
+                  setSelectedCalDate(next);
+                  if (next) setTimeout(() => historyRef.current?.scrollIntoView({ behavior: "smooth", block: "start" }), 50);
+                }}
                 style={{ display: "flex", justifyContent: "center", alignItems: "center", padding: "3px 0", cursor: "pointer" }}
               >
                 <div style={{ position: "relative" }}>
@@ -287,40 +290,6 @@ export default function WorkoutTab({
           })}
         </div>
       </div>
-
-      {/* ── 當日訓練紀錄 ── */}
-      {selectedCalDate && (
-        <div style={styles.card}>
-          <div style={{ ...styles.sectionTitle, marginBottom: 12 }}>{selectedCalDate} 的訓練</div>
-          {selectedDayWorkouts.length === 0 ? (
-            <div style={{ color: "#555", fontSize: 14, textAlign: "center", padding: "12px 0" }}>這天沒有訓練紀錄</div>
-          ) : selectedDayWorkouts.map(w => (
-            <div key={w.id} style={{ ...styles.workoutItem, marginBottom: 10 }}>
-              <div style={{ fontSize: 17, fontWeight: 700, marginBottom: 8 }}>{w.exercise}</div>
-              <div style={{ display: "flex", gap: 6, flexWrap: "wrap" }}>
-                {w.sets?.map((s, idx) => {
-                  if (s.duration !== undefined) {
-                    const durationLabel = s.duration
-                      ? `${s.duration}分${String(parseInt(s.duration_sec || 0)).padStart(2, "0")}秒`
-                      : null;
-                    const paceLabel = paceFromTimeDist(s.duration, s.duration_sec, s.distance)
-                      || (s.speed ? toMinPerKm(s.speed) : null);
-                    const parts = [
-                      durationLabel,
-                      s.distance && `${s.distance} km`,
-                      paceLabel,
-                      s.incline && `坡度${s.incline}%`,
-                    ].filter(Boolean);
-                    return <span key={idx} style={styles.tag}>{parts.join(" · ") || "—"}</span>;
-                  }
-                  return <span key={idx} style={styles.tag}>第{idx + 1}組 {s.reps ? `${s.reps}下` : ""}{s.weight ? ` × ${s.weight}kg` : ""}</span>;
-                })}
-              </div>
-              {w.note && <div style={{ fontSize: 13, color: "#888", fontStyle: "italic", marginTop: 6, whiteSpace: "pre-wrap" }}>📝 {w.note}</div>}
-            </div>
-          ))}
-        </div>
-      )}
 
       {/* ── AI 教練評語 ── */}
       <div style={styles.card}>
@@ -846,7 +815,7 @@ export default function WorkoutTab({
       </div>
 
       {/* ── 歷史紀錄 ── */}
-      <div style={styles.card}>
+      <div ref={historyRef} style={styles.card}>
         <div style={{ display: "flex", justifyContent: "space-between", alignItems: "center", marginBottom: "16px" }}>
           <div style={styles.sectionTitle}>所有訓練紀錄</div>
           <div style={{ display: "flex", gap: "6px" }}>
@@ -865,6 +834,24 @@ export default function WorkoutTab({
             ))}
           </div>
         </div>
+        {/* ── 日期篩選 chip ── */}
+        {selectedCalDate && (
+          <div style={{ display: "flex", alignItems: "center", gap: 6, marginBottom: 10 }}>
+            <div style={{
+              display: "flex", alignItems: "center", gap: 6,
+              padding: "4px 10px 4px 12px", borderRadius: 20,
+              background: "rgba(255,106,0,0.15)", border: "1px solid rgba(255,106,0,0.4)",
+              fontSize: 12, color: "#ff9955", fontWeight: 700,
+            }}>
+              📅 {selectedCalDate}
+              <button onClick={() => setSelectedCalDate(null)} style={{
+                background: "none", border: "none", color: "#ff9955", cursor: "pointer",
+                fontSize: 14, padding: "0 2px", lineHeight: 1, fontFamily: "inherit",
+              }}>✕</button>
+            </div>
+          </div>
+        )}
+
         {/* ── 動作篩選列（兩層）── */}
         {workouts.length > 0 && (() => {
           const usedCategories = [...new Set(
@@ -982,6 +969,7 @@ export default function WorkoutTab({
         )}
         {workouts.length > 0 && (() => {
           const filteredWorkouts = workouts.filter(w => {
+            if (selectedCalDate && w.date !== selectedCalDate) return false;
             if (historyExFilter) return w.exercise === historyExFilter;
             if (historyActiveCategory) return (getCategoryForExercise(w.exercise, customExercises) || "自訂") === historyActiveCategory;
             return true;
@@ -1060,13 +1048,15 @@ export default function WorkoutTab({
                 }} style={{
                   display: "flex", justifyContent: "space-between", alignItems: "center",
                   padding: "10px 14px", borderRadius: "10px",
-                  background: "rgba(255,255,255,0.05)", cursor: "pointer",
+                  background: "rgba(255,255,255,0.07)",
+                  borderLeft: "3px solid rgba(255,106,0,0.5)",
+                  cursor: "pointer",
                   marginBottom: isOpen ? "8px" : 0,
                 }}>
-                  <span style={{ fontSize: "13px", color: "#aaa", fontWeight: 600 }}>
+                  <span style={{ fontSize: "13px", color: "#cc9966", fontWeight: 700 }}>
                     {group.label}（{group.items.length} 筆 · {group.totalSets} 組）
                   </span>
-                  <span style={{ color: "#666", fontSize: "12px" }}>{isOpen ? "▲" : "▼"}</span>
+                  <span style={{ color: "#888", fontSize: "12px" }}>{isOpen ? "▲" : "▼"}</span>
                 </div>
                 {isOpen && group.days.map((day, dayIdx) => {
                   const isDayOpen = expandedDayKeys === null
@@ -1080,7 +1070,7 @@ export default function WorkoutTab({
                   const dateLabel = `${mm}/${dd}（週${weekday}）`;
                   const isCoachDay = coachDays?.includes(day.date);
                   return (
-                    <div key={day.date} style={{ marginBottom: "4px" }}>
+                    <div key={day.date} style={{ marginBottom: "4px", marginLeft: "10px" }}>
                       <div onClick={() => {
                         setExpandedDayKeys(prev => {
                           const base = prev ?? new Set(
@@ -1093,7 +1083,7 @@ export default function WorkoutTab({
                         });
                       }} style={{
                         display: "flex", justifyContent: "space-between", alignItems: "center",
-                        padding: "8px 14px", borderRadius: "8px",
+                        padding: "7px 12px", borderRadius: "8px",
                         background: isCoachDay ? "rgba(255,215,0,0.07)" : "rgba(255,255,255,0.03)",
                         cursor: "pointer",
                         border: isCoachDay ? "1px solid rgba(255,215,0,0.25)" : "1px solid rgba(255,255,255,0.06)",
