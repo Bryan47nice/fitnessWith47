@@ -1069,6 +1069,8 @@ export default function WorkoutTab({
                   const dd = String(d.getDate()).padStart(2, '0');
                   const dateLabel = `${mm}/${dd}（週${weekday}）`;
                   const isCoachDay = coachDays?.includes(day.date);
+                  const coachCount = isCoachDay ? day.items.filter(w => w.isCoach !== false).length : 0;
+                  const dayEmoji = isCoachDay ? (coachCount > 0 ? "🏅" : "💪") : "📅";
                   return (
                     <div key={day.date} style={{ marginBottom: "4px", marginLeft: "10px" }}>
                       <div onClick={() => {
@@ -1090,7 +1092,7 @@ export default function WorkoutTab({
                         marginBottom: isDayOpen ? "6px" : 0,
                       }}>
                         <span style={{ fontSize: "13px", color: "#bbb", fontWeight: 600, flex: 1, minWidth: 0 }}>
-                          {isCoachDay ? "🏅" : "📅"} {dateLabel} · {day.items.length} 個動作 · {day.totalSets} 組
+                          {dayEmoji} {dateLabel} · {day.items.length} 個動作 · {day.totalSets} 組
                         </span>
                         <div style={{ display: "flex", alignItems: "center", gap: "6px", flexShrink: 0 }}>
                           <button
