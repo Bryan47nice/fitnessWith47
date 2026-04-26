@@ -13,6 +13,8 @@ users/{userId}/
   │                              ↑ date 字串為 doc ID（v1.2.2 起，同日覆蓋機制）
   │                              ↑ v1.8.1：移除 chest/arm/thigh，新增 bodyfat/muscle_mass/visceral_fat
   ├── customExercises/{id}    → { name, createdAt }
+  ├── routines/{id}           → { name: string, exercises: string[], createdAt, updatedAt }
+  │                              ↑ v1.20.0：自訂訓練常規，exercises 為有序動作名稱陣列
   ├── meta/streak             → { count, lastDate }
   ├── coachDays/{YYYY-MM-DD}  → { date, createdAt }
   └── meta/coachQuota         → { total: 24 }

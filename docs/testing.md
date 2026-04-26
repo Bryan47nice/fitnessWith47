@@ -30,6 +30,8 @@
 | `getLastSessionSets(exercise, workouts)` | 回傳該動作最近一次訓練的 sets 副本，無紀錄時回傳 null | 無 |
 | `paceFromTimeDist(durationMin, durationSec, distanceKm)` | 由時間（分+秒）與距離計算配速字串（"MM:SS /km"），無效時回傳 null | 無 |
 | `toMinPerKm(kmh)` | 將 km/h 速度轉換為配速字串（"MM:SS /km"），無效時回傳 null | 無 |
+| `toggleItemInArray(arr, item)` | 切換陣列中的項目（不存在則加入，存在則移除），回傳新陣列 | 無 |
+| `reindexAfterDelete(arr, deletedIndex)` | 刪除指定 index 元素並重新排序 `order` 屬性（若有），回傳新陣列 | 無 |
 
 > 所有函式從 `FitForge.jsx` 抽取後，`FitForge.jsx` 改為 import 使用，行為不變。
 
@@ -586,6 +588,54 @@
 - Given：`lastWeekSets = -1`（資料異常，guard 條件為 `<= 0`）
 - When：呼叫 `calcWeekTrendPct(5, -1)`
 - Then：回傳 `null`（負數亦被 guard 擋下，行為與 0 相同）
+
+---
+
+### 十八、`toggleItemInArray(arr, item)` — 陣列項目切換
+
+**TC-ROU1 (FF-ROU-001) 項目不在陣列中時加入**
+- Given：`arr = ["chest", "back"]`，`item = "legs"`
+- When：呼叫 `toggleItemInArray(arr, "legs")`
+- Then：回傳 `["chest", "back", "legs"]`（item 被附加至尾端）
+
+**TC-ROU2 (FF-ROU-002) 項目已存在時從陣列移除**
+- Given：`arr = ["chest", "back", "legs"]`，`item = "back"`
+- When：呼叫 `toggleItemInArray(arr, "back")`
+- Then：回傳 `["chest", "legs"]`（"back" 被移除）
+
+**TC-ROU3 (FF-ROU-003) 原始陣列不被修改**
+- Given：`arr = ["chest"]`，`item = "back"`
+- When：呼叫 `toggleItemInArray(arr, "back")`
+- Then：原始 `arr` 長度仍為 1（無副作用，回傳的是新陣列）
+
+**TC-ROU4 (FF-ROU-004) 輸入非陣列時回傳含該 item 的單元素陣列**
+- Given：`arr = null`，`item = "shoulder"`
+- When：呼叫 `toggleItemInArray(null, "shoulder")`
+- Then：guard 回傳 `["shoulder"]`
+
+---
+
+### 十九、`reindexAfterDelete(arr, deletedIndex)` — 刪除後重新排序
+
+**TC-ROU5 (FF-ROU-005) 刪除中間元素後陣列長度減一**
+- Given：`arr = [{ name: "A" }, { name: "B" }, { name: "C" }]`，`deletedIndex = 1`
+- When：呼叫 `reindexAfterDelete(arr, 1)`
+- Then：回傳兩個元素，`{ name: "B" }` 被移除
+
+**TC-ROU6 (FF-ROU-006) 含 order 屬性的元素刪除後 order 重新排序**
+- Given：`arr = [{ name: "A", order: 0 }, { name: "B", order: 1 }, { name: "C", order: 2 }]`，`deletedIndex = 0`
+- When：呼叫 `reindexAfterDelete(arr, 0)`
+- Then：回傳 `[{ name: "B", order: 0 }, { name: "C", order: 1 }]`（order 從 0 重新排列）
+
+**TC-ROU7 (FF-ROU-007) 原始陣列不被修改**
+- Given：`arr = [{ name: "A" }, { name: "B" }]`，`deletedIndex = 0`
+- When：呼叫 `reindexAfterDelete(arr, 0)`
+- Then：原始 `arr` 長度仍為 2（無副作用）
+
+**TC-ROU8 (FF-ROU-008) 輸入非陣列時回傳空陣列**
+- Given：`arr = null`，`deletedIndex = 0`
+- When：呼叫 `reindexAfterDelete(null, 0)`
+- Then：guard 回傳 `[]`
 
 ---
 

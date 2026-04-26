@@ -66,6 +66,7 @@ export default function WorkoutTab({
   coachDays, toggleCoachDay, toggleWorkoutCoach,
   // Today's plan
   todayPlan, setTodayPlan,
+  activeRoutineName,
 }) {
   const MONTHS_ZH = ["一月","二月","三月","四月","五月","六月","七月","八月","九月","十月","十一月","十二月"];
   const toLocalDateStr = (d = new Date()) =>
@@ -396,7 +397,16 @@ export default function WorkoutTab({
             {/* 今日計畫 chips */}
             {todayPlan && todayPlan.length > 0 && (
               <div style={{ marginBottom: "10px" }}>
-                <div style={{ fontSize: "11px", color: "#666", marginBottom: "6px", letterSpacing: "0.06em" }}>今日計畫</div>
+                <div style={{ fontSize: "11px", marginBottom: "6px", letterSpacing: "0.06em", display: "flex", alignItems: "center", gap: "6px" }}>
+                  {activeRoutineName ? (
+                    <>
+                      <span style={{ color: "#666" }}>常規：</span>
+                      <span style={{ color: "#ff9500", background: "rgba(255,106,0,0.12)", border: "1px solid rgba(255,106,0,0.25)", borderRadius: "8px", padding: "1px 8px", fontSize: "10px" }}>{activeRoutineName}</span>
+                    </>
+                  ) : (
+                    <span style={{ color: "#666" }}>今日計畫</span>
+                  )}
+                </div>
                 <div style={{ display: "flex", gap: "8px", overflowX: "auto", WebkitOverflowScrolling: "touch", scrollbarWidth: "none", paddingBottom: "2px" }}>
                   {todayPlan.map(name => {
                     const done = workouts.some(w => w.exercise === name && w.date === todayStr);

@@ -25,6 +25,8 @@ import {
   groupWorkoutsByDate,
   getWeekBounds,
   formatDateLabel,
+  toggleItemInArray,
+  reindexAfterDelete,
 } from "./fitforge.utils.js";
 
 // ─── 一、getWeekStart ──────────────────────────────────────────────────────
@@ -1153,5 +1155,87 @@ describe("calcWeekTrendPct", () => {
     // When: calcWeekTrendPct(5, -1)
     // Then: guard 條件 <= 0 覆蓋負數，回傳 null
     expect(calcWeekTrendPct(5, -1)).toBeNull();
+  });
+});
+
+// ─── 十八、toggleItemInArray ──────────────────────────────────────────────────
+describe("toggleItemInArray()", () => {
+  test("TC-ROU1 (FF-ROU-001) 項目不在陣列中時加入", () => {
+    // Given: 陣列 ["chest", "back"]，item = "legs"
+    const arr = ["chest", "back"];
+    // When: 呼叫 toggleItemInArray(arr, "legs")
+    const result = toggleItemInArray(arr, "legs");
+    // Then: 回傳包含 "legs" 的新陣列
+    expect(result).toEqual(["chest", "back", "legs"]);
+  });
+
+  test("TC-ROU2 (FF-ROU-002) 項目已存在時從陣列移除", () => {
+    // Given: 陣列 ["chest", "back", "legs"]，item = "back"
+    const arr = ["chest", "back", "legs"];
+    // When: 呼叫 toggleItemInArray(arr, "back")
+    const result = toggleItemInArray(arr, "back");
+    // Then: 回傳不含 "back" 的新陣列
+    expect(result).toEqual(["chest", "legs"]);
+  });
+
+  test("TC-ROU3 (FF-ROU-003) 原始陣列不被修改", () => {
+    // Given: 陣列 ["chest"]，item = "back"
+    const arr = ["chest"];
+    // When: 呼叫 toggleItemInArray(arr, "back")
+    toggleItemInArray(arr, "back");
+    // Then: 原陣列長度仍為 1（沒有副作用）
+    expect(arr).toHaveLength(1);
+  });
+
+  test("TC-ROU4 (FF-ROU-004) 輸入非陣列時回傳含該 item 的單元素陣列", () => {
+    // Given: arr = null，item = "shoulder"
+    // When: 呼叫 toggleItemInArray(null, "shoulder")
+    const result = toggleItemInArray(null, "shoulder");
+    // Then: guard 回傳 ["shoulder"]
+    expect(result).toEqual(["shoulder"]);
+  });
+});
+
+// ─── 十九、reindexAfterDelete ─────────────────────────────────────────────────
+describe("reindexAfterDelete()", () => {
+  test("TC-ROU5 (FF-ROU-005) 刪除中間元素後陣列長度減一", () => {
+    // Given: 三個物件組成的陣列，刪除 index 1
+    const arr = [{ name: "A" }, { name: "B" }, { name: "C" }];
+    // When: 呼叫 reindexAfterDelete(arr, 1)
+    const result = reindexAfterDelete(arr, 1);
+    // Then: 回傳兩個元素，"B" 被移除
+    expect(result).toHaveLength(2);
+    expect(result.find(x => x.name === "B")).toBeUndefined();
+  });
+
+  test("TC-ROU6 (FF-ROU-006) 含 order 屬性的元素刪除後 order 重新排序", () => {
+    // Given: 三個有 order 屬性的物件，刪除 index 0
+    const arr = [
+      { name: "A", order: 0 },
+      { name: "B", order: 1 },
+      { name: "C", order: 2 },
+    ];
+    // When: 呼叫 reindexAfterDelete(arr, 0)
+    const result = reindexAfterDelete(arr, 0);
+    // Then: 剩餘兩個元素的 order 重新從 0 排列
+    expect(result[0]).toEqual({ name: "B", order: 0 });
+    expect(result[1]).toEqual({ name: "C", order: 1 });
+  });
+
+  test("TC-ROU7 (FF-ROU-007) 原始陣列不被修改", () => {
+    // Given: 兩個物件組成的陣列
+    const arr = [{ name: "A" }, { name: "B" }];
+    // When: 呼叫 reindexAfterDelete(arr, 0)
+    reindexAfterDelete(arr, 0);
+    // Then: 原始陣列長度仍為 2（無副作用）
+    expect(arr).toHaveLength(2);
+  });
+
+  test("TC-ROU8 (FF-ROU-008) 輸入非陣列時回傳空陣列", () => {
+    // Given: arr = null
+    // When: 呼叫 reindexAfterDelete(null, 0)
+    const result = reindexAfterDelete(null, 0);
+    // Then: guard 回傳 []
+    expect(result).toEqual([]);
   });
 });

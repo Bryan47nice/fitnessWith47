@@ -339,3 +339,40 @@ export function groupWorkoutsByDate(workouts, fromDate, toDate) {
     .sort((a, b) => b[0].localeCompare(a[0]))
     .map(([date, items]) => ({ date, items }));
 }
+
+/**
+ * Toggles an item in an array.
+ * If the item is already present (by value equality), it is removed.
+ * If the item is not present, it is appended.
+ * Returns a new array; the original is not mutated.
+ *
+ * @param {Array}  arr  - source array
+ * @param {*}      item - item to toggle
+ * @returns {Array} new array with item added or removed
+ */
+export function toggleItemInArray(arr, item) {
+  if (!Array.isArray(arr)) return [item];
+  return arr.includes(item)
+    ? arr.filter(x => x !== item)
+    : [...arr, item];
+}
+
+/**
+ * Returns a new array with the element at deletedIndex removed.
+ * Elements with an `order` (or `index`) numeric property are re-numbered
+ * sequentially (0-based) after the deletion.
+ * If the array elements do not have an `order` property, a plain splice
+ * copy is returned.
+ * The original array is not mutated.
+ *
+ * @param {Array}  arr          - source array of objects
+ * @param {number} deletedIndex - 0-based index of the element to remove
+ * @returns {Array} new array without the deleted element, re-indexed
+ */
+export function reindexAfterDelete(arr, deletedIndex) {
+  if (!Array.isArray(arr)) return [];
+  const next = arr.filter((_, i) => i !== deletedIndex);
+  const hasOrder = next.length > 0 && typeof next[0].order === "number";
+  if (!hasOrder) return next;
+  return next.map((item, i) => ({ ...item, order: i }));
+}

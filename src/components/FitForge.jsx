@@ -25,7 +25,7 @@ import BodyTab from "./tabs/BodyTab.jsx";
 import GoalsTab from "./tabs/GoalsTab.jsx";
 import WeeklyDetailModal from "./WeeklyDetailModal.jsx";
 
-const APP_VERSION = "1.19.0";
+const APP_VERSION = "1.20.0";
 const toLocalDateStr = (d = new Date()) =>
   `${d.getFullYear()}-${String(d.getMonth() + 1).padStart(2, "0")}-${String(d.getDate()).padStart(2, "0")}`;
 
@@ -169,6 +169,21 @@ export default function FitForge({ user }) {
   const [showPlanSheet, setShowPlanSheet] = useState(false);
   const [planChecked, setPlanChecked] = useState({}); // { [exerciseName]: boolean }
   const [planFilterTag, setPlanFilterTag] = useState("全部");
+
+  // Routines
+  const [routines, setRoutines] = useState([]);
+  const [showRoutineSheet, setShowRoutineSheet] = useState(false);
+  const [showRoutineEditor, setShowRoutineEditor] = useState(false);
+  const [editingRoutineId, setEditingRoutineId] = useState(null);
+  const [routineName, setRoutineName] = useState("");
+  const [routineExercises, setRoutineExercises] = useState([]); // ordered string[]
+  const [routineEditorTag, setRoutineEditorTag] = useState("伸展");
+  const [routineEditorSearch, setRoutineEditorSearch] = useState("");
+  const [routineSwipeOffsets, setRoutineSwipeOffsets] = useState({}); // { [idx]: px }
+  const [activeRoutineSwipe, setActiveRoutineSwipe] = useState(null);
+  const routineSwipeStartXRef = useRef(0);
+  const routineSwipeStartOffsetRef = useRef(0);
+  const routineDragSrcRef = useRef(null);
 
   const today = toLocalDateStr();
   const todayWorked = workouts.some(w => w.date === today);
@@ -316,6 +331,18 @@ export default function FitForge({ user }) {
     );
     const unsub = onSnapshot(q, snap => {
       setGoals(snap.docs.map(d => ({ id: d.id, ...d.data() })));
+    });
+    return unsub;
+  }, [user.uid]);
+
+  // Subscribe to routines
+  useEffect(() => {
+    const q = query(
+      collection(db, "users", user.uid, "routines"),
+      orderBy("updatedAt", "desc")
+    );
+    const unsub = onSnapshot(q, snap => {
+      setRoutines(snap.docs.map(d => ({ id: d.id, ...d.data() })));
     });
     return unsub;
   }, [user.uid]);
@@ -581,6 +608,71 @@ export default function FitForge({ user }) {
     setEditingExName("");
     setEditingExCategory("自訂");
     setEditingExCustomCategoryInput("");
+  }
+
+  // ── Routine CRUD ──
+  function closeRoutineEditor() {
+    setShowRoutineEditor(false);
+    setEditingRoutineId(null);
+    setRoutineName("");
+    setRoutineExercises([]);
+    setRoutineEditorTag("伸展");
+    setRoutineEditorSearch("");
+    setRoutineSwipeOffsets({});
+    setActiveRoutineSwipe(null);
+  }
+
+  function openNewRoutine() {
+    setEditingRoutineId(null);
+    setRoutineName("");
+    setRoutineExercises([]);
+    setRoutineEditorTag("伸展");
+    setRoutineEditorSearch("");
+    setActiveRoutineSwipe(null);
+    setRoutineSwipeOffsets({});
+    setShowRoutineSheet(false);
+    setShowRoutineEditor(true);
+  }
+
+  function openEditRoutine(r) {
+    setEditingRoutineId(r.id);
+    setRoutineName(r.name);
+    setRoutineExercises([...r.exercises]);
+    setRoutineEditorTag("伸展");
+    setRoutineEditorSearch("");
+    setActiveRoutineSwipe(null);
+    setRoutineSwipeOffsets({});
+    setShowRoutineSheet(false);
+    setShowRoutineEditor(true);
+  }
+
+  async function saveRoutine() {
+    const name = routineName.trim();
+    if (!name || routineExercises.length === 0) return;
+    const payload = { name, exercises: routineExercises, updatedAt: serverTimestamp() };
+    if (editingRoutineId) {
+      await updateDoc(doc(db, "users", user.uid, "routines", editingRoutineId), payload);
+    } else {
+      await addDoc(collection(db, "users", user.uid, "routines"), { ...payload, createdAt: serverTimestamp() });
+    }
+    closeRoutineEditor();
+    setShowRoutineSheet(true);
+  }
+
+  function loadRoutine(r) {
+    setTodayPlan(r.exercises);
+    setShowRoutineSheet(false);
+    setTab("workout");
+    setWDate(today);
+    setExPickerExpanded(true);
+  }
+
+  function toggleRoutineExercise(name) {
+    setRoutineExercises(prev => {
+      const idx = prev.indexOf(name);
+      if (idx === -1) return [...prev, name];
+      return prev.filter((_, i) => i !== idx);
+    });
   }
 
   function addSet() {
@@ -1037,6 +1129,16 @@ export default function FitForge({ user }) {
     pickerDisplayList = recentExercises.map(name => ({ name, category: getCategoryForExercise(name) }));
   }
 
+  // Derived: which routine (if any) matches the current todayPlan
+  const activeRoutineName = (() => {
+    if (!todayPlan || todayPlan.length === 0) return null;
+    const match = routines.find(r =>
+      r.exercises.length === todayPlan.length &&
+      r.exercises.every((e, i) => e === todayPlan[i])
+    );
+    return match ? match.name : null;
+  })();
+
   const tabs = [
     { id: "dashboard", label: "儀表板", icon: "⚡" },
     { id: "workout",   label: "訓練日誌", icon: "📋" },
@@ -1368,6 +1470,7 @@ export default function FitForge({ user }) {
             toggleWorkoutCoach={toggleWorkoutCoach}
             todayPlan={todayPlan}
             setTodayPlan={setTodayPlan}
+            activeRoutineName={activeRoutineName}
           />
         )}
 
@@ -1590,14 +1693,14 @@ export default function FitForge({ user }) {
           <button
             style={{
               position: "fixed", right: "20px", zIndex: 149,
-              bottom: showFabMenu ? "154px" : "28px",
+              bottom: showFabMenu ? "212px" : "28px",
               width: "46px", height: "46px", borderRadius: "50%", border: "1px solid rgba(255,255,255,0.15)",
               background: "rgba(20,20,30,0.92)", backdropFilter: "blur(10px)",
               color: "#fff", fontSize: "20px", cursor: "pointer",
               display: "flex", alignItems: "center", justifyContent: "center",
               fontFamily: "inherit",
               opacity: showFabMenu ? 1 : 0, pointerEvents: showFabMenu ? "auto" : "none",
-              transition: "bottom 0.22s cubic-bezier(0.34,1.56,0.64,1), opacity 0.15s",
+              transition: "bottom 0.25s cubic-bezier(0.34,1.56,0.64,1), opacity 0.15s",
               boxShadow: "0 2px 12px rgba(0,0,0,0.4)",
             }}
             onClick={() => {
@@ -1609,6 +1712,22 @@ export default function FitForge({ user }) {
               setShowPlanSheet(true);
             }}
           >📋</button>
+          {/* Sub-button: 訓練常規 🗂 */}
+          <button
+            style={{
+              position: "fixed", right: "20px", zIndex: 149,
+              bottom: showFabMenu ? "154px" : "28px",
+              width: "46px", height: "46px", borderRadius: "50%", border: "1px solid rgba(255,255,255,0.15)",
+              background: "rgba(20,20,30,0.92)", backdropFilter: "blur(10px)",
+              color: "#fff", fontSize: "20px", cursor: "pointer",
+              display: "flex", alignItems: "center", justifyContent: "center",
+              fontFamily: "inherit",
+              opacity: showFabMenu ? 1 : 0, pointerEvents: showFabMenu ? "auto" : "none",
+              transition: "bottom 0.19s cubic-bezier(0.34,1.56,0.64,1), opacity 0.15s",
+              boxShadow: "0 2px 12px rgba(0,0,0,0.4)",
+            }}
+            onClick={() => { setShowFabMenu(false); setShowRoutineSheet(true); }}
+          >🗂</button>
           {/* Sub-button: 直接記錄 ✏️ */}
           <button
             style={{
@@ -1779,6 +1898,323 @@ export default function FitForge({ user }) {
                 </button>
               </div>
             )}
+          </div>
+        );
+      })(),
+      document.body
+    )}
+
+    {/* ── Routine List Sheet ── */}
+    {showRoutineSheet && createPortal(
+      <div style={{ position: "fixed", inset: 0, zIndex: 9998, background: "rgba(10,10,18,0.98)", backdropFilter: "blur(12px)", display: "flex", flexDirection: "column" }}>
+        {/* Header */}
+        <div style={{ display: "flex", alignItems: "center", justifyContent: "space-between", padding: "16px 20px 12px", borderBottom: "1px solid rgba(255,255,255,0.07)", flexShrink: 0 }}>
+          <button onClick={() => setShowRoutineSheet(false)} style={{ background: "none", border: "none", color: "#888", fontSize: "22px", cursor: "pointer", padding: "4px 8px 4px 0", fontFamily: "inherit" }}>←</button>
+          <div style={{ fontSize: "17px", fontWeight: 800, color: "#e8e4dc" }}>我的訓練常規</div>
+          <button
+            onClick={openNewRoutine}
+            style={{ width: "32px", height: "32px", borderRadius: "50%", border: "1px solid rgba(255,106,0,0.4)", background: "rgba(255,106,0,0.15)", color: "#ff9500", fontSize: "20px", display: "flex", alignItems: "center", justifyContent: "center", cursor: "pointer", fontFamily: "inherit" }}
+          >＋</button>
+        </div>
+        {/* Body */}
+        <div style={{ flex: 1, overflowY: "auto", WebkitOverflowScrolling: "touch", padding: "14px 20px", display: "flex", flexDirection: "column", gap: "10px" }}>
+          {routines.length === 0 ? (
+            <div style={{ flex: 1, display: "flex", flexDirection: "column", alignItems: "center", justifyContent: "center", gap: "14px", padding: "60px 20px" }}>
+              <div style={{ fontSize: "48px", opacity: 0.35 }}>🗂</div>
+              <div style={{ color: "#555", fontSize: "14px", textAlign: "center", lineHeight: 1.7 }}>還沒有儲存的常規<br/>建立後一鍵載入動作清單</div>
+              <button
+                onClick={openNewRoutine}
+                style={{ padding: "10px 28px", borderRadius: "24px", border: "none", background: "linear-gradient(135deg,#ff6a00,#ff9500)", color: "#fff", fontSize: "14px", fontWeight: 700, cursor: "pointer", fontFamily: "inherit", marginTop: "6px" }}
+              >＋ 建立第一個常規</button>
+            </div>
+          ) : routines.map(r => (
+            <div key={r.id} style={{ borderRadius: "14px", border: "1px solid rgba(255,255,255,0.08)", background: "rgba(255,255,255,0.03)", padding: "14px 16px" }}>
+              <div style={{ display: "flex", alignItems: "center", justifyContent: "space-between", marginBottom: "6px" }}>
+                <div style={{ fontSize: "15px", fontWeight: 700, color: "#e8e4dc", display: "flex", alignItems: "center", gap: "8px" }}>
+                  <span>🗂</span>{r.name}
+                </div>
+                <button
+                  onClick={() => loadRoutine(r)}
+                  style={{ padding: "5px 16px", borderRadius: "20px", border: "none", background: "linear-gradient(135deg,#ff6a00,#ff9500)", color: "#fff", fontSize: "12px", fontWeight: 700, cursor: "pointer", fontFamily: "inherit", flexShrink: 0 }}
+                >載入</button>
+              </div>
+              <div style={{ fontSize: "12px", color: "#666", marginBottom: "8px", overflow: "hidden", whiteSpace: "nowrap", textOverflow: "ellipsis" }}>
+                {r.exercises.slice(0, 5).join("、")}{r.exercises.length > 5 ? "…" : ""}
+              </div>
+              <div style={{ display: "flex", alignItems: "center", gap: "8px" }}>
+                <span style={{ fontSize: "11px", color: "#444" }}>{r.exercises.length} 個動作</span>
+                <div style={{ marginLeft: "auto", display: "flex", gap: "6px" }}>
+                  <button onClick={() => openEditRoutine(r)} style={{ padding: "3px 10px", borderRadius: "8px", border: "1px solid rgba(255,255,255,0.1)", background: "rgba(255,255,255,0.04)", color: "#888", fontSize: "11px", cursor: "pointer", fontFamily: "inherit" }}>✏️ 編輯</button>
+                  <button
+                    onClick={() => setConfirmDialog({ message: `確定刪除「${r.name}」？`, onConfirm: () => { deleteDoc(doc(db, "users", user.uid, "routines", r.id)); setConfirmDialog(null); } })}
+                    style={{ padding: "3px 10px", borderRadius: "8px", border: "1px solid rgba(220,0,60,0.2)", background: "rgba(220,0,60,0.06)", color: "#e03", fontSize: "11px", cursor: "pointer", fontFamily: "inherit" }}
+                  >🗑 刪除</button>
+                </div>
+              </div>
+            </div>
+          ))}
+        </div>
+      </div>,
+      document.body
+    )}
+
+    {/* ── Routine Editor Sheet ── */}
+    {showRoutineEditor && createPortal(
+      (() => {
+        // Derive editor's picker list (same logic as main picker, but driven by routineEditorTag/Search)
+        let editorPickerList;
+        if (routineEditorSearch.trim()) {
+          const q = routineEditorSearch.trim().toLowerCase();
+          editorPickerList = [...allPresetFlat, ...allCustomFlat].filter(e => e.name.toLowerCase().includes(q));
+        } else if (routineEditorTag === "自訂") {
+          editorPickerList = allCustomFlat;
+        } else if (routineEditorTag) {
+          const builtInCat = exerciseCategories.find(c => c.label === routineEditorTag);
+          const builtInItems = builtInCat ? builtInCat.exercises.map(e => ({ name: e, category: routineEditorTag })) : [];
+          const customInCat = allCustomFlat.filter(e => e.category === routineEditorTag);
+          editorPickerList = [...builtInItems, ...customInCat];
+        } else {
+          editorPickerList = allPresetFlat;
+        }
+
+        const canSave = routineName.trim().length > 0 && routineExercises.length > 0;
+
+        return (
+          <div style={{ position: "fixed", inset: 0, zIndex: 9999, background: "rgba(10,10,18,0.99)", backdropFilter: "blur(12px)", display: "flex", flexDirection: "column" }}>
+            {/* Header */}
+            <div style={{ display: "flex", alignItems: "center", justifyContent: "space-between", padding: "16px 20px 12px", borderBottom: "1px solid rgba(255,255,255,0.07)", flexShrink: 0 }}>
+              <button onClick={closeRoutineEditor} style={{ background: "none", border: "none", color: "#888", fontSize: "22px", cursor: "pointer", padding: "4px 8px 4px 0", fontFamily: "inherit" }}>←</button>
+              <div style={{ fontSize: "17px", fontWeight: 800, color: "#e8e4dc" }}>
+                {editingRoutineId ? `編輯「${routines.find(r => r.id === editingRoutineId)?.name || ""}」` : "新增常規"}
+              </div>
+              <div style={{ width: "40px" }} />
+            </div>
+
+            {/* Scrollable body */}
+            <div style={{ flex: 1, overflowY: "auto", WebkitOverflowScrolling: "touch", display: "flex", flexDirection: "column" }}>
+              {/* Name input */}
+              <input
+                value={routineName}
+                onChange={e => setRoutineName(e.target.value)}
+                maxLength={40}
+                placeholder="常規名稱（例：晨間伸展）"
+                style={{ margin: "14px 20px 0", padding: "12px 14px", borderRadius: "12px", border: `1px solid ${routineName.trim() ? "rgba(255,106,0,0.5)" : "rgba(255,255,255,0.12)"}`, background: "rgba(255,255,255,0.05)", color: "#fff", fontSize: "15px", fontFamily: "inherit", outline: "none" }}
+              />
+
+              {/* Selected exercises */}
+              <div style={{ padding: "14px 20px 0", flexShrink: 0 }}>
+                <div style={{ fontSize: "11px", color: "#555", letterSpacing: "0.08em", textTransform: "uppercase", marginBottom: "8px" }}>
+                  已選動作（{routineExercises.length} 個）
+                </div>
+                {routineExercises.length === 0 ? (
+                  <div style={{ color: "#3a3a4a", fontSize: "13px", fontStyle: "italic", padding: "6px 0 8px" }}>點選下方動作加入常規</div>
+                ) : (
+                  <div data-routine-sortable="true" style={{ display: "flex", flexDirection: "column", gap: "5px" }}>
+                    {routineExercises.map((name, idx) => {
+                      const swipeX = routineSwipeOffsets[idx] || 0;
+                      return (
+                        <div key={`${name}-${idx}`} data-routine-row="true" style={{ position: "relative", borderRadius: "10px", overflow: "hidden" }}>
+                          {/* Red delete bg */}
+                          <div
+                            style={{ position: "absolute", right: 0, top: 0, bottom: 0, width: "72px", background: "#c0182f", display: "flex", alignItems: "center", justifyContent: "center", borderRadius: "10px", cursor: "pointer", fontSize: "12px", fontWeight: 700, color: "#fff", gap: "3px" }}
+                            onClick={() => {
+                              setRoutineExercises(prev => prev.filter((_, i) => i !== idx));
+                              setRoutineSwipeOffsets(prev => {
+                                const n = {};
+                                Object.keys(prev).forEach(k => {
+                                  const ki = parseInt(k);
+                                  if (ki < idx) n[k] = prev[k];
+                                  else if (ki > idx) n[ki - 1] = prev[k];
+                                });
+                                return n;
+                              });
+                            }}
+                          >🗑 刪除</div>
+                          {/* Swipeable row */}
+                          <div
+                            style={{ display: "flex", alignItems: "center", gap: "10px", padding: "10px 12px", borderRadius: "10px", background: "rgba(30,30,42,1)", border: "1px solid rgba(255,255,255,0.07)", transform: `translateX(${swipeX}px)`, transition: activeRoutineSwipe === idx ? "none" : "transform 0.22s cubic-bezier(0.25,1,0.5,1)", userSelect: "none" }}
+                            onTouchStart={e => {
+                              if (e.target.closest("[data-drag-handle]")) return;
+                              routineSwipeStartXRef.current = e.touches[0].clientX;
+                              routineSwipeStartOffsetRef.current = swipeX;
+                              setActiveRoutineSwipe(idx);
+                              setRoutineSwipeOffsets(prev => {
+                                const n = {};
+                                Object.keys(prev).forEach(k => { if (parseInt(k) !== idx) n[k] = 0; });
+                                n[idx] = swipeX;
+                                return n;
+                              });
+                            }}
+                            onTouchMove={e => {
+                              if (e.target.closest("[data-drag-handle]")) return;
+                              const dx = e.touches[0].clientX - routineSwipeStartXRef.current;
+                              const newX = Math.min(0, Math.max(-72, routineSwipeStartOffsetRef.current + dx));
+                              setRoutineSwipeOffsets(prev => ({ ...prev, [idx]: newX }));
+                            }}
+                            onTouchEnd={() => {
+                              setRoutineSwipeOffsets(prev => ({ ...prev, [idx]: (prev[idx] || 0) < -36 ? -72 : 0 }));
+                              setActiveRoutineSwipe(null);
+                            }}
+                            onMouseDown={e => {
+                              if (e.target.closest("[data-drag-handle]")) return;
+                              const startX = e.clientX;
+                              const startOffset = swipeX;
+                              const onMove = ev => {
+                                const dx = ev.clientX - startX;
+                                setRoutineSwipeOffsets(prev => ({ ...prev, [idx]: Math.min(0, Math.max(-72, startOffset + dx)) }));
+                              };
+                              const onUp = () => {
+                                setRoutineSwipeOffsets(prev => ({ ...prev, [idx]: (prev[idx] || 0) < -36 ? -72 : 0 }));
+                                setActiveRoutineSwipe(null);
+                                window.removeEventListener("mousemove", onMove);
+                                window.removeEventListener("mouseup", onUp);
+                              };
+                              setActiveRoutineSwipe(idx);
+                              setRoutineSwipeOffsets(prev => {
+                                const n = { ...prev };
+                                Object.keys(n).forEach(k => { if (parseInt(k) !== idx) n[k] = 0; });
+                                return n;
+                              });
+                              window.addEventListener("mousemove", onMove);
+                              window.addEventListener("mouseup", onUp);
+                            }}
+                          >
+                            <div style={{ flex: 1, fontSize: "14px", color: "#e8e4dc" }}>{name}</div>
+                            {/* Drag handle (right side) */}
+                            <div
+                              data-drag-handle="true"
+                              style={{ display: "flex", flexDirection: "column", gap: "3px", padding: "6px 4px", opacity: 0.35, flexShrink: 0, cursor: "grab", touchAction: "none" }}
+                              onMouseDown={e => {
+                                e.stopPropagation();
+                                setRoutineSwipeOffsets(prev => ({ ...prev, [idx]: 0 }));
+                                routineDragSrcRef.current = idx;
+                                const container = e.currentTarget.closest("[data-routine-sortable]");
+                                if (!container) return;
+                                const getRows = () => [...container.querySelectorAll("[data-routine-row]")];
+                                const onMove = ev => {
+                                  const src = routineDragSrcRef.current;
+                                  if (src === null) return;
+                                  getRows().forEach((row, ri) => {
+                                    if (ri === src) return;
+                                    const rect = row.getBoundingClientRect();
+                                    if (ev.clientY >= rect.top && ev.clientY <= rect.bottom) {
+                                      const from = src;
+                                      routineDragSrcRef.current = ri;
+                                      setRoutineExercises(prev => {
+                                        const arr = [...prev];
+                                        const [item] = arr.splice(from, 1);
+                                        arr.splice(ri, 0, item);
+                                        return arr;
+                                      });
+                                    }
+                                  });
+                                };
+                                const onUp = () => {
+                                  routineDragSrcRef.current = null;
+                                  window.removeEventListener("mousemove", onMove);
+                                  window.removeEventListener("mouseup", onUp);
+                                };
+                                window.addEventListener("mousemove", onMove);
+                                window.addEventListener("mouseup", onUp);
+                              }}
+                              onTouchStart={e => {
+                                e.stopPropagation();
+                                e.preventDefault();
+                                setRoutineSwipeOffsets(prev => ({ ...prev, [idx]: 0 }));
+                                routineDragSrcRef.current = idx;
+                                const container = e.currentTarget.closest("[data-routine-sortable]");
+                                const getRows = () => container ? [...container.querySelectorAll("[data-routine-row]")] : [];
+                                const handleMove = ev => {
+                                  ev.preventDefault();
+                                  const src = routineDragSrcRef.current;
+                                  if (src === null) return;
+                                  const touch = ev.touches[0];
+                                  getRows().forEach((row, ri) => {
+                                    if (ri === src) return;
+                                    const rect = row.getBoundingClientRect();
+                                    if (touch.clientY >= rect.top && touch.clientY <= rect.bottom) {
+                                      const from = src;
+                                      routineDragSrcRef.current = ri;
+                                      setRoutineExercises(prev => {
+                                        const arr = [...prev];
+                                        const [item] = arr.splice(from, 1);
+                                        arr.splice(ri, 0, item);
+                                        return arr;
+                                      });
+                                    }
+                                  });
+                                };
+                                const handleEnd = () => {
+                                  routineDragSrcRef.current = null;
+                                  document.removeEventListener("touchmove", handleMove);
+                                  document.removeEventListener("touchend", handleEnd);
+                                };
+                                document.addEventListener("touchmove", handleMove, { passive: false });
+                                document.addEventListener("touchend", handleEnd);
+                              }}
+                            >
+                              <span style={{ display: "block", width: "18px", height: "2px", background: "#aaa", borderRadius: "2px" }} />
+                              <span style={{ display: "block", width: "18px", height: "2px", background: "#aaa", borderRadius: "2px" }} />
+                              <span style={{ display: "block", width: "18px", height: "2px", background: "#aaa", borderRadius: "2px" }} />
+                            </div>
+                          </div>
+                        </div>
+                      );
+                    })}
+                  </div>
+                )}
+              </div>
+
+              {/* Add exercises section */}
+              <div style={{ padding: "16px 20px 0", flexShrink: 0 }}>
+                <div style={{ fontSize: "11px", color: "#555", letterSpacing: "0.08em", textTransform: "uppercase", marginBottom: "8px" }}>新增動作</div>
+                <input
+                  value={routineEditorSearch}
+                  onChange={e => setRoutineEditorSearch(e.target.value)}
+                  placeholder="🔍 搜尋動作"
+                  style={{ width: "100%", padding: "9px 12px", borderRadius: "10px", border: "1px solid rgba(255,255,255,0.1)", background: "rgba(255,255,255,0.05)", color: "#fff", fontSize: "13px", fontFamily: "inherit", outline: "none", marginBottom: "8px" }}
+                />
+                {/* Category tags */}
+                <div style={{ display: "flex", gap: "6px", overflowX: "auto", WebkitOverflowScrolling: "touch", scrollbarWidth: "none", paddingBottom: "4px", marginBottom: "6px" }}>
+                  {[...exerciseCategories.map(c => c.label), "自訂"].map(tag => (
+                    <button
+                      key={tag}
+                      onClick={() => { setRoutineEditorTag(tag); setRoutineEditorSearch(""); }}
+                      style={{ flexShrink: 0, padding: "5px 13px", borderRadius: "16px", border: "none", background: routineEditorTag === tag && !routineEditorSearch ? "#ff6a00" : "rgba(255,255,255,0.07)", color: routineEditorTag === tag && !routineEditorSearch ? "#fff" : "#888", fontSize: "12px", fontWeight: routineEditorTag === tag && !routineEditorSearch ? 700 : 400, cursor: "pointer", fontFamily: "inherit" }}
+                    >{tag}</button>
+                  ))}
+                </div>
+              </div>
+
+              {/* Exercise list */}
+              <div style={{ flex: 1, overflowY: "auto", WebkitOverflowScrolling: "touch", padding: "0 20px 120px" }}>
+                {editorPickerList.map((ex, i) => {
+                  const inRoutine = routineExercises.includes(ex.name);
+                  return (
+                    <div
+                      key={i}
+                      onClick={() => toggleRoutineExercise(ex.name)}
+                      style={{ display: "flex", alignItems: "center", gap: "10px", padding: "10px 12px", borderRadius: "10px", cursor: "pointer", background: inRoutine ? "rgba(80,220,140,0.07)" : "transparent", transition: "background 0.1s" }}
+                    >
+                      <span style={{ fontSize: "10px", padding: "2px 7px", borderRadius: "6px", background: "rgba(255,255,255,0.07)", color: "#666", whiteSpace: "nowrap", flexShrink: 0 }}>{ex.category}</span>
+                      <span style={{ flex: 1, fontSize: "14px", color: inRoutine ? "#50dc8c" : "#ccc" }}>{ex.name}</span>
+                      {inRoutine && <span style={{ width: "20px", height: "20px", borderRadius: "50%", border: "1.5px solid rgba(80,220,140,0.6)", background: "rgba(80,220,140,0.15)", color: "#50dc8c", fontSize: "11px", display: "flex", alignItems: "center", justifyContent: "center", flexShrink: 0 }}>✓</span>}
+                    </div>
+                  );
+                })}
+              </div>
+            </div>
+
+            {/* Footer save button */}
+            <div style={{ padding: "12px 20px 28px", borderTop: "1px solid rgba(255,255,255,0.06)", background: "rgba(10,10,18,0.95)", flexShrink: 0 }}>
+              <button
+                onClick={saveRoutine}
+                disabled={!canSave}
+                style={{ width: "100%", padding: "14px", borderRadius: "14px", border: "none", background: canSave ? "linear-gradient(135deg,#ff6a00,#ff9500)" : "rgba(255,255,255,0.07)", color: canSave ? "#fff" : "#444", fontSize: "15px", fontWeight: 700, cursor: canSave ? "pointer" : "default", fontFamily: "inherit", transition: "background 0.2s, color 0.2s" }}
+              >
+                {canSave ? `儲存常規（${routineExercises.length} 個動作）` : "請輸入名稱並選擇動作"}
+              </button>
+            </div>
           </div>
         );
       })(),
@@ -2066,15 +2502,29 @@ export default function FitForge({ user }) {
               版本更新記錄
             </div>
 
-            {/* v1.19.0 */}
+            {/* v1.20.0 */}
             <div style={{ marginBottom: "24px" }}>
               <div style={{ display: "flex", alignItems: "center", gap: "10px", marginBottom: "10px" }}>
-                <span style={{ fontSize: "17px", fontWeight: 900, color: "#ffd700" }}>v1.19.0</span>
+                <span style={{ fontSize: "17px", fontWeight: 900, color: "#ffd700" }}>v1.20.0</span>
                 <span style={{
                   fontSize: "11px", fontWeight: 800, color: "#ff6a00",
                   background: "rgba(255,106,0,0.15)", border: "1px solid rgba(255,106,0,0.3)",
                   borderRadius: "6px", padding: "2px 7px", letterSpacing: "0.05em",
                 }}>最新</span>
+                <span style={{ fontSize: "12px", color: "#555", marginLeft: "auto" }}>2026-04-26</span>
+              </div>
+              <div style={{ display: "flex", flexDirection: "column", gap: "7px" }}>
+                <div style={{ fontSize: "14px", color: "#c8c4bc", display: "flex", gap: "8px" }}>
+                  <span style={{ color: "#ffd700", flexShrink: 0 }}>✨</span>
+                  <span>自訂訓練常規：建立、儲存、一鍵載入有序動作清單；動作可左滑刪除、拖曳排序</span>
+                </div>
+              </div>
+            </div>
+
+            {/* v1.19.0 */}
+            <div style={{ marginBottom: "24px" }}>
+              <div style={{ display: "flex", alignItems: "center", gap: "10px", marginBottom: "10px" }}>
+                <span style={{ fontSize: "17px", fontWeight: 900, color: "#e8e4dc" }}>v1.19.0</span>
                 <span style={{ fontSize: "12px", color: "#555", marginLeft: "auto" }}>2026-04-26</span>
               </div>
               <div style={{ display: "flex", flexDirection: "column", gap: "7px" }}>
