@@ -6,8 +6,27 @@ export const exerciseCategories = [
   { label: "手臂", exercises: ["二頭彎舉", "三頭下壓", "錘式彎舉", "牧師椅彎舉", "過頭三頭伸展"] },
   { label: "核心", exercises: ["棒式", "捲腹", "俄羅斯轉體"] },
   { label: "有氧", exercises: ["跑步機", "慢跑", "室內健走", "橢圓機", "樓梯機", "騎車", "跳繩", "游泳", "划船機"] },
-  { label: "伸展", exercises: ["鳥狗式", "繩子伸展", "棍子伸展", "貓牛式", "世界最好的伸展", "外旋", "死蟲式", "熊爬式"] },
+  { label: "伸展", exercises: ["鳥狗式", "繩子前後伸展", "繩子8字型伸展", "棍子伸展", "貓牛式", "世界最好的伸展", "外旋", "死蟲式", "熊爬式"] },
 ];
 
 export const INCLINE_EXERCISES = ["跑步機", "慢跑", "室內健走", "橢圓機"];
 export const RUNNING_EXERCISES = ["跑步機", "慢跑", "室內健走"];
+
+/**
+ * Default exercise configs for stretch exercises.
+ * unit: "下" | "趟" | "秒" | "距離"
+ * showWeight: always false for stretch
+ * defaultReps: the value for each set's reps field
+ * defaultSets: number of sets to pre-create
+ */
+export const STRETCH_DEFAULTS = {
+  "繩子前後伸展":   { unit: "趟",   showWeight: false, defaultReps: "10",     defaultSets: 3 },
+  "繩子8字型伸展":  { unit: "趟",   showWeight: false, defaultReps: "10",     defaultSets: 3 },
+  "棍子伸展":       { unit: "秒",   showWeight: false, defaultReps: "30",     defaultSets: 4 },
+  "貓牛式":         { unit: "下",   showWeight: false, defaultReps: "10",     defaultSets: 1 },
+  "鳥狗式":         { unit: "下",   showWeight: false, defaultReps: "10",     defaultSets: 4 },
+  "世界最好的伸展": { unit: "下",   showWeight: false, defaultReps: "10",     defaultSets: 4 },
+  "外旋":           { unit: "下",   showWeight: false, defaultReps: "10",     defaultSets: 4 },
+  "死蟲式":         { unit: "下",   showWeight: false, defaultReps: "10",     defaultSets: 4 },
+  "熊爬式":         { unit: "距離", showWeight: false, defaultReps: "2瑜珈墊", defaultSets: 4 },
+};

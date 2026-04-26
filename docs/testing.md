@@ -32,6 +32,7 @@
 | `toMinPerKm(kmh)` | 將 km/h 速度轉換為配速字串（"MM:SS /km"），無效時回傳 null | 無 |
 | `toggleItemInArray(arr, item)` | 切換陣列中的項目（不存在則加入，存在則移除），回傳新陣列 | 無 |
 | `reindexAfterDelete(arr, deletedIndex)` | 刪除指定 index 元素並重新排序 `order` 屬性（若有），回傳新陣列 | 無 |
+| `makeDefaultExerciseConfig(name, customExercises, exerciseCats, stretchDefaults)` | 依動作分類建立預設 ExerciseConfig（伸展/有氧/重訓各有不同預設值） | 無 |
 
 > 所有函式從 `FitForge.jsx` 抽取後，`FitForge.jsx` 改為 import 使用，行為不變。
 
@@ -612,6 +613,50 @@
 - Given：`arr = null`，`item = "shoulder"`
 - When：呼叫 `toggleItemInArray(null, "shoulder")`
 - Then：guard 回傳 `["shoulder"]`
+
+---
+
+### 十九（甲）、`makeDefaultExerciseConfig(name, customExercises, exerciseCats, stretchDefaults)` — 動作預設參數建立
+
+**TC-DC1 重訓動作回傳 unit=下、showWeight=true、3組×10下**
+- Given：動作「臥推」屬於「胸」分類（來自 exerciseCats）
+- When：呼叫 `makeDefaultExerciseConfig("臥推", [], MOCK_EXERCISE_CATS, MOCK_STRETCH_DEFAULTS)`
+- Then：`unit = "下"`、`showWeight = true`、`sets` 長度為 3，每組 `{ reps: "10", weight: "" }`
+
+**TC-DC2 有氧動作回傳 unit=下、showWeight=false、空 sets**
+- Given：動作「跑步機」屬於「有氧」分類
+- When：呼叫 `makeDefaultExerciseConfig("跑步機", [], MOCK_EXERCISE_CATS, MOCK_STRETCH_DEFAULTS)`
+- Then：`showWeight = false`、`sets` 長度為 0（有氧交由 WorkoutTab 自行處理）
+
+**TC-DC3 伸展動作套用 STRETCH_DEFAULTS（繩子前後伸展）**
+- Given：動作「繩子前後伸展」在 exerciseCats 的「伸展」分類中，且在 STRETCH_DEFAULTS 有定義（unit="趟"、defaultReps="10"、defaultSets=3）
+- When：呼叫 `makeDefaultExerciseConfig("繩子前後伸展", [], MOCK_EXERCISE_CATS, MOCK_STRETCH_DEFAULTS)`
+- Then：`unit = "趟"`、`showWeight = false`、`sets` 長度 3，每組 `{ reps: "10", weight: "" }`
+
+**TC-DC4 距離單位伸展動作（熊爬式）defaultReps 為文字描述**
+- Given：動作「熊爬式」unit = "距離"，defaultReps = "2瑜珈墊"，defaultSets = 4
+- When：呼叫 `makeDefaultExerciseConfig("熊爬式", [], MOCK_EXERCISE_CATS, MOCK_STRETCH_DEFAULTS)`
+- Then：`unit = "距離"`、`sets` 長度 4，每組 `reps = "2瑜珈墊"`
+
+**TC-DC5 伸展分類動作但不在 STRETCH_DEFAULTS 時使用 fallback（3組×5趟）**
+- Given：動作「貓牛式」在 exerciseCats 的「伸展」分類中，但不在 STRETCH_DEFAULTS 裡
+- When：呼叫 `makeDefaultExerciseConfig("貓牛式", [], MOCK_EXERCISE_CATS, MOCK_STRETCH_DEFAULTS)`
+- Then：fallback 值 `unit = "趟"`、`showWeight = false`、`sets` 長度 3，每組 `{ reps: "5", weight: "" }`
+
+**TC-DC6 自訂動作分類為「伸展」時走伸展路徑（含 STRETCH_DEFAULTS 查找）**
+- Given：`customExercises = [{ name: "自訂伸展", category: "伸展" }]`，且 stretchDefaults 含對應定義（unit="秒"、defaultReps="20"、defaultSets=2）；exerciseCats 不含此動作
+- When：呼叫 `makeDefaultExerciseConfig("自訂伸展", customExercises, [], stretchDefaults)`
+- Then：`unit = "秒"`、`showWeight = false`、`sets` 長度 2，每組 `{ reps: "20", weight: "" }`
+
+**TC-DC7 exerciseCats 為空陣列時，不在自訂清單的動作回傳重訓預設**
+- Given：`exerciseCats = []`，`customExercises = []`，動作名稱「未知動作」找不到任何分類
+- When：呼叫 `makeDefaultExerciseConfig("未知動作", [], [], {})`
+- Then：回傳重訓預設（`unit = "下"`、`showWeight = true`、`sets` 長度 3）
+
+**TC-DC8 自訂動作無 category 欄位時 category fallback 為「自訂」，回傳重訓預設**
+- Given：`customExercises = [{ name: "無分類動作" }]`（無 category 欄位），exerciseCats 不含此動作
+- When：呼叫 `makeDefaultExerciseConfig("無分類動作", customExercises, [], {})`
+- Then：category 被視為「自訂」，不觸發伸展/有氧路徑，回傳重訓預設（`unit = "下"`、`showWeight = true`、`sets` 長度 3、`name = "無分類動作"`）
 
 ---
 

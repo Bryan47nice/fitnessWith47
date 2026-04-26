@@ -358,6 +358,67 @@ export function toggleItemInArray(arr, item) {
 }
 
 /**
+ * Creates a default ExerciseConfig for a given exercise name,
+ * based on its category (stretch → STRETCH_DEFAULTS, cardio → empty, strength → standard).
+ *
+ * @param {string} name                  - exercise name
+ * @param {Array}  customExercises       - array of user custom exercise documents { name, category }
+ * @param {Array}  exerciseCats          - exerciseCategories array from constants
+ * @param {Object} stretchDefaults       - STRETCH_DEFAULTS map from constants
+ * @returns {Object} ExerciseConfig { name, unit, showWeight, sets[] }
+ */
+export function makeDefaultExerciseConfig(name, customExercises = [], exerciseCats = [], stretchDefaults = {}) {
+  // Determine category
+  let category = "";
+  for (const cat of exerciseCats) {
+    if (Array.isArray(cat.exercises) && cat.exercises.includes(name)) {
+      category = cat.label;
+      break;
+    }
+  }
+  if (!category && Array.isArray(customExercises)) {
+    const custom = customExercises.find(e => e.name === name);
+    if (custom) category = custom.category || "自訂";
+  }
+
+  if (category === "伸展") {
+    const def = stretchDefaults[name];
+    if (def) {
+      return {
+        name,
+        unit: def.unit,
+        showWeight: false,
+        sets: Array.from({ length: def.defaultSets }, () => ({ reps: def.defaultReps, weight: "" })),
+      };
+    }
+    // Unknown stretch: sensible fallback
+    return {
+      name,
+      unit: "趟",
+      showWeight: false,
+      sets: [{ reps: "5", weight: "" }, { reps: "5", weight: "" }, { reps: "5", weight: "" }],
+    };
+  }
+
+  if (category === "有氧") {
+    // Cardio handled separately in WorkoutTab; provide empty config
+    return { name, unit: "下", showWeight: false, sets: [] };
+  }
+
+  // Default: strength training
+  return {
+    name,
+    unit: "下",
+    showWeight: true,
+    sets: [
+      { reps: "10", weight: "" },
+      { reps: "10", weight: "" },
+      { reps: "10", weight: "" },
+    ],
+  };
+}
+
+/**
  * Returns a new array with the element at deletedIndex removed.
  * Elements with an `order` (or `index`) numeric property are re-numbered
  * sequentially (0-based) after the deletion.

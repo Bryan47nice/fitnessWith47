@@ -67,6 +67,8 @@ export default function WorkoutTab({
   // Today's plan
   todayPlan, setTodayPlan,
   activeRoutineName,
+  // Routine exercise defaults
+  routineExDefaults,
 }) {
   const MONTHS_ZH = ["一月","二月","三月","四月","五月","六月","七月","八月","九月","十月","十一月","十二月"];
   const toLocalDateStr = (d = new Date()) =>
@@ -203,6 +205,11 @@ export default function WorkoutTab({
   }, [historyExFilter]);
 
   const cardio = (name) => isCardio(name, customExercises);
+
+  // Derive unit label and weight visibility from routine defaults (if available)
+  const exDefault = routineExDefaults?.[wExercise];
+  const unitLabel = exDefault?.unit ?? "下";
+  const showWeightField = exDefault ? exDefault.showWeight : true;
 
   return (
     <>
@@ -413,7 +420,15 @@ export default function WorkoutTab({
                     return (
                       <button
                         key={name}
-                        onClick={() => setWExercise(name)}
+                        onClick={() => {
+                          const lastSets = getLastSessionSets(name, workouts);
+                          if (lastSets) {
+                            setWSets(lastSets);
+                          } else if (routineExDefaults?.[name]?.sets?.length > 0) {
+                            setWSets(routineExDefaults[name].sets.map(s => ({ ...s })));
+                          }
+                          setWExercise(name);
+                        }}
                         style={{
                           flexShrink: 0, padding: "5px 12px", borderRadius: "20px", cursor: "pointer",
                           fontFamily: "inherit", fontSize: "13px",
@@ -465,7 +480,11 @@ export default function WorkoutTab({
                   }
                   if (nextSets.length === 0) {
                     const lastSets = getLastSessionSets(ex.name, workouts);
-                    if (lastSets) nextSets = lastSets;
+                    if (lastSets) {
+                      nextSets = lastSets;
+                    } else if (routineExDefaults?.[ex.name]?.sets?.length > 0) {
+                      nextSets = routineExDefaults[ex.name].sets.map(s => ({ ...s }));
+                    }
                   }
                   setWSets(nextSets);
                   setWExercise(ex.name);
@@ -737,18 +756,30 @@ export default function WorkoutTab({
             <>
               {/* 重訓模式：快速新增列 */}
               <div style={{ display: "flex", gap: "4px", alignItems: "center", marginBottom: "8px" }}>
-                <input
-                  type="number" placeholder="次數" value={batchReps}
-                  onChange={e => setBatchReps(e.target.value)}
-                  style={{ ...styles.setInput, flex: 1 }}
-                />
-                <span style={{ color: "#666", fontSize: "11px", flexShrink: 0 }}>下 ×</span>
-                <input
-                  type="number" placeholder="重量" value={batchWeight}
-                  onChange={e => setBatchWeight(e.target.value)}
-                  style={{ ...styles.setInput, flex: 1 }}
-                />
-                <span style={{ color: "#666", fontSize: "11px", flexShrink: 0 }}>kg ×</span>
+                {unitLabel === "距離" ? (
+                  <input
+                    type="text" placeholder="距離" value={batchReps}
+                    onChange={e => setBatchReps(e.target.value)}
+                    style={{ ...styles.setInput, flex: 1 }}
+                  />
+                ) : (
+                  <input
+                    type="number" placeholder={unitLabel === "秒" ? "秒數" : "次數"} value={batchReps}
+                    onChange={e => setBatchReps(e.target.value)}
+                    style={{ ...styles.setInput, flex: 1 }}
+                  />
+                )}
+                <span style={{ color: "#666", fontSize: "11px", flexShrink: 0 }}>{unitLabel} ×</span>
+                {showWeightField && (
+                  <>
+                    <input
+                      type="number" placeholder="重量" value={batchWeight}
+                      onChange={e => setBatchWeight(e.target.value)}
+                      style={{ ...styles.setInput, flex: 1 }}
+                    />
+                    <span style={{ color: "#666", fontSize: "11px", flexShrink: 0 }}>kg ×</span>
+                  </>
+                )}
                 <input
                   type="number" min={1} max={10} value={batchCount}
                   onChange={e => setBatchCount(e.target.value)}
@@ -767,13 +798,19 @@ export default function WorkoutTab({
                     </div>
                     <div style={{ flex: 1, display: "flex", flexDirection: "column", gap: "4px" }}>
                       <div style={{ display: "flex", alignItems: "center", gap: "6px" }}>
-                        <input type="number" style={styles.setInput} placeholder="次數" value={s.reps || ""} onChange={e => updateSet(i, "reps", e.target.value)} />
-                        <span style={{ color: "#555", fontSize: "12px", flexShrink: 0 }}>下</span>
+                        {unitLabel === "距離" ? (
+                          <input type="text" style={styles.setInput} placeholder="距離 (e.g. 2瑜珈墊)" value={s.reps || ""} onChange={e => updateSet(i, "reps", e.target.value)} />
+                        ) : (
+                          <input type="number" style={styles.setInput} placeholder={unitLabel === "秒" ? "秒數" : "次數"} value={s.reps || ""} onChange={e => updateSet(i, "reps", e.target.value)} />
+                        )}
+                        <span style={{ color: "#555", fontSize: "12px", flexShrink: 0 }}>{unitLabel}</span>
                       </div>
-                      <div style={{ display: "flex", alignItems: "center", gap: "6px" }}>
-                        <input type="number" style={styles.setInput} placeholder="重量" value={s.weight || ""} onChange={e => updateSet(i, "weight", e.target.value)} />
-                        <span style={{ color: "#555", fontSize: "12px", flexShrink: 0 }}>kg</span>
-                      </div>
+                      {showWeightField && (
+                        <div style={{ display: "flex", alignItems: "center", gap: "6px" }}>
+                          <input type="number" style={styles.setInput} placeholder="重量" value={s.weight || ""} onChange={e => updateSet(i, "weight", e.target.value)} />
+                          <span style={{ color: "#555", fontSize: "12px", flexShrink: 0 }}>kg</span>
+                        </div>
+                      )}
                     </div>
                     <button style={styles.deleteBtn} onClick={() => removeSet(i)}>✕</button>
                   </div>

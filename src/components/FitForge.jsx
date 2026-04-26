@@ -18,14 +18,15 @@ import {
   paceFromTimeDist,
 } from "../utils/fitforge.utils.js";
 import styles from "../styles/fitforge.styles.js";
-import { exerciseCategories, INCLINE_EXERCISES, RUNNING_EXERCISES } from "../constants/fitforge.constants.js";
+import { exerciseCategories, INCLINE_EXERCISES, RUNNING_EXERCISES, STRETCH_DEFAULTS } from "../constants/fitforge.constants.js";
+import { makeDefaultExerciseConfig } from "../utils/fitforge.utils.js";
 import DashboardTab from "./tabs/DashboardTab.jsx";
 import WorkoutTab from "./tabs/WorkoutTab.jsx";
 import BodyTab from "./tabs/BodyTab.jsx";
 import GoalsTab from "./tabs/GoalsTab.jsx";
 import WeeklyDetailModal from "./WeeklyDetailModal.jsx";
 
-const APP_VERSION = "1.20.0";
+const APP_VERSION = "1.21.0";
 const toLocalDateStr = (d = new Date()) =>
   `${d.getFullYear()}-${String(d.getMonth() + 1).padStart(2, "0")}-${String(d.getDate()).padStart(2, "0")}`;
 
@@ -177,6 +178,9 @@ export default function FitForge({ user }) {
   const [editingRoutineId, setEditingRoutineId] = useState(null);
   const [routineName, setRoutineName] = useState("");
   const [routineExercises, setRoutineExercises] = useState([]); // ordered string[]
+  const [routineExConfigs, setRoutineExConfigs] = useState([]); // ordered ExerciseConfig[] (synced with routineExercises)
+  const [expandedRoutineEx, setExpandedRoutineEx] = useState(null); // index of expanded config panel
+  const [routineExDefaults, setRoutineExDefaults] = useState({}); // { [exerciseName]: ExerciseConfig } after loadRoutine
   const [routineEditorTag, setRoutineEditorTag] = useState("伸展");
   const [routineEditorSearch, setRoutineEditorSearch] = useState("");
   const [routineSwipeOffsets, setRoutineSwipeOffsets] = useState({}); // { [idx]: px }
@@ -626,6 +630,8 @@ export default function FitForge({ user }) {
     setEditingRoutineId(null);
     setRoutineName("");
     setRoutineExercises([]);
+    setRoutineExConfigs([]);
+    setExpandedRoutineEx(null);
     setRoutineEditorTag("伸展");
     setRoutineEditorSearch("");
     setActiveRoutineSwipe(null);
@@ -638,6 +644,11 @@ export default function FitForge({ user }) {
     setEditingRoutineId(r.id);
     setRoutineName(r.name);
     setRoutineExercises([...r.exercises]);
+    const configs = r.exerciseConfigs
+      ? [...r.exerciseConfigs]
+      : (r.exercises || []).map(n => makeDefaultExerciseConfig(n, customExercises, exerciseCategories, STRETCH_DEFAULTS));
+    setRoutineExConfigs(configs);
+    setExpandedRoutineEx(null);
     setRoutineEditorTag("伸展");
     setRoutineEditorSearch("");
     setActiveRoutineSwipe(null);
@@ -649,7 +660,7 @@ export default function FitForge({ user }) {
   async function saveRoutine() {
     const name = routineName.trim();
     if (!name || routineExercises.length === 0) return;
-    const payload = { name, exercises: routineExercises, updatedAt: serverTimestamp() };
+    const payload = { name, exercises: routineExercises, exerciseConfigs: routineExConfigs, updatedAt: serverTimestamp() };
     if (editingRoutineId) {
       await updateDoc(doc(db, "users", user.uid, "routines", editingRoutineId), payload);
     } else {
@@ -661,6 +672,12 @@ export default function FitForge({ user }) {
 
   function loadRoutine(r) {
     setTodayPlan(r.exercises);
+    const configs = r.exerciseConfigs
+      ? r.exerciseConfigs
+      : (r.exercises || []).map(n => makeDefaultExerciseConfig(n, customExercises, exerciseCategories, STRETCH_DEFAULTS));
+    const defaultsMap = {};
+    configs.forEach(c => { defaultsMap[c.name] = c; });
+    setRoutineExDefaults(defaultsMap);
     setShowRoutineSheet(false);
     setTab("workout");
     setWDate(today);
@@ -672,6 +689,11 @@ export default function FitForge({ user }) {
       const idx = prev.indexOf(name);
       if (idx === -1) return [...prev, name];
       return prev.filter((_, i) => i !== idx);
+    });
+    setRoutineExConfigs(prev => {
+      const exists = prev.find(c => c.name === name);
+      if (exists) return prev.filter(c => c.name !== name);
+      return [...prev, makeDefaultExerciseConfig(name, customExercises, exerciseCategories, STRETCH_DEFAULTS)];
     });
   }
 
@@ -1471,6 +1493,7 @@ export default function FitForge({ user }) {
             todayPlan={todayPlan}
             setTodayPlan={setTodayPlan}
             activeRoutineName={activeRoutineName}
+            routineExDefaults={routineExDefaults}
           />
         )}
 
@@ -2019,6 +2042,8 @@ export default function FitForge({ user }) {
                             style={{ position: "absolute", right: 0, top: 0, bottom: 0, width: "72px", background: "#c0182f", display: "flex", alignItems: "center", justifyContent: "center", borderRadius: "10px", cursor: "pointer", fontSize: "12px", fontWeight: 700, color: "#fff", gap: "3px" }}
                             onClick={() => {
                               setRoutineExercises(prev => prev.filter((_, i) => i !== idx));
+                              setRoutineExConfigs(prev => prev.filter((_, i) => i !== idx));
+                              setExpandedRoutineEx(prev => prev === idx ? null : prev !== null && prev > idx ? prev - 1 : prev);
                               setRoutineSwipeOffsets(prev => {
                                 const n = {};
                                 Object.keys(prev).forEach(k => {
@@ -2032,7 +2057,7 @@ export default function FitForge({ user }) {
                           >🗑 刪除</div>
                           {/* Swipeable row */}
                           <div
-                            style={{ display: "flex", alignItems: "center", gap: "10px", padding: "10px 12px", borderRadius: "10px", background: "rgba(30,30,42,1)", border: "1px solid rgba(255,255,255,0.07)", transform: `translateX(${swipeX}px)`, transition: activeRoutineSwipe === idx ? "none" : "transform 0.22s cubic-bezier(0.25,1,0.5,1)", userSelect: "none" }}
+                            style={{ display: "flex", flexDirection: "column", borderRadius: "10px", background: "rgba(30,30,42,1)", border: "1px solid rgba(255,255,255,0.07)", transform: `translateX(${swipeX}px)`, transition: activeRoutineSwipe === idx ? "none" : "transform 0.22s cubic-bezier(0.25,1,0.5,1)", userSelect: "none", overflow: "hidden" }}
                             onTouchStart={e => {
                               if (e.target.closest("[data-drag-handle]")) return;
                               routineSwipeStartXRef.current = e.touches[0].clientX;
@@ -2079,14 +2104,32 @@ export default function FitForge({ user }) {
                               window.addEventListener("mouseup", onUp);
                             }}
                           >
-                            <div style={{ flex: 1, fontSize: "14px", color: "#e8e4dc" }}>{name}</div>
-                            {/* Drag handle (right side) */}
-                            <div
-                              data-drag-handle="true"
-                              style={{ display: "flex", flexDirection: "column", gap: "3px", padding: "6px 4px", opacity: 0.35, flexShrink: 0, cursor: "grab", touchAction: "none" }}
-                              onMouseDown={e => {
-                                e.stopPropagation();
-                                setRoutineSwipeOffsets(prev => ({ ...prev, [idx]: 0 }));
+                            {/* Main row: name + config chip + drag handle */}
+                            <div style={{ display: "flex", alignItems: "center", gap: "10px", padding: "10px 12px" }}>
+                              <div style={{ flex: 1, fontSize: "14px", color: "#e8e4dc" }}>{name}</div>
+                              {/* Config summary chip */}
+                              {(() => {
+                                const cfg = routineExConfigs[idx];
+                                if (!cfg) return null;
+                                const setsCount = cfg.sets?.length || 0;
+                                const firstReps = cfg.sets?.[0]?.reps || "";
+                                const summary = setsCount && firstReps ? `${setsCount}組×${firstReps}${cfg.unit}` : `${setsCount}組`;
+                                return (
+                                  <button
+                                    onClick={e => { e.stopPropagation(); setExpandedRoutineEx(prev => prev === idx ? null : idx); }}
+                                    style={{ background: expandedRoutineEx === idx ? "rgba(232,124,62,0.2)" : "rgba(255,255,255,0.06)", border: `1px solid ${expandedRoutineEx === idx ? "rgba(232,124,62,0.5)" : "rgba(255,255,255,0.1)"}`, borderRadius: "8px", color: expandedRoutineEx === idx ? "#e87c3e" : "#aaa", fontSize: "11px", padding: "3px 8px", cursor: "pointer", flexShrink: 0, fontFamily: "inherit" }}
+                                  >
+                                    {summary}
+                                  </button>
+                                );
+                              })()}
+                              {/* Drag handle (right side) */}
+                              <div
+                                data-drag-handle="true"
+                                style={{ display: "flex", flexDirection: "column", gap: "3px", padding: "6px 4px", opacity: 0.35, flexShrink: 0, cursor: "grab", touchAction: "none" }}
+                                onMouseDown={e => {
+                                  e.stopPropagation();
+                                  setRoutineSwipeOffsets(prev => ({ ...prev, [idx]: 0 }));
                                 routineDragSrcRef.current = idx;
                                 const container = e.currentTarget.closest("[data-routine-sortable]");
                                 if (!container) return;
@@ -2101,6 +2144,12 @@ export default function FitForge({ user }) {
                                       const from = src;
                                       routineDragSrcRef.current = ri;
                                       setRoutineExercises(prev => {
+                                        const arr = [...prev];
+                                        const [item] = arr.splice(from, 1);
+                                        arr.splice(ri, 0, item);
+                                        return arr;
+                                      });
+                                      setRoutineExConfigs(prev => {
                                         const arr = [...prev];
                                         const [item] = arr.splice(from, 1);
                                         arr.splice(ri, 0, item);
@@ -2141,6 +2190,12 @@ export default function FitForge({ user }) {
                                         arr.splice(ri, 0, item);
                                         return arr;
                                       });
+                                      setRoutineExConfigs(prev => {
+                                        const arr = [...prev];
+                                        const [item] = arr.splice(from, 1);
+                                        arr.splice(ri, 0, item);
+                                        return arr;
+                                      });
                                     }
                                   });
                                 };
@@ -2153,10 +2208,86 @@ export default function FitForge({ user }) {
                                 document.addEventListener("touchend", handleEnd);
                               }}
                             >
-                              <span style={{ display: "block", width: "18px", height: "2px", background: "#aaa", borderRadius: "2px" }} />
-                              <span style={{ display: "block", width: "18px", height: "2px", background: "#aaa", borderRadius: "2px" }} />
-                              <span style={{ display: "block", width: "18px", height: "2px", background: "#aaa", borderRadius: "2px" }} />
-                            </div>
+                                <span style={{ display: "block", width: "18px", height: "2px", background: "#aaa", borderRadius: "2px" }} />
+                                <span style={{ display: "block", width: "18px", height: "2px", background: "#aaa", borderRadius: "2px" }} />
+                                <span style={{ display: "block", width: "18px", height: "2px", background: "#aaa", borderRadius: "2px" }} />
+                              </div>
+                            </div>{/* end main row */}
+                            {/* Expanded config panel */}
+                            {expandedRoutineEx === idx && routineExConfigs[idx] && (() => {
+                              const cfg = routineExConfigs[idx];
+                              const updateCfg = (patch) => setRoutineExConfigs(prev => {
+                                const next = [...prev];
+                                next[idx] = { ...next[idx], ...patch };
+                                return next;
+                              });
+                              const updateSetReps = (si, val) => setRoutineExConfigs(prev => {
+                                const next = [...prev];
+                                const sets = [...(next[idx].sets || [])];
+                                sets[si] = { ...sets[si], reps: val };
+                                next[idx] = { ...next[idx], sets };
+                                return next;
+                              });
+                              const adjustSetCount = (delta) => {
+                                const current = cfg.sets || [];
+                                const newCount = Math.max(1, Math.min(10, current.length + delta));
+                                if (delta > 0) {
+                                  const last = current[current.length - 1] || { reps: "", weight: "" };
+                                  updateCfg({ sets: [...current, { ...last }] });
+                                } else {
+                                  updateCfg({ sets: current.slice(0, newCount) });
+                                }
+                              };
+                              const UNITS = ["下", "趟", "秒", "距離"];
+                              return (
+                                <div style={{ borderTop: "1px solid rgba(255,255,255,0.06)", padding: "10px 12px 12px", display: "flex", flexDirection: "column", gap: "10px" }}>
+                                  {/* Unit selector */}
+                                  <div style={{ display: "flex", alignItems: "center", gap: "6px" }}>
+                                    <span style={{ color: "#666", fontSize: "11px", flexShrink: 0 }}>單位</span>
+                                    <div style={{ display: "flex", gap: "4px" }}>
+                                      {UNITS.map(u => (
+                                        <button key={u} onClick={() => updateCfg({ unit: u })}
+                                          style={{ padding: "3px 9px", borderRadius: "6px", fontSize: "11px", fontFamily: "inherit", cursor: "pointer", border: "none", background: cfg.unit === u ? "#e87c3e" : "rgba(255,255,255,0.08)", color: cfg.unit === u ? "#fff" : "#888" }}>
+                                          {u}
+                                        </button>
+                                      ))}
+                                    </div>
+                                  </div>
+                                  {/* Set count + reps */}
+                                  <div style={{ display: "flex", alignItems: "center", gap: "8px" }}>
+                                    <span style={{ color: "#666", fontSize: "11px", flexShrink: 0 }}>組數</span>
+                                    <button onClick={() => adjustSetCount(-1)} style={{ width: "24px", height: "24px", borderRadius: "50%", border: "1px solid rgba(255,255,255,0.15)", background: "transparent", color: "#aaa", fontSize: "14px", cursor: "pointer", display: "flex", alignItems: "center", justifyContent: "center" }}>−</button>
+                                    <span style={{ color: "#fff", fontSize: "13px", minWidth: "16px", textAlign: "center" }}>{cfg.sets?.length || 0}</span>
+                                    <button onClick={() => adjustSetCount(1)} style={{ width: "24px", height: "24px", borderRadius: "50%", border: "1px solid rgba(255,255,255,0.15)", background: "transparent", color: "#aaa", fontSize: "14px", cursor: "pointer", display: "flex", alignItems: "center", justifyContent: "center" }}>+</button>
+                                    <span style={{ color: "#666", fontSize: "11px", flexShrink: 0, marginLeft: "4px" }}>每組</span>
+                                    {cfg.unit === "距離" ? (
+                                      <input
+                                        type="text" value={cfg.sets?.[0]?.reps || ""} placeholder="e.g. 2瑜珈墊" maxLength={50}
+                                        onChange={e => { const val = e.target.value; setRoutineExConfigs(prev => { const next = [...prev]; next[idx] = { ...next[idx], sets: (next[idx].sets || []).map(s => ({ ...s, reps: val })) }; return next; }); }}
+                                        style={{ flex: 1, padding: "4px 8px", borderRadius: "6px", border: "1px solid rgba(255,255,255,0.12)", background: "rgba(255,255,255,0.06)", color: "#fff", fontSize: "12px", fontFamily: "inherit", outline: "none" }}
+                                      />
+                                    ) : (
+                                      <input
+                                        type="number" value={cfg.sets?.[0]?.reps || ""} placeholder={cfg.unit === "秒" ? "秒數" : "次數"}
+                                        onChange={e => { const val = e.target.value; setRoutineExConfigs(prev => { const next = [...prev]; next[idx] = { ...next[idx], sets: (next[idx].sets || []).map(s => ({ ...s, reps: val })) }; return next; }); }}
+                                        style={{ width: "56px", padding: "4px 8px", borderRadius: "6px", border: "1px solid rgba(255,255,255,0.12)", background: "rgba(255,255,255,0.06)", color: "#fff", fontSize: "12px", fontFamily: "inherit", outline: "none", textAlign: "center" }}
+                                      />
+                                    )}
+                                    <span style={{ color: "#666", fontSize: "11px" }}>{cfg.unit}</span>
+                                  </div>
+                                  {/* Weight toggle */}
+                                  <div style={{ display: "flex", alignItems: "center", gap: "6px" }}>
+                                    <span style={{ color: "#666", fontSize: "11px", flexShrink: 0 }}>重量</span>
+                                    {[true, false].map(sw => (
+                                      <button key={String(sw)} onClick={() => updateCfg({ showWeight: sw })}
+                                        style={{ padding: "3px 10px", borderRadius: "6px", fontSize: "11px", fontFamily: "inherit", cursor: "pointer", border: "none", background: cfg.showWeight === sw ? "#e87c3e" : "rgba(255,255,255,0.08)", color: cfg.showWeight === sw ? "#fff" : "#888" }}>
+                                        {sw ? "顯示" : "不顯示"}
+                                      </button>
+                                    ))}
+                                  </div>
+                                </div>
+                              );
+                            })()}
                           </div>
                         </div>
                       );
@@ -2502,15 +2633,29 @@ export default function FitForge({ user }) {
               版本更新記錄
             </div>
 
-            {/* v1.20.0 */}
+            {/* v1.21.0 */}
             <div style={{ marginBottom: "24px" }}>
               <div style={{ display: "flex", alignItems: "center", gap: "10px", marginBottom: "10px" }}>
-                <span style={{ fontSize: "17px", fontWeight: 900, color: "#ffd700" }}>v1.20.0</span>
+                <span style={{ fontSize: "17px", fontWeight: 900, color: "#ffd700" }}>v1.21.0</span>
                 <span style={{
                   fontSize: "11px", fontWeight: 800, color: "#ff6a00",
                   background: "rgba(255,106,0,0.15)", border: "1px solid rgba(255,106,0,0.3)",
                   borderRadius: "6px", padding: "2px 7px", letterSpacing: "0.05em",
                 }}>最新</span>
+                <span style={{ fontSize: "12px", color: "#555", marginLeft: "auto" }}>2026-04-26</span>
+              </div>
+              <div style={{ display: "flex", flexDirection: "column", gap: "7px" }}>
+                <div style={{ fontSize: "14px", color: "#c8c4bc", display: "flex", gap: "8px" }}>
+                  <span style={{ color: "#ffd700", flexShrink: 0 }}>✨</span>
+                  <span>常規動作預設設定：建立/編輯常規時可設定每個動作的預設單位（下/趟/秒/距離）、組數與次數；載入常規時自動預填；伸展動作智慧預設（繩子伸展拆分為前後/8字型、棍子伸展改時長制等）</span>
+                </div>
+              </div>
+            </div>
+
+            {/* v1.20.0 */}
+            <div style={{ marginBottom: "24px" }}>
+              <div style={{ display: "flex", alignItems: "center", gap: "10px", marginBottom: "10px" }}>
+                <span style={{ fontSize: "17px", fontWeight: 900, color: "#e8e4dc" }}>v1.20.0</span>
                 <span style={{ fontSize: "12px", color: "#555", marginLeft: "auto" }}>2026-04-26</span>
               </div>
               <div style={{ display: "flex", flexDirection: "column", gap: "7px" }}>

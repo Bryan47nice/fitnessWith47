@@ -27,6 +27,7 @@ import {
   formatDateLabel,
   toggleItemInArray,
   reindexAfterDelete,
+  makeDefaultExerciseConfig,
 } from "./fitforge.utils.js";
 
 // ─── 一、getWeekStart ──────────────────────────────────────────────────────
@@ -1193,6 +1194,110 @@ describe("toggleItemInArray()", () => {
     const result = toggleItemInArray(null, "shoulder");
     // Then: guard 回傳 ["shoulder"]
     expect(result).toEqual(["shoulder"]);
+  });
+});
+
+// ─── 十九、makeDefaultExerciseConfig ─────────────────────────────────────────
+const MOCK_EXERCISE_CATS = [
+  { label: "胸", exercises: ["臥推", "上斜臥推"] },
+  { label: "有氧", exercises: ["跑步機", "騎車"] },
+  { label: "伸展", exercises: ["繩子前後伸展", "棍子伸展", "熊爬式", "貓牛式"] },
+];
+
+const MOCK_STRETCH_DEFAULTS = {
+  "繩子前後伸展":  { unit: "趟",   showWeight: false, defaultReps: "10", defaultSets: 3 },
+  "棍子伸展":      { unit: "秒",   showWeight: false, defaultReps: "30", defaultSets: 4 },
+  "熊爬式":        { unit: "距離", showWeight: false, defaultReps: "2瑜珈墊", defaultSets: 4 },
+};
+
+describe("makeDefaultExerciseConfig()", () => {
+  test("TC-DC1 重訓動作回傳 unit=下、showWeight=true、3組×10下", () => {
+    // Given: 動作「臥推」屬於「胸」分類
+    // When: 呼叫 makeDefaultExerciseConfig
+    const result = makeDefaultExerciseConfig("臥推", [], MOCK_EXERCISE_CATS, MOCK_STRETCH_DEFAULTS);
+    // Then: 標準重訓預設
+    expect(result.unit).toBe("下");
+    expect(result.showWeight).toBe(true);
+    expect(result.sets).toHaveLength(3);
+    expect(result.sets[0]).toEqual({ reps: "10", weight: "" });
+  });
+
+  test("TC-DC2 有氧動作回傳 unit=下、showWeight=false、空 sets", () => {
+    // Given: 動作「跑步機」屬於「有氧」分類
+    // When: 呼叫 makeDefaultExerciseConfig
+    const result = makeDefaultExerciseConfig("跑步機", [], MOCK_EXERCISE_CATS, MOCK_STRETCH_DEFAULTS);
+    // Then: 有氧交由 WorkoutTab 自行處理
+    expect(result.showWeight).toBe(false);
+    expect(result.sets).toHaveLength(0);
+  });
+
+  test("TC-DC3 伸展動作套用 STRETCH_DEFAULTS（繩子前後伸展）", () => {
+    // Given: 動作「繩子前後伸展」在 STRETCH_DEFAULTS 中有定義
+    // When: 呼叫 makeDefaultExerciseConfig
+    const result = makeDefaultExerciseConfig("繩子前後伸展", [], MOCK_EXERCISE_CATS, MOCK_STRETCH_DEFAULTS);
+    // Then: 套用 STRETCH_DEFAULTS 定義
+    expect(result.unit).toBe("趟");
+    expect(result.showWeight).toBe(false);
+    expect(result.sets).toHaveLength(3);
+    expect(result.sets[0]).toEqual({ reps: "10", weight: "" });
+  });
+
+  test("TC-DC4 距離單位伸展動作（熊爬式）defaultReps 為文字描述", () => {
+    // Given: 動作「熊爬式」unit = "距離"，defaultReps = "2瑜珈墊"
+    // When: 呼叫 makeDefaultExerciseConfig
+    const result = makeDefaultExerciseConfig("熊爬式", [], MOCK_EXERCISE_CATS, MOCK_STRETCH_DEFAULTS);
+    // Then: 距離單位、4組、每組 reps 為 "2瑜珈墊"
+    expect(result.unit).toBe("距離");
+    expect(result.sets).toHaveLength(4);
+    expect(result.sets[0].reps).toBe("2瑜珈墊");
+  });
+
+  test("TC-DC5 伸展分類動作但不在 STRETCH_DEFAULTS 時使用 fallback（3組×5趟）", () => {
+    // Given: 「貓牛式」在 MOCK_EXERCISE_CATS["伸展"] 中，但不在 MOCK_STRETCH_DEFAULTS 裡
+    // When: 呼叫 makeDefaultExerciseConfig
+    const result = makeDefaultExerciseConfig("貓牛式", [], MOCK_EXERCISE_CATS, MOCK_STRETCH_DEFAULTS);
+    // Then: fallback 伸展預設值 unit="趟"、showWeight=false、3組×reps="5"
+    expect(result.unit).toBe("趟");
+    expect(result.showWeight).toBe(false);
+    expect(result.sets).toHaveLength(3);
+    expect(result.sets[0]).toEqual({ reps: "5", weight: "" });
+  });
+
+  test("TC-DC6 自訂動作分類為「伸展」時走伸展路徑（含 STRETCH_DEFAULTS 查找）", () => {
+    // Given: 自訂動作「自訂伸展」category = "伸展"，且在 STRETCH_DEFAULTS 中有對應定義
+    const customExercises = [{ name: "自訂伸展", category: "伸展" }];
+    const stretchDefaults = {
+      "自訂伸展": { unit: "秒", showWeight: false, defaultReps: "20", defaultSets: 2 },
+    };
+    // When: 呼叫 makeDefaultExerciseConfig（exerciseCats 不含此動作）
+    const result = makeDefaultExerciseConfig("自訂伸展", customExercises, [], stretchDefaults);
+    // Then: 套用 STRETCH_DEFAULTS 定義，unit="秒"、2組
+    expect(result.unit).toBe("秒");
+    expect(result.showWeight).toBe(false);
+    expect(result.sets).toHaveLength(2);
+    expect(result.sets[0]).toEqual({ reps: "20", weight: "" });
+  });
+
+  test("TC-DC7 exerciseCats 為空陣列時，不在自訂清單的動作回傳重訓預設", () => {
+    // Given: exerciseCats = []（無內建分類），customExercises 也不含此動作
+    // When: 呼叫 makeDefaultExerciseConfig
+    const result = makeDefaultExerciseConfig("未知動作", [], [], {});
+    // Then: 無法判斷分類，回傳重訓預設（unit="下"、showWeight=true、3組×10下）
+    expect(result.unit).toBe("下");
+    expect(result.showWeight).toBe(true);
+    expect(result.sets).toHaveLength(3);
+  });
+
+  test("TC-DC8 自訂動作無 category 欄位時 category fallback 為「自訂」，回傳重訓預設", () => {
+    // Given: 自訂動作「無分類動作」無 category 屬性（undefined）
+    const customExercises = [{ name: "無分類動作" }];
+    // When: 呼叫 makeDefaultExerciseConfig
+    const result = makeDefaultExerciseConfig("無分類動作", customExercises, [], {});
+    // Then: category 為「自訂」，不符合伸展/有氧，回傳重訓預設
+    expect(result.unit).toBe("下");
+    expect(result.showWeight).toBe(true);
+    expect(result.sets).toHaveLength(3);
+    expect(result.name).toBe("無分類動作");
   });
 });
 
