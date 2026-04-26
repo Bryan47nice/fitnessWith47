@@ -373,7 +373,7 @@ export default function WorkoutTab({
               WebkitOverflowScrolling: "touch", scrollbarWidth: "none",
               paddingBottom: "4px", marginBottom: "10px",
             }}>
-              {["胸", "背", "肩", "腿", "手臂", "核心", "有氧", ...userCustomCategories, "自訂"].map(tag => (
+              {[...exerciseCategories.map(c => c.label), ...userCustomCategories, "自訂"].map(tag => (
                 <button key={tag} onClick={() => {
                   const next = exActiveTag === tag ? null : tag;
                   setExActiveTag(next);
@@ -493,7 +493,7 @@ export default function WorkoutTab({
                       />
                       <div style={{ display: "flex", flexWrap: "wrap", gap: "4px", alignItems: "center" }}>
                         <span style={{ fontSize: "11px", color: "#666", flexShrink: 0 }}>分類：</span>
-                        {["胸", "背", "肩", "腿", "手臂", "核心", "有氧", ...userCustomCategories, "自訂"].map(cat => (
+                        {[...exerciseCategories.map(c => c.label), ...userCustomCategories, "自訂"].map(cat => (
                           <button key={cat}
                             onClick={() => { setEditingExCategory(cat); setEditingExCustomCategoryInput(""); }}
                             style={{
@@ -602,7 +602,7 @@ export default function WorkoutTab({
                       {/* 分類選擇列 */}
                       <div style={{ display: "flex", flexWrap: "wrap", gap: "6px", alignItems: "center" }}>
                         <span style={{ fontSize: "12px", color: "#666", flexShrink: 0 }}>分類：</span>
-                        {["胸", "背", "肩", "腿", "手臂", "核心", "有氧", ...userCustomCategories, "自訂"].map(cat => (
+                        {[...exerciseCategories.map(c => c.label), ...userCustomCategories, "自訂"].map(cat => (
                           <button key={cat}
                             onClick={() => { setNewExCategory(cat); setNewExCustomCategoryInput(""); }}
                             style={{

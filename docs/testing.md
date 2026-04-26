@@ -415,6 +415,11 @@
 - When：呼叫 `getNeglectedExercises([], 14, 10)`
 - Then：回傳 `[]`
 
+**TC-NE7 新增「伸展」分類動作超過門檻天數時正確回傳**
+- Given：「鳥狗式」（伸展分類）距今 20 天，「貓牛式」（伸展分類）距今 5 天，threshold = 14
+- When：呼叫 `getNeglectedExercises(workouts, 14, 10)`
+- Then：回傳陣列僅含「鳥狗式」（20天 >= 14），「貓牛式」（5天 < 14）不被回傳
+
 ---
 
 ### 十一、`formatRestTime(seconds)` — 休息計時器格式化

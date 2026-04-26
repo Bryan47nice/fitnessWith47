@@ -18,27 +18,15 @@ import {
   paceFromTimeDist,
 } from "../utils/fitforge.utils.js";
 import styles from "../styles/fitforge.styles.js";
+import { exerciseCategories, INCLINE_EXERCISES, RUNNING_EXERCISES } from "../constants/fitforge.constants.js";
 import DashboardTab from "./tabs/DashboardTab.jsx";
 import WorkoutTab from "./tabs/WorkoutTab.jsx";
 import BodyTab from "./tabs/BodyTab.jsx";
 import GoalsTab from "./tabs/GoalsTab.jsx";
 
-const APP_VERSION = "1.18.3";
+const APP_VERSION = "1.18.4";
 const toLocalDateStr = (d = new Date()) =>
   `${d.getFullYear()}-${String(d.getMonth() + 1).padStart(2, "0")}-${String(d.getDate()).padStart(2, "0")}`;
-
-const exerciseCategories = [
-  { label: "胸", exercises: ["臥推", "上斜臥推", "雙槓撐體", "飛鳥", "胸推機", "蝴蝶機", "伏地挺身"] },
-  { label: "背", exercises: ["引體向上", "划船", "滑輪下拉", "單手啞鈴划船", "坐姿划船機", "羅馬尼亞硬舉", "T-bar 划船"] },
-  { label: "肩", exercises: ["肩推", "側平舉", "前平舉", "面拉", "後三角飛鳥", "聳肩"] },
-  { label: "腿", exercises: ["深蹲", "硬舉", "腿推", "腿彎舉", "腿伸展", "保加利亞分腿蹲", "啞鈴弓箭步"] },
-  { label: "手臂", exercises: ["二頭彎舉", "三頭下壓", "錘式彎舉", "牧師椅彎舉", "過頭三頭伸展"] },
-  { label: "核心", exercises: ["棒式", "捲腹", "俄羅斯轉體"] },
-  { label: "有氧", exercises: ["跑步機", "慢跑", "室內健走", "橢圓機", "樓梯機", "騎車", "跳繩", "游泳", "划船機"] },
-];
-
-const INCLINE_EXERCISES = ["跑步機", "慢跑", "室內健走", "橢圓機"];
-const RUNNING_EXERCISES = ["跑步機", "慢跑", "室內健走"];
 
 export default function FitForge({ user }) {
   const [tab, setTab] = useState("dashboard");
@@ -2047,15 +2035,29 @@ export default function FitForge({ user }) {
               版本更新記錄
             </div>
 
-            {/* v1.18.3 */}
+            {/* v1.18.4 */}
             <div style={{ marginBottom: "24px" }}>
               <div style={{ display: "flex", alignItems: "center", gap: "10px", marginBottom: "10px" }}>
-                <span style={{ fontSize: "17px", fontWeight: 900, color: "#ffd700" }}>v1.18.3</span>
+                <span style={{ fontSize: "17px", fontWeight: 900, color: "#ffd700" }}>v1.18.4</span>
                 <span style={{
                   fontSize: "11px", fontWeight: 800, color: "#ff6a00",
                   background: "rgba(255,106,0,0.15)", border: "1px solid rgba(255,106,0,0.3)",
                   borderRadius: "6px", padding: "2px 7px", letterSpacing: "0.05em",
                 }}>最新</span>
+                <span style={{ fontSize: "12px", color: "#555", marginLeft: "auto" }}>2026-04-26</span>
+              </div>
+              <div style={{ display: "flex", flexDirection: "column", gap: "7px" }}>
+                <div style={{ fontSize: "14px", color: "#c8c4bc", display: "flex", gap: "8px" }}>
+                  <span style={{ color: "#ffd700", flexShrink: 0 }}>✨</span>
+                  <span>新增用戶自訂動作至系統預設分類（新增「伸展」分類，補齊多個現有分類動作），修正 constants.js 與 FitForge.jsx 不同步問題</span>
+                </div>
+              </div>
+            </div>
+
+            {/* v1.18.3 */}
+            <div style={{ marginBottom: "24px" }}>
+              <div style={{ display: "flex", alignItems: "center", gap: "10px", marginBottom: "10px" }}>
+                <span style={{ fontSize: "17px", fontWeight: 900, color: "#e8e4dc" }}>v1.18.3</span>
                 <span style={{ fontSize: "12px", color: "#555", marginLeft: "auto" }}>2026-04-25</span>
               </div>
               <div style={{ display: "flex", flexDirection: "column", gap: "7px" }}>

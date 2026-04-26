@@ -737,6 +737,24 @@ describe("getNeglectedExercises()", () => {
     // Then: nothing to return
     expect(result).toHaveLength(0);
   });
+
+  test("TC-NE7 新增「伸展」分類動作超過門檻天數時正確回傳", () => {
+    // Given: 「鳥狗式」（伸展分類）距今 20 天，「貓牛式」（伸展分類）距今 5 天，threshold = 14
+    const today = new Date();
+    today.setHours(0, 0, 0, 0);
+    const d20 = new Date(today); d20.setDate(d20.getDate() - 20);
+    const d5  = new Date(today); d5.setDate(d5.getDate() - 5);
+    const workouts = [
+      { exercise: "鳥狗式", date: d20.toISOString().slice(0, 10) },
+      { exercise: "貓牛式", date: d5.toISOString().slice(0, 10) },
+    ];
+    // When
+    const result = getNeglectedExercises(workouts, 14, 10);
+    // Then: 鳥狗式（20天）被回傳，貓牛式（5天）不被回傳
+    expect(result).toHaveLength(1);
+    expect(result[0].name).toBe("鳥狗式");
+    expect(result[0].daysAgo).toBeGreaterThanOrEqual(14);
+  });
 });
 
 // ─── 十一、formatRestTime ─────────────────────────────────────────────────
