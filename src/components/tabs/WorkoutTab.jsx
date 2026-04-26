@@ -1113,9 +1113,9 @@ export default function WorkoutTab({
                       </div>
                       {isDayOpen && day.items.map(w => (
                         <div key={w.id} style={{ ...styles.workoutItem, marginBottom: "8px" }}>
-                          <div style={{ display: "flex", justifyContent: "space-between", alignItems: "center", marginBottom: "8px" }}>
-                            <div style={{ fontSize: "17px", fontWeight: 700 }}>{w.exercise}</div>
-                            <div style={{ display: "flex", gap: "6px", alignItems: "center" }}>
+                          <div style={{ display: "flex", justifyContent: "space-between", alignItems: "flex-start", gap: "8px", marginBottom: "8px" }}>
+                            <div style={{ fontSize: "17px", fontWeight: 700, flex: 1, minWidth: 0 }}>{w.exercise}</div>
+                            <div style={{ display: "flex", gap: "6px", alignItems: "center", flexShrink: 0 }}>
                               {coachDays?.includes(day.date) && (() => {
                                 const isCoach = w.isCoach ?? true;
                                 return (
