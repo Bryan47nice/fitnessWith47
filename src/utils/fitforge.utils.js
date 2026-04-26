@@ -277,3 +277,65 @@ export function calcWeekTrendPct(currentWeekSets, lastWeekSets) {
   if (lastWeekSets <= 0) return null;
   return Math.round(((currentWeekSets - lastWeekSets) / lastWeekSets) * 100);
 }
+
+/**
+ * Returns the ISO date strings for the Monday and Sunday of a given week,
+ * where offsetWeeks=0 is the current week, offsetWeeks=1 is last week, etc.
+ *
+ * @param {number} [offsetWeeks=0] - how many weeks back (0 = this week, 1 = last week)
+ * @returns {{ from: string, to: string }} Monday and Sunday date strings (YYYY-MM-DD)
+ */
+export function getWeekBounds(offsetWeeks = 0) {
+  const d = new Date();
+  d.setHours(0, 0, 0, 0);
+  const dayOfWeek = (d.getDay() + 6) % 7; // Mon=0
+  const monday = new Date(d);
+  monday.setDate(d.getDate() - dayOfWeek - offsetWeeks * 7);
+  const sunday = new Date(monday);
+  sunday.setDate(monday.getDate() + 6);
+  const pad = v => String(v).padStart(2, "0");
+  const fmt = dt =>
+    `${dt.getFullYear()}-${pad(dt.getMonth() + 1)}-${pad(dt.getDate())}`;
+  return { from: fmt(monday), to: fmt(sunday) };
+}
+
+/**
+ * Formats a YYYY-MM-DD date string as "M月D日 週X" in zh-TW.
+ *
+ * @param {string} dateStr - ISO date string e.g. "2026-04-21"
+ * @returns {string} e.g. "4月21日 週二"
+ */
+export function formatDateLabel(dateStr) {
+  const d = new Date(dateStr + "T00:00:00");
+  const weekdays = ["日", "一", "二", "三", "四", "五", "六"];
+  const m = d.getMonth() + 1;
+  const day = d.getDate();
+  const wd = weekdays[d.getDay()];
+  return `${m}月${day}日 週${wd}`;
+}
+
+/**
+ * Groups an array of workout records by date, sorted in descending order.
+ * Optionally filters to only include records within a given date range.
+ *
+ * @param {Array}  workouts  - array of workout documents { exercise, date, sets[], … }
+ * @param {string} [fromDate] - ISO date string (inclusive lower bound, e.g. "2025-04-21")
+ * @param {string} [toDate]   - ISO date string (inclusive upper bound, e.g. "2025-04-27")
+ * @returns {Array} [{ date, items }, …] sorted by date descending
+ */
+export function groupWorkoutsByDate(workouts, fromDate, toDate) {
+  const filtered = workouts.filter(w => {
+    if (!w.date) return false;
+    if (fromDate && w.date < fromDate) return false;
+    if (toDate && w.date > toDate) return false;
+    return true;
+  });
+  const map = {};
+  filtered.forEach(w => {
+    if (!map[w.date]) map[w.date] = [];
+    map[w.date].push(w);
+  });
+  return Object.entries(map)
+    .sort((a, b) => b[0].localeCompare(a[0]))
+    .map(([date, items]) => ({ date, items }));
+}

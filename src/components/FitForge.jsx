@@ -23,8 +23,9 @@ import DashboardTab from "./tabs/DashboardTab.jsx";
 import WorkoutTab from "./tabs/WorkoutTab.jsx";
 import BodyTab from "./tabs/BodyTab.jsx";
 import GoalsTab from "./tabs/GoalsTab.jsx";
+import WeeklyDetailModal from "./WeeklyDetailModal.jsx";
 
-const APP_VERSION = "1.18.7";
+const APP_VERSION = "1.19.0";
 const toLocalDateStr = (d = new Date()) =>
   `${d.getFullYear()}-${String(d.getMonth() + 1).padStart(2, "0")}-${String(d.getDate()).padStart(2, "0")}`;
 
@@ -83,6 +84,7 @@ export default function FitForge({ user }) {
   // More Panel state
   const [showMorePanel, setShowMorePanel] = useState(false);
   const [showChangelog, setShowChangelog] = useState(false);
+  const [showWeeklyDetail, setShowWeeklyDetail] = useState(false);
   const [shareCopied, setShareCopied] = useState(false);
   const [hasNewChangelog, setHasNewChangelog] = useState(
     () => localStorage.getItem("last_seen_changelog") !== APP_VERSION
@@ -1312,6 +1314,7 @@ export default function FitForge({ user }) {
             coachDays={coachDays}
             coachQuota={coachQuota}
             customExercises={customExercises}
+            onOpenWeeklyDetail={() => setShowWeeklyDetail(true)}
           />
         )}
 
@@ -2063,15 +2066,29 @@ export default function FitForge({ user }) {
               版本更新記錄
             </div>
 
-            {/* v1.18.7 */}
+            {/* v1.19.0 */}
             <div style={{ marginBottom: "24px" }}>
               <div style={{ display: "flex", alignItems: "center", gap: "10px", marginBottom: "10px" }}>
-                <span style={{ fontSize: "17px", fontWeight: 900, color: "#ffd700" }}>v1.18.7</span>
+                <span style={{ fontSize: "17px", fontWeight: 900, color: "#ffd700" }}>v1.19.0</span>
                 <span style={{
                   fontSize: "11px", fontWeight: 800, color: "#ff6a00",
                   background: "rgba(255,106,0,0.15)", border: "1px solid rgba(255,106,0,0.3)",
                   borderRadius: "6px", padding: "2px 7px", letterSpacing: "0.05em",
                 }}>最新</span>
+                <span style={{ fontSize: "12px", color: "#555", marginLeft: "auto" }}>2026-04-26</span>
+              </div>
+              <div style={{ display: "flex", flexDirection: "column", gap: "7px" }}>
+                <div style={{ fontSize: "14px", color: "#c8c4bc", display: "flex", gap: "8px" }}>
+                  <span style={{ color: "#ffd700", flexShrink: 0 }}>✨</span>
+                  <span>週訓練詳情全螢幕頁：點擊儀表板本週 vs 上週卡片，可查看本週/上週完整訓練紀錄、部位覆蓋狀況及久未訓練動作</span>
+                </div>
+              </div>
+            </div>
+
+            {/* v1.18.7 */}
+            <div style={{ marginBottom: "24px" }}>
+              <div style={{ display: "flex", alignItems: "center", gap: "10px", marginBottom: "10px" }}>
+                <span style={{ fontSize: "17px", fontWeight: 900, color: "#e8e4dc" }}>v1.18.7</span>
                 <span style={{ fontSize: "12px", color: "#555", marginLeft: "auto" }}>2026-04-26</span>
               </div>
               <div style={{ display: "flex", flexDirection: "column", gap: "7px" }}>
@@ -3568,6 +3585,16 @@ export default function FitForge({ user }) {
         </div>
       </div>,
       document.body
+    )}
+
+    {showWeeklyDetail && (
+      <WeeklyDetailModal
+        workouts={workouts}
+        customExercises={customExercises}
+        coachDays={coachDays}
+        personalBests={prMap}
+        onClose={() => setShowWeeklyDetail(false)}
+      />
     )}
     </>
   );

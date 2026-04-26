@@ -46,7 +46,7 @@ function daysUntilClass(startDateTime) {
   return `${diff} 天後`;
 }
 
-export default function DashboardTab({ workouts, bodyData, prMap, volumePeriod, setVolumePeriod, streak, nextClass, calendarConnected, calendarKeyword, onConnectCalendar, onSyncCalendar, onDisconnectCalendar, onSaveCalendarKeyword, coachDays = [], coachQuota = { total: 24 }, customExercises = [] }) {
+export default function DashboardTab({ workouts, bodyData, prMap, volumePeriod, setVolumePeriod, streak, nextClass, calendarConnected, calendarKeyword, onConnectCalendar, onSyncCalendar, onDisconnectCalendar, onSaveCalendarKeyword, coachDays = [], coachQuota = { total: 24 }, customExercises = [], onOpenWeeklyDetail }) {
   const [prFullView, setPrFullView] = useState(false);
   const [selectedPrExercise, setSelectedPrExercise] = useState(null);
   const [prFilterTag, setPrFilterTag] = useState("全部");
@@ -337,7 +337,11 @@ export default function DashboardTab({ workouts, bodyData, prMap, volumePeriod, 
       </div>
 
       {/* 本週 vs 上週訓練量對比 */}
-      <div style={styles.card}>
+      <div
+        style={{ ...styles.card, cursor: onOpenWeeklyDetail ? "pointer" : "default" }}
+        onClick={onOpenWeeklyDetail}
+        title="點擊查看本週 / 上週訓練詳情"
+      >
         <div style={{ display: "flex", justifyContent: "space-between", alignItems: "center", marginBottom: 8 }}>
           <div style={styles.sectionTitle}>本週 vs 上週</div>
           {weekTrendPct !== null ? (
@@ -381,6 +385,11 @@ export default function DashboardTab({ workouts, bodyData, prMap, volumePeriod, 
             </div>
           )}
         </div>
+        {onOpenWeeklyDetail && (
+          <div style={{ marginTop: 10, textAlign: "right", fontSize: 11, color: "#555" }}>
+            查看詳情 →
+          </div>
+        )}
       </div>
 
       {/* 訓練量趨勢圖 */}

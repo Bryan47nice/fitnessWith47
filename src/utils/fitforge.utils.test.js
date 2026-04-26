@@ -22,6 +22,9 @@ import {
   getLastSessionSets,
   paceFromTimeDist,
   toMinPerKm,
+  groupWorkoutsByDate,
+  getWeekBounds,
+  formatDateLabel,
 } from "./fitforge.utils.js";
 
 // ─── 一、getWeekStart ──────────────────────────────────────────────────────
@@ -965,6 +968,137 @@ describe("paceFromTimeDist()", () => {
     const result = paceFromTimeDist("10", undefined, "2");
     // Then: treats as 10 min, pace = 10/2 = 5 min/km = 05:00
     expect(result).toBe("05:00 /km");
+  });
+});
+
+// ─── 十五、groupWorkoutsByDate ────────────────────────────────────────────
+import { groupWorkoutsByDate } from "./fitforge.utils.js";
+
+describe("groupWorkoutsByDate()", () => {
+  test("TC-GD1 多筆不同日期，回傳按日期遞減排列的分組", () => {
+    // Given: three workouts on two different dates
+    const workouts = [
+      { exercise: "深蹲", date: "2026-04-20", sets: [] },
+      { exercise: "臥推", date: "2026-04-22", sets: [] },
+      { exercise: "硬舉", date: "2026-04-20", sets: [] },
+    ];
+    // When
+    const result = groupWorkoutsByDate(workouts);
+    // Then: two groups, 2026-04-22 first (descending)
+    expect(result).toHaveLength(2);
+    expect(result[0].date).toBe("2026-04-22");
+    expect(result[1].date).toBe("2026-04-20");
+    expect(result[1].items).toHaveLength(2);
+  });
+
+  test("TC-GD2 fromDate / toDate 過濾掉範圍外的訓練", () => {
+    // Given: workouts on three dates
+    const workouts = [
+      { exercise: "深蹲", date: "2026-04-14", sets: [] },
+      { exercise: "臥推", date: "2026-04-18", sets: [] },
+      { exercise: "硬舉", date: "2026-04-21", sets: [] },
+    ];
+    // When: filter to 2026-04-15 ~ 2026-04-20
+    const result = groupWorkoutsByDate(workouts, "2026-04-15", "2026-04-20");
+    // Then: only 2026-04-18 falls within range
+    expect(result).toHaveLength(1);
+    expect(result[0].date).toBe("2026-04-18");
+  });
+
+  test("TC-GD3 空 workouts 陣列時回傳空陣列", () => {
+    // Given: no workouts
+    // When
+    const result = groupWorkoutsByDate([]);
+    // Then
+    expect(result).toHaveLength(0);
+  });
+
+  test("TC-GD4 同一天多筆訓練全部歸入同一 group", () => {
+    // Given: three workouts all on the same date
+    const workouts = [
+      { exercise: "深蹲", date: "2026-04-20", sets: [] },
+      { exercise: "臥推", date: "2026-04-20", sets: [] },
+      { exercise: "肩推", date: "2026-04-20", sets: [] },
+    ];
+    // When
+    const result = groupWorkoutsByDate(workouts);
+    // Then: one group with three items
+    expect(result).toHaveLength(1);
+    expect(result[0].items).toHaveLength(3);
+  });
+
+  test("TC-GD5 沒有 date 欄位的訓練被忽略", () => {
+    // Given: one workout missing date field
+    const workouts = [
+      { exercise: "深蹲", date: "2026-04-20", sets: [] },
+      { exercise: "臥推", sets: [] }, // no date
+    ];
+    // When
+    const result = groupWorkoutsByDate(workouts);
+    // Then: only the workout with a date is included
+    expect(result).toHaveLength(1);
+    expect(result[0].items).toHaveLength(1);
+  });
+});
+
+// ─── 十六、getWeekBounds ──────────────────────────────────────────────────────
+describe("getWeekBounds()", () => {
+  test("TC-WB1 offsetWeeks=0 回傳本週的 from (週一) 和 to (週日)", () => {
+    // Given: current week
+    // When
+    const { from, to } = getWeekBounds(0);
+    // Then: from must be a Monday, to must be a Sunday, and to = from + 6 days
+    const fromDate = new Date(from + "T00:00:00");
+    const toDate   = new Date(to   + "T00:00:00");
+    expect((fromDate.getDay() + 6) % 7).toBe(0); // Monday
+    expect((toDate.getDay()   + 6) % 7).toBe(6); // Sunday
+    expect((toDate - fromDate) / 86400000).toBe(6);
+  });
+
+  test("TC-WB2 offsetWeeks=1 回傳上週範圍，比本週早 7 天", () => {
+    // Given: last week
+    // When
+    const thisWeek = getWeekBounds(0);
+    const lastWeek = getWeekBounds(1);
+    // Then: lastWeek.from is exactly 7 days before thisWeek.from
+    const diff = (new Date(thisWeek.from + "T00:00:00") - new Date(lastWeek.from + "T00:00:00")) / 86400000;
+    expect(diff).toBe(7);
+  });
+
+  test("TC-WB3 回傳的日期字串格式為 YYYY-MM-DD", () => {
+    // Given: any offset
+    // When
+    const { from, to } = getWeekBounds(0);
+    // Then: both match YYYY-MM-DD pattern
+    expect(from).toMatch(/^\d{4}-\d{2}-\d{2}$/);
+    expect(to).toMatch(/^\d{4}-\d{2}-\d{2}$/);
+  });
+});
+
+// ─── 十七、formatDateLabel ────────────────────────────────────────────────────
+describe("formatDateLabel()", () => {
+  test("TC-DL1 已知週二日期格式化正確", () => {
+    // Given: 2026-04-21 is a Tuesday
+    // When
+    const result = formatDateLabel("2026-04-21");
+    // Then: should contain 4月21日 and 週二
+    expect(result).toBe("4月21日 週二");
+  });
+
+  test("TC-DL2 週日格式化包含「週日」", () => {
+    // Given: 2026-04-26 is a Sunday
+    // When
+    const result = formatDateLabel("2026-04-26");
+    // Then
+    expect(result).toContain("週日");
+  });
+
+  test("TC-DL3 月份和日期不含前導零", () => {
+    // Given: 2026-01-05 (January 5)
+    // When
+    const result = formatDateLabel("2026-01-05");
+    // Then: "1月5日" not "01月05日"
+    expect(result).toBe("1月5日 週一");
   });
 });
 
