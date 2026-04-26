@@ -24,7 +24,7 @@ import WorkoutTab from "./tabs/WorkoutTab.jsx";
 import BodyTab from "./tabs/BodyTab.jsx";
 import GoalsTab from "./tabs/GoalsTab.jsx";
 
-const APP_VERSION = "1.18.5";
+const APP_VERSION = "1.18.6";
 const toLocalDateStr = (d = new Date()) =>
   `${d.getFullYear()}-${String(d.getMonth() + 1).padStart(2, "0")}-${String(d.getDate()).padStart(2, "0")}`;
 
@@ -1092,39 +1092,64 @@ export default function FitForge({ user }) {
         </div>
         {/* Scrollable list */}
         <div style={{ flex: 1, overflowY: "auto", WebkitOverflowScrolling: "touch", padding: "8px 0 32px" }}>
-          {exerciseCategories.map(cat => (
-            <div key={cat.label}>
-              <div style={{
-                fontSize: "11px", fontWeight: 700, color: "#555",
-                letterSpacing: "0.12em", textTransform: "uppercase", padding: "14px 20px 6px",
-              }}>
-                {cat.label}
+          {exerciseCategories.map(cat => {
+            const customInCat = customExercises.filter(e => (e.category || "自訂") === cat.label && !cat.exercises.includes(e.name));
+            return (
+              <div key={cat.label}>
+                <div style={{
+                  fontSize: "11px", fontWeight: 700, color: "#555",
+                  letterSpacing: "0.12em", textTransform: "uppercase", padding: "14px 20px 6px",
+                }}>
+                  {cat.label}
+                </div>
+                {cat.exercises.map(ex => {
+                  const currentEx = pickerTarget === "editWorkout" ? ewExercise : pickerTarget === "goal" ? goalTargetExercise : ewExercise;
+                  const sel = currentEx === ex;
+                  return (
+                    <button key={ex} onClick={() => {
+                      if (pickerTarget === "editWorkout") setEwExercise(ex);
+                      else if (pickerTarget === "goal") setGoalTargetExercise(ex);
+                      setShowExPicker(false);
+                    }}
+                      style={{
+                        display: "block", width: "100%", padding: "13px 20px",
+                        background: sel ? "rgba(255,106,0,0.12)" : "transparent",
+                        border: "none", borderLeft: sel ? "3px solid #ff6a00" : "3px solid transparent",
+                        color: sel ? "#ff9500" : "#e8e4dc",
+                        fontSize: "15px", fontWeight: sel ? 700 : 400,
+                        textAlign: "left", cursor: "pointer", boxSizing: "border-box",
+                        fontFamily: "'Barlow Condensed','Noto Sans TC',sans-serif",
+                      }}>
+                      {ex}
+                    </button>
+                  );
+                })}
+                {customInCat.map(ex => {
+                  const currentEx = pickerTarget === "editWorkout" ? ewExercise : pickerTarget === "goal" ? goalTargetExercise : ewExercise;
+                  const sel = currentEx === ex.name;
+                  return (
+                    <button key={ex.id} onClick={() => {
+                      if (pickerTarget === "editWorkout") setEwExercise(ex.name);
+                      else if (pickerTarget === "goal") setGoalTargetExercise(ex.name);
+                      setShowExPicker(false);
+                    }}
+                      style={{
+                        display: "block", width: "100%", padding: "13px 20px",
+                        background: sel ? "rgba(255,106,0,0.12)" : "transparent",
+                        border: "none", borderLeft: sel ? "3px solid #ff6a00" : "3px solid transparent",
+                        color: sel ? "#ff9500" : "#e8e4dc",
+                        fontSize: "15px", fontWeight: sel ? 700 : 400,
+                        textAlign: "left", cursor: "pointer", boxSizing: "border-box",
+                        fontFamily: "'Barlow Condensed','Noto Sans TC',sans-serif",
+                      }}>
+                      {ex.name}
+                    </button>
+                  );
+                })}
               </div>
-              {cat.exercises.map(ex => {
-                const currentEx = pickerTarget === "editWorkout" ? ewExercise : pickerTarget === "goal" ? goalTargetExercise : ewExercise;
-                const sel = currentEx === ex;
-                return (
-                  <button key={ex} onClick={() => {
-                    if (pickerTarget === "editWorkout") setEwExercise(ex);
-                    else if (pickerTarget === "goal") setGoalTargetExercise(ex);
-                    setShowExPicker(false);
-                  }}
-                    style={{
-                      display: "block", width: "100%", padding: "13px 20px",
-                      background: sel ? "rgba(255,106,0,0.12)" : "transparent",
-                      border: "none", borderLeft: sel ? "3px solid #ff6a00" : "3px solid transparent",
-                      color: sel ? "#ff9500" : "#e8e4dc",
-                      fontSize: "15px", fontWeight: sel ? 700 : 400,
-                      textAlign: "left", cursor: "pointer", boxSizing: "border-box",
-                      fontFamily: "'Barlow Condensed','Noto Sans TC',sans-serif",
-                    }}>
-                    {ex}
-                  </button>
-                );
-              })}
-            </div>
-          ))}
-          {customExercises.length > 0 && (
+            );
+          })}
+          {customExercises.filter(e => !builtInLabels.has(e.category || "自訂") || (e.category || "自訂") === "自訂").length > 0 && (
             <div>
               <div style={{
                 fontSize: "11px", fontWeight: 700, color: "#ff9500",
@@ -1132,7 +1157,7 @@ export default function FitForge({ user }) {
               }}>
                 ★ 我的自訂動作
               </div>
-              {customExercises.map(ex => {
+              {customExercises.filter(e => !builtInLabels.has(e.category || "自訂") || (e.category || "自訂") === "自訂").map(ex => {
                 const currentEx = pickerTarget === "editWorkout" ? ewExercise : pickerTarget === "goal" ? goalTargetExercise : ewExercise;
                 const sel = currentEx === ex.name;
                 return (
@@ -2038,15 +2063,29 @@ export default function FitForge({ user }) {
               版本更新記錄
             </div>
 
-            {/* v1.18.5 */}
+            {/* v1.18.6 */}
             <div style={{ marginBottom: "24px" }}>
               <div style={{ display: "flex", alignItems: "center", gap: "10px", marginBottom: "10px" }}>
-                <span style={{ fontSize: "17px", fontWeight: 900, color: "#ffd700" }}>v1.18.5</span>
+                <span style={{ fontSize: "17px", fontWeight: 900, color: "#ffd700" }}>v1.18.6</span>
                 <span style={{
                   fontSize: "11px", fontWeight: 800, color: "#ff6a00",
                   background: "rgba(255,106,0,0.15)", border: "1px solid rgba(255,106,0,0.3)",
                   borderRadius: "6px", padding: "2px 7px", letterSpacing: "0.05em",
                 }}>最新</span>
+                <span style={{ fontSize: "12px", color: "#555", marginLeft: "auto" }}>2026-04-26</span>
+              </div>
+              <div style={{ display: "flex", flexDirection: "column", gap: "7px" }}>
+                <div style={{ fontSize: "14px", color: "#c8c4bc", display: "flex", gap: "8px" }}>
+                  <span style={{ color: "#ffd700", flexShrink: 0 }}>✨</span>
+                  <span>修正編輯訓練動作選擇器：有分類的自訂動作現在出現在對應分類下而非「我的自訂動作」</span>
+                </div>
+              </div>
+            </div>
+
+            {/* v1.18.5 */}
+            <div style={{ marginBottom: "24px" }}>
+              <div style={{ display: "flex", alignItems: "center", gap: "10px", marginBottom: "10px" }}>
+                <span style={{ fontSize: "17px", fontWeight: 900, color: "#e8e4dc" }}>v1.18.5</span>
                 <span style={{ fontSize: "12px", color: "#555", marginLeft: "auto" }}>2026-04-26</span>
               </div>
               <div style={{ display: "flex", flexDirection: "column", gap: "7px" }}>
